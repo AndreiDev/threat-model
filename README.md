@@ -60,8 +60,14 @@ python3 tools/build_index.py            # this homepage
 
 ## Credits and licences
 
-Built by Claude Opus 5.5 agents in Claude Code. Third-party code is loaded from CDNs under
-its own licence; notably Strudel (AGPL-3.0, in Known exploited) and Remotion (its own licence,
-free for individuals and small teams; used only to render). Fonts are under the SIL Open
-Font License (see `remotion/public/fonts/LICENSE.md`). The vulnerability data is CISA’s
-public Known Exploited Vulnerabilities catalog.
+This project is released under the [MIT License](LICENSE): the pieces, the tools, the
+homepage and the rendered films and painting. Built by Claude Opus 5.5 agents in Claude Code.
+
+Some parts keep their own licences:
+
+- **Fonts**: Martian Mono and Schibsted Grotesk, under the SIL Open Font License
+  (see [`remotion/public/fonts/LICENSE.md`](remotion/public/fonts/LICENSE.md)).
+- **Libraries loaded from CDNs** are not included in this repo and stay under their own
+  licences; notably Strudel (AGPL-3.0, used by Known exploited) and Remotion (its own
+  licence, free for individuals and small teams; used only to render the documentary).
+- **Data**: the vulnerability data is CISA’s public Known Exploited Vulnerabilities catalog.

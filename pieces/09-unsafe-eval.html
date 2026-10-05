@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Unsafe eval</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--void)}
+body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab;outline:none}
+#c:active{cursor:grabbing}
+
+.caption{position:fixed;left:50%;top:22px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:10px;
+  max-width:calc(100vw - 32px);padding:8px 14px;border-radius:999px;background:rgba(16,12,42,.42);
+  border:1px solid rgba(140,147,196,.16);color:var(--frost);font:400 14px/1.35 "Schibsted Grotesk",system-ui,sans-serif;
+  pointer-events:none;white-space:nowrap;transition:none}
+.caption code{font:400 13px/1 "Martian Mono",ui-monospace,monospace}
+.caption .dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--heat-3);box-shadow:0 0 10px var(--heat-3)}
+.caption.cold .dot{background:var(--ice);box-shadow:0 0 10px var(--ice)}
+@media (max-width:600px){.caption{top:14px;left:16px;right:16px;transform:none;width:fit-content;max-width:none;margin:0 auto;font-size:13px;white-space:normal;text-align:left;border-radius:14px}}
+
+.fallback{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:18px;
+  font:400 clamp(20px,4vw,44px)/1.2 "Martian Mono",ui-monospace,monospace;color:var(--ice);text-align:center;padding:24px;
+  background:radial-gradient(ellipse at 50% 45%,#221C5C 0%,var(--void) 65%)}
+.fallback .hot{color:var(--heat-3);text-shadow:0 0 24px rgba(240,48,106,.6);text-decoration:line-through;text-decoration-color:rgba(232,247,255,.5)}
+.fallback .cold{color:var(--ice);text-shadow:0 0 24px rgba(155,232,255,.45)}
+
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes p code{font:400 12px/1 "Martian Mono",ui-monospace,monospace;color:var(--frost)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+</style>
+</head>
+<body>
+<canvas id="c" role="img" aria-label="The line eval(userInput) glows hot, shatters into glass shards that swirl and cool, then reassembles ice-cold as JSON.parse(userInput)"></canvas>
+<div class="caption" id="caption" aria-live="off"><span class="dot"></span><span id="caption-text">eval runs whatever the user sent as code</span></div>
+<div class="fallback" id="fallback" aria-hidden="true"><span class="hot">eval(userInput)</span><span class="cold">JSON.parse(userInput)</span></div>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Unsafe eval</h1>
+  <p><code>eval(userInput)</code> runs whatever a user sends as code. It shatters into hot glass and cools back together as <code>JSON.parse(userInput)</code>, which only reads that input as data. Then the sink creeps back as <code>new Function</code>.</p>
+  <p id="backend-note" hidden></p>
+  <ul class="tech">
+    <li>Three.js WebGPURenderer and TSL, compiled to WGSL (GLSL on the WebGL 2 fallback)</li>
+    <li id="tech-shards">Glass shards moved by one TSL positionNode, a pure function of time</li>
+    <li>Three TextGeometry lines resampled to one triangle count and paired by position</li>
+    <li>MeshPhysicalNodeMaterial glass on a PMREM room, emissive from each shard's temperature</li>
+    <li>RenderPipeline post: bokeh depth of field on the code plane, then bloom</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.js",
+    "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.js",
+    "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.tsl.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three/webgpu';
+import {
+  Fn, attribute, uniform, float, vec2, vec3, vec4, color, mix, smoothstep, clamp, step, sin, cos, exp, pow,
+  normalize, cross, dot, max, min, abs, fwidth, atan, varyingProperty, positionWorld, positionViewDirection, normalView, normalWorld,
+  cameraWorldMatrix, pmremTexture, pass, screenUV, mx_noise_float, PI, TWO_PI
+} from 'three/tsl';
+import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+
+/* ---------- params ---------- */
+const params = new URLSearchParams(location.search);
+const LOW = params.get('q') === 'low';
+const FORCE_GL = params.has('gl') && params.get('gl') !== '0';      // ?gl=1 forces the WebGL 2 backend
+const USE_DOF = !params.has('nodof'), USE_BLOOM = !params.has('nobloom');   // debug switches
+const T_PARAM = params.has('t') ? parseFloat(params.get('t')) : NaN;
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const HERO_T = 3.7;
+const FONT_URL = 'https://cdn.jsdelivr.net/npm/three@0.184.0/examples/fonts/droid/droid_sans_mono_regular.typeface.json';
+
+/* ---------- storyboard (seconds) ----------
+   One loop = 16 s, two 8 s beats. Beat 0: eval -> JSON.parse. Beat 1: new Function -> JSON.parse.
+   s = time within a beat
+   0.0 - 0.8  hot line holds, trembling harder toward the crack          (hook)
+   0.8 - 1.2  crack: a front runs out from the function name; every piece's edges flash white-hot
+   1.1 - 2.0  burst: each letter flies apart outward (an exploded view), slowed by drag
+   1.3 - 3.5  vortex: two helical arms around the line, shorter than it; camera swings 36 degrees
+   2.8 - 5.2  landing, centre first: each shard snaps in over 0.6 s, sweeping through violet to ice
+              (hero frame ~3.7: an ice-cold core with hot glass still swirling around it)
+   5.2 - 7.0  JSON.parse(userInput) holds, ice-cold, camera back to the front
+   7.0 - 8.0  creep: heat runs left to right, shards flip into the next unsafe form */
+const PERIOD = 16, BEAT = 8;
+const T_CRACK = 0.8, T_CREEP = 7.0, CREEP_LEN = 1.0;
+const L0 = 2.0, LSPREAD = 1.8, LDUR = 0.6;          // landing schedule, relative to the crack
+const HOT_T = 0.68, COLD_T = -0.74;
+
+/* ---------- seeded randomness ---------- */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
+const smooth = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+
+/* ---------- DOM ---------- */
+const canvas = document.getElementById('c');
+const captionEl = document.getElementById('caption'), captionText = document.getElementById('caption-text');
+const pp = document.getElementById('playpause');
+
+/* ---------- renderer ---------- */
+const renderer = new THREE.WebGPURenderer({ canvas, antialias: true, forceWebGL: FORCE_GL });
+renderer.toneMapping = THREE.NoToneMapping;   // a custom shoulder in the post chain keeps the indigo darks exact
+const PR = () => Math.min(window.devicePixelRatio || 1, LOW ? 1 : 2);
+renderer.setPixelRatio(PR());
+renderer.setSize(window.innerWidth, window.innerHeight, false);
+
+try {
+  await renderer.init();
+} catch (e) {
+  document.getElementById('fallback').style.display = 'flex';
+  const note = document.getElementById('backend-note');
+  note.hidden = false; note.textContent = 'Your browser can run neither WebGPU nor WebGL 2, so you are seeing a still of the two lines instead of the shattering glass.';
+  captionEl.style.display = "none"; canvas.style.display = "none";
+  window.__seek = () => {}; window.__play = () => {};
+  await new Promise(() => {});   // stop here quietly: the still fallback is the whole piece
+}
+const IS_WEBGPU = renderer.backend.isWebGPUBackend === true;
+if (!IS_WEBGPU) {
+  const note = document.getElementById('backend-note');
+  note.hidden = false;
+  note.textContent = FORCE_GL
+    ? 'Forced onto the WebGL 2 backend: the same TSL graph, compiled to GLSL instead of WGSL.'
+    : 'Your browser has no WebGPU, so this is the same TSL scene compiled to GLSL for WebGL 2.';
+}
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(30, 1, 0.5, 300);
+
+/* ---------- environment: dark indigo room with frost softboxes, prefiltered by PMREM ---------- */
+{
+  const env = new THREE.Scene();
+  const skyMat = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide });
+  const yN = positionWorld.normalize().y;
+  skyMat.colorNode = mix(mix(color(0x05040f), color(0x16123c), smoothstep(-0.6, 0.05, yN)), color(0x2c2f66), smoothstep(0.0, 0.9, yN));
+  env.add(new THREE.Mesh(new THREE.SphereGeometry(60, 48, 24), skyMat));
+  const box = (w, h, x, y, z, hex, k) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(k), side: THREE.DoubleSide }));
+    m.position.set(x, y, z); m.lookAt(0, 0, 0); env.add(m);
+  };
+  box(30, 10, 0, 34, -6, 0xE8F7FF, 14.0);    // overhead key
+  box(5, 34, 36, 4, -10, 0xE8F7FF, 20.0);    // right strip
+  box(4, 30, -34, 2, -16, 0x9BE8FF, 14.0);   // left strip, ice
+  box(40, 3, 0, 8, -40, 0xE8F7FF, 10.0);     // back rim line
+  box(14, 4, -20, -18, 18, 0x4E5A8C, 4.0);   // low steel bounce
+  box(8, 8, 24, 20, 28, 0xE8F7FF, 8.0);      // high front-right kicker
+  box(3, 3, -14, 26, 30, 0xE8F7FF, 16.0);    // small front-left spark
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envRT = pmrem.fromScene(env, 0.02, 0.1, 100);
+  scene.environment = envRT.texture;
+  scene.environmentIntensity = 1.0;
+  scene.userData.envTex = envRT.texture;
+}
+
+/* ---------- background: indigo night with a faint halo behind the code ---------- */
+{
+  const p = screenUV.sub(vec2(0.5, 0.5));
+  const d = p.mul(vec2(1.6, 1.0)).length();
+  scene.backgroundNode = mix(color(0x1c1750), color(0x110d2e), smoothstep(0.0, 0.7, d));
+}
+
+/* ---------- font -> per-glyph triangles, subdivided into shards ---------- */
+const font = await new FontLoader().loadAsync(FONT_URL);
+const GLYPH = { size: 1, depth: 0.34, curveSegments: 4, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.03, bevelOffset: 0, bevelSegments: 2 };
+const ADV = font.data.glyphs['a'].ha / font.data.resolution * GLYPH.size;
+const MAX_EDGE = 0.36, M2 = MAX_EDGE * MAX_EDGE;
+const glyphCache = new Map();
+
+// conforming subdivision: an edge splits iff it is longer than MAX_EDGE, so neighbours always agree (no T-junction cracks)
+function subdivide(out, a, b, c, depth) {
+  const l2 = (p, q) => (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2;
+  const sab = l2(a, b) > M2, sbc = l2(b, c) > M2, sca = l2(c, a) > M2;
+  if (depth > 9 || (!sab && !sbc && !sca)) { out.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]); return; }
+  const mid = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2];
+  const d = depth + 1;
+  if (sab && sbc && sca) {
+    const m1 = mid(a, b), m2 = mid(b, c), m3 = mid(c, a);
+    subdivide(out, a, m1, m3, d); subdivide(out, m1, b, m2, d); subdivide(out, m3, m2, c, d); subdivide(out, m1, m2, m3, d);
+  } else if (sab && sbc) {
+    const m1 = mid(a, b), m2 = mid(b, c);
+    subdivide(out, m1, b, m2, d); subdivide(out, a, m1, m2, d); subdivide(out, a, m2, c, d);
+  } else if (sbc && sca) {
+    const m2 = mid(b, c), m3 = mid(c, a);
+    subdivide(out, m2, c, m3, d); subdivide(out, a, b, m2, d); subdivide(out, a, m2, m3, d);
+  } else if (sca && sab) {
+    const m3 = mid(c, a), m1 = mid(a, b);
+    subdivide(out, a, m1, m3, d); subdivide(out, m1, b, c, d); subdivide(out, m1, c, m3, d);
+  } else if (sab) {
+    const m = mid(a, b); subdivide(out, a, m, c, d); subdivide(out, m, b, c, d);
+  } else if (sbc) {
+    const m = mid(b, c); subdivide(out, a, b, m, d); subdivide(out, a, m, c, d);
+  } else {
+    const m = mid(c, a); subdivide(out, a, b, m, d); subdivide(out, m, b, c, d);
+  }
+}
+function glyphTris(ch) {
+  if (glyphCache.has(ch)) return glyphCache.get(ch);
+  let g = new TextGeometry(ch, { font, ...GLYPH });
+  if (g.index) { const n = g.toNonIndexed(); g.dispose(); g = n; }
+  const p = g.getAttribute('position').array, out = [];
+  for (let i = 0; i < p.length; i += 9) {
+    const a = [p[i], p[i + 1], p[i + 2] - GLYPH.depth / 2], b = [p[i + 3], p[i + 4], p[i + 5] - GLYPH.depth / 2], c = [p[i + 6], p[i + 7], p[i + 8] - GLYPH.depth / 2];
+    // drop zero-area slivers from the extruder
+    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+    const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
+    if (cx * cx + cy * cy + cz * cz < 1e-12) continue;
+    subdivide(out, a, b, c, 0);
+  }
+  g.dispose();
+  const arr = new Float32Array(out);
+  glyphCache.set(ch, arr);
+  return arr;
+}
+
+const TEXTS = [
+  { func: 'eval(', name: 'eval' },
+  { func: 'JSON.parse(', name: 'JSON.parse' },
+  { func: 'new Function(', name: 'new Function' }
+];
+const ARG = 'userInput)';
+const LINE_H = 1.32;
+
+// lay out one text: returns { func: [tris], arg: [tris], halfW, impactX }
+function layoutText(k, stacked) {
+  const { func, name } = TEXTS[k];
+  const lines = stacked ? [{ s: func, y: 0, part: 0 }, { s: '  ' + ARG, y: -LINE_H, part: 1 }] : [{ s: func + ARG, y: 0, part: -1 }];
+  const out = { func: [], arg: [] };
+  let minX = Infinity, maxX = -Infinity;
+  for (const L of lines) {
+    for (let i = 0; i < L.s.length; i++) {
+      const ch = L.s[i]; if (ch === ' ') continue;
+      const part = L.part >= 0 ? L.part : (i < func.length ? 0 : 1);
+      const src = glyphTris(ch), ox = i * ADV, oy = L.y;
+      for (let j = 0; j < src.length; j += 9) {
+        const v = new Float32Array(9);
+        for (let q = 0; q < 9; q += 3) { v[q] = src[j + q] + ox; v[q + 1] = src[j + q + 1] + oy; v[q + 2] = src[j + q + 2]; }
+        for (let q = 0; q < 9; q += 3) { if (v[q] < minX) minX = v[q]; if (v[q] > maxX) maxX = v[q]; }
+        (part === 0 ? out.func : out.arg).push(v);
+      }
+    }
+  }
+  const sx = -(minX + maxX) / 2;
+  for (const list of [out.func, out.arg]) for (const v of list) { v[0] += sx; v[3] += sx; v[6] += sx; }
+  out.halfW = (maxX - minX) / 2;
+  // impact point: centre of the function name
+  out.impactX = (name.length * ADV) / 2 + sx;
+  return out;
+}
+
+function buildLayout(stacked) {
+  const L = TEXTS.map((_, k) => layoutText(k, stacked));
+  // shared vertical centring
+  let minY = Infinity, maxY = -Infinity;
+  for (const t of L) for (const list of [t.func, t.arg]) for (const v of list) for (let q = 1; q < 9; q += 3) { if (v[q] < minY) minY = v[q]; if (v[q] > maxY) maxY = v[q]; }
+  const sy = -(minY + maxY) / 2;
+  for (const t of L) for (const list of [t.func, t.arg]) for (const v of list) { v[1] += sy; v[4] += sy; v[7] += sy; }
+
+  const cen = v => [(v[0] + v[3] + v[6]) / 3, (v[1] + v[4] + v[7]) / 3, (v[2] + v[5] + v[8]) / 3];
+  // function-name shards: sort each set x-major (with a little seeded chaos) and resample to a common count
+  const rng = mulberry32(9);
+  const sorted = L.map(t => {
+    const items = t.func.map(v => ({ v, c: cen(v) }));
+    let x0 = Infinity, x1 = -Infinity;
+    for (const it of items) { x0 = Math.min(x0, it.c[0]); x1 = Math.max(x1, it.c[0]); }
+    for (const it of items) it.key = (it.c[0] - x0) / (x1 - x0) + it.c[1] * 0.004 + (rng() - 0.5) * 0.03;
+    items.sort((a, b) => a.key - b.key);
+    return items;
+  });
+  const NF = Math.max(...sorted.map(s => s.length));
+  const resampled = sorted.map(items => {
+    const n = items.length, res = [];
+    let prev = -1;
+    for (let j = 0; j < NF; j++) {
+      const src = Math.floor(j * n / NF), it = items[src];
+      if (src !== prev) res.push(it);
+      else { // degenerate duplicate collapsed into its neighbour's centroid
+        const c = it.c, v = new Float32Array(9);
+        for (let q = 0; q < 9; q += 3) { v[q] = c[0]; v[q + 1] = c[1]; v[q + 2] = c[2]; }
+        res.push({ v, c });
+      }
+      prev = src;
+    }
+    return res;
+  });
+  // argument shards are identical glyphs in identical order: pair them 1:1
+  const NA = L[0].arg.length;
+  const N = NF + NA;
+  // WebGPU allows 8 vertex buffers, so everything is interleaved into two
+  const GS = 18, RS = 12;                      // geometry stride: pE pJ pF cE cJ cF; random stride: rA rB kd bary
+  const G = new Float32Array(N * 3 * GS), R = new Float32Array(N * 3 * RS);
+  const r = mulberry32(77);
+  for (let s = 0; s < N; s++) {
+    for (let k = 0; k < 3; k++) {
+      const it = s < NF ? resampled[k][s] : { v: L[k].arg[s - NF], c: cen(L[k].arg[s - NF]) };
+      for (let q = 0; q < 3; q++) {
+        const o = (s * 3 + q) * GS;
+        G[o + k * 3] = it.v[q * 3]; G[o + k * 3 + 1] = it.v[q * 3 + 1]; G[o + k * 3 + 2] = it.v[q * 3 + 2];
+        G[o + 9 + k * 3] = it.c[0]; G[o + 10 + k * 3] = it.c[1]; G[o + 11 + k * 3] = it.c[2];
+      }
+    }
+    // random tumble axis + per-shard randoms
+    let ax = r() * 2 - 1, ay = r() * 2 - 1, az = r() * 2 - 1; const l = Math.hypot(ax, ay, az) || 1; ax /= l; ay /= l; az /= l;
+    const r0 = r(), r1 = r(), r2 = r(), r3 = r(), r4 = r();
+    for (let q = 0; q < 3; q++) R.set([ax, ay, az, r0, r1, r2, r3, r4, s < NF ? 0 : 1, q === 0 ? 1 : 0, q === 1 ? 1 : 0, q === 2 ? 1 : 0], (s * 3 + q) * RS);
+  }
+  const g = new THREE.BufferGeometry();
+  const ib = new THREE.InterleavedBuffer(G, GS), rb = new THREE.InterleavedBuffer(R, RS);
+  g.setAttribute('position', new THREE.InterleavedBufferAttribute(ib, 3, 0));
+  g.setAttribute('pJ', new THREE.InterleavedBufferAttribute(ib, 3, 3));
+  g.setAttribute('pF', new THREE.InterleavedBufferAttribute(ib, 3, 6));
+  g.setAttribute('cE', new THREE.InterleavedBufferAttribute(ib, 3, 9));
+  g.setAttribute('cJ', new THREE.InterleavedBufferAttribute(ib, 3, 12));
+  g.setAttribute('cF', new THREE.InterleavedBufferAttribute(ib, 3, 15));
+  g.setAttribute('rA', new THREE.InterleavedBufferAttribute(rb, 4, 0));
+  g.setAttribute('rB', new THREE.InterleavedBufferAttribute(rb, 4, 4));
+  g.setAttribute('kd', new THREE.InterleavedBufferAttribute(rb, 1, 8));
+  g.setAttribute('bary', new THREE.InterleavedBufferAttribute(rb, 3, 9));
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 30);
+  return { geometry: g, N, NF, NA, meta: L.map(t => ({ halfW: t.halfW, impactX: t.impactX })), blockW: Math.max(...L.map(t => t.halfW * 2)), blockH: maxY - minY, axisY: 0 };
+}
+
+/* ---------- uniforms (all driven from t) ---------- */
+const U = {
+  from: uniform(new THREE.Vector3(1, 0, 0)),
+  to: uniform(new THREE.Vector3(0, 1, 0)),
+  mode: uniform(0),            // 0 = hot hold / shatter / cold hold, 1 = creep
+  tau: uniform(-1),            // seconds since the crack
+  creep: uniform(0),           // creep progress 0..1
+  time: uniform(0),
+  impactX: uniform(0),
+  halfFrom: uniform(8), halfTo: uniform(8),
+  tremble: uniform(0),
+  axisY: uniform(0), rhoMin: uniform(0.9), rhoSpread: uniform(2.8), spinDir: uniform(1), squeeze: uniform(0.5)
+};
+
+/* ---------- TSL helpers ---------- */
+const rotAxis = Fn(([v, k, a]) => {
+  const c = cos(a), s = sin(a);
+  return v.mul(c).add(cross(k, v).mul(s)).add(k.mul(dot(k, v).mul(c.oneMinus())));
+});
+const HEAT = [0x3A0F6B, 0x9B1D8F, 0xF0306A, 0xFF7A2F, 0xFFD36B, 0xFFF6E0].map(h => color(h));
+const COLD = [0x1B1747, 0x2F4FA8, 0x4FA3E0, 0x9BE8FF, 0xE8F7FF].map(h => color(h));
+const rampN = (arr, x) => {
+  const xs = clamp(x, 0, 1).mul(arr.length - 1);
+  let c = arr[0];
+  for (let i = 1; i < arr.length; i++) c = mix(c, arr[i], clamp(xs.sub(i - 1), 0, 1));
+  return c;
+};
+const ironbow = Fn(([x]) => rampN(HEAT, x));
+const coldbow = Fn(([x]) => rampN(COLD, x));
+// one signed temperature: T > 0 runs the ironbow (hostile), T < 0 the cold ramp (trusted)
+const thermal = Fn(([T]) => {
+  const h = T.max(0), c = T.negate().max(0);
+  const hot = ironbow(h).mul(pow(h, 2.2).mul(2.6).add(0.16));
+  const cold = coldbow(c).mul(pow(c, 1.5).mul(0.95).add(0.1));
+  return mix(cold, hot, step(0.0, T));
+});
+
+/* ---------- shard material ---------- */
+const vTemp = varyingProperty('float', 'vTemp');
+const vFly = varyingProperty('float', 'vFly');
+const vCrack = varyingProperty('float', 'vCrack');
+
+const aPE = attribute('position', 'vec3'), aPJ = attribute('pJ', 'vec3'), aPF = attribute('pF', 'vec3');
+const aCE = attribute('cE', 'vec3'), aCJ = attribute('cJ', 'vec3'), aCF = attribute('cF', 'vec3');
+const aRA = attribute('rA', 'vec4'), aRB = attribute('rB', 'vec4'), aKD = attribute('kd', 'float');
+
+const easeOutBack = Fn(([x]) => {
+  const y = x.sub(1);
+  return y.mul(y).mul(y).mul(2.0).add(y.mul(y).mul(1.0)).add(1.0);
+});
+
+const shardPosition = Fn(() => {
+  const wf = U.from, wt = U.to;
+  const pA = aPE.mul(wf.x).add(aPJ.mul(wf.y)).add(aPF.mul(wf.z));
+  const pB = aPE.mul(wt.x).add(aPJ.mul(wt.y)).add(aPF.mul(wt.z));
+  const cA = aCE.mul(wf.x).add(aCJ.mul(wf.y)).add(aCF.mul(wf.z)).toVar();
+  const cB = aCE.mul(wt.x).add(aCJ.mul(wt.y)).add(aCF.mul(wt.z)).toVar();
+  const lA = pA.sub(cA), lB = pB.sub(cB);
+  const tumbleAxis = aRA.xyz, r0 = aRA.w, r1 = aRB.x, r2 = aRB.y, r3 = aRB.z, r4 = aRB.w;
+  const yC = U.axisY;                                   // the code line's own axis (y offset for stacked layouts)
+
+  /* ===== shatter: cracks -> burst -> vortex arms around the code line -> landing ===== */
+  const dx = cA.x.sub(U.impactX);
+  const dly = dx.abs().div(U.halfFrom).mul(0.42).add(r0.mul(0.05));
+  const ti = U.tau.sub(dly).max(0.0).toVar();
+  const crack = smoothstep(0.0, 0.12, ti);                // the glass cracks first, pieces barely move
+  const b = exp(ti.sub(0.3).max(0.0).mul(-2.3)).oneMinus();    // then the burst, with drag: out fast, then hanging
+  // cylindrical coordinates around the line's own axis
+  const y0 = cA.y.sub(yC), z0 = cA.z;
+  const rho0 = vec2(y0, z0).length();
+  const phi0 = atan(z0, y0);
+  const phiT = phi0.add(r1.sub(0.5).mul(1.6));             // thrown outward along its own direction: an exploded view of each letter
+  const rhoT = pow(r4, 1.35).mul(U.rhoSpread).add(U.rhoMin);
+  const wrap = (d) => d.sub(TWO_PI.mul((d.div(TWO_PI)).round()));
+  const rhoB = mix(rho0, rhoT, b);
+  const phiB = phi0.add(wrap(phiT.sub(phi0)).mul(b));
+  // the vortex gathers the spray into two helical arms, then turns slowly; inner shards orbit faster
+  // the vortex is shorter than the line, so the shards still in the air orbit the core as it re-forms
+  const xC = mix(cA.x, cB.x.mul(U.squeeze), smoothstep(0.6, 2.4, ti)).add(dx.sign().mul(0.3).add(r2.sub(0.5).mul(1.0)).mul(b));
+  const armW = step(r2, 0.78).mul(0.85).add(0.15);
+  const org = smoothstep(0.45, 2.0, ti).mul(armW);
+  const phiArm = r0.mul(2.0).floor().mul(PI).add(xC.mul(0.36).mul(U.spinDir)).add(r3.sub(0.5).mul(0.7));
+  const rhoArm = U.rhoMin.mul(0.85).add(r4.mul(U.rhoSpread).mul(0.55));
+  const rhoV = mix(rhoB, rhoArm, org.mul(0.6));
+  const g = ti.mul(ti).div(ti.add(1.0));
+  const theta = float(1.9).div(rhoV.add(0.5)).add(0.35).mul(g).mul(U.spinDir);
+  const phiV = phiB.add(wrap(phiArm.sub(phiB)).mul(org)).add(theta);
+  const wob = vec3(
+    sin(ti.mul(0.9).add(r1.mul(6.283))),
+    sin(ti.mul(0.7).add(r2.mul(6.283))),
+    sin(ti.mul(0.8).add(r3.mul(6.283)))).mul(0.1).mul(smoothstep(0.2, 1.6, ti));
+  const jit = vec3(r1.sub(0.5), r2.sub(0.5), r3.mul(0.5).add(0.5)).mul(0.09).mul(smoothstep(0.0, 0.3, ti));
+  const Xc = vec3(xC, cos(phiV).mul(rhoV).add(yC), sin(phiV).mul(rhoV)).add(wob).add(jit);
+  // landing: centre first, spiralling in, a small overshoot, then a frost flash
+  const order = cB.x.abs().div(U.halfTo).mul(0.92).add(r2.mul(0.08));
+  const tl0 = order.mul(LSPREAD).add(L0);
+  const w = U.tau.sub(tl0).div(LDUR).clamp(0.0, 1.0).toVar();
+  const we = easeOutBack(smoothstep(0.0, 1.0, w));
+  const Pshat = mix(Xc, cB, we);
+  const spin = b.mul(r3.mul(5.0).add(2.5)).add(ti.mul(r1.mul(0.9).add(0.3))).add(crack.mul(r0.sub(0.5).mul(0.5)));
+  const angS = spin.mul(smoothstep(0.0, 0.72, w).oneMinus());
+  const localS = rotAxis(mix(lA, lB, smoothstep(0.15, 1.3, ti)), tumbleAxis, angS);
+  // heat tremble is a function of the vertex itself, so shared vertices move together and the surface never cracks
+  const trem = vec3(sin(U.time.mul(57.0).add(pA.x.mul(2.3))), sin(U.time.mul(49.0).add(pA.x.mul(1.7).add(pA.y.mul(3.1)))), 0.0)
+    .mul(U.tremble.mul(0.02)).mul(step(ti, 0.0));
+  const posS = Pshat.add(localS).add(trem);
+  // temperature: white-hot cracks, then each shard cools on its way to its slot, and turns ice as it lands
+  const cool = smoothstep(0.35, tl0.add(0.2), ti);
+  const tVar = r0.sub(0.5).mul(0.34).add(step(0.965, r4).mul(0.3)).mul(smoothstep(0.2, 0.9, ti));   // a spread of temperatures, a few white-hot sparks
+  const Tc = float(HOT_T).sub(cool.mul(0.16)).sub(smoothstep(0.25, 1.1, ti).mul(0.14)).add(crack.mul(exp(ti.mul(-3.5))).mul(0.15)).add(tVar);
+  const lockT = U.tau.sub(tl0.add(LDUR));
+  const lockFlash = exp(lockT.mul(lockT).mul(-30.0)).mul(0.08);
+  const TS = mix(Tc, COLD_T, smoothstep(0.02, 0.7, w)).sub(lockFlash);
+  const flyS = crack.mul(smoothstep(0.6, 0.95, w).oneMinus());
+  const crackS = crack.mul(exp(ti.mul(-4.0)));
+
+  /* ===== creep: heat runs left to right, shards flip into the next unsafe line ===== */
+  const u = cA.x.div(U.halfFrom).add(1.0).mul(0.5);
+  const q = U.creep.mul(1.5).sub(u).sub(r1.mul(0.12)).div(0.38).clamp(0.0, 1.0).toVar();
+  const qe = smoothstep(0.0, 1.0, q);
+  const isArg = aKD;
+  const lift = sin(q.mul(PI)).mul(mix(0.6, 0.14, isArg));
+  const Pc = mix(cA, cB, qe).add(vec3(0.0, sin(q.mul(PI)).mul(r2.sub(0.5).mul(0.25)), lift));
+  const flipAxis = normalize(mix(vec3(1.0, 0.0, 0.0), tumbleAxis, 0.35));
+  const angC = qe.mul(TWO_PI).mul(isArg.oneMinus());
+  const localC = rotAxis(mix(lA, lB, smoothstep(0.3, 0.7, q)), flipAxis, angC);
+  const posC = Pc.add(localC);
+  const TC = mix(float(COLD_T), float(HOT_T), smoothstep(0.1, 0.85, q)).add(sin(q.mul(PI)).mul(0.22));
+  const flyC = sin(q.mul(PI)).mul(isArg.oneMinus());
+
+  vTemp.assign(mix(TS, TC, U.mode));
+  vFly.assign(mix(flyS, flyC, U.mode));
+  vCrack.assign(crackS.mul(U.mode.oneMinus()));
+  return mix(posS, posC, U.mode);
+});
+
+const mat = new THREE.MeshPhysicalNodeMaterial({
+  color: new THREE.Color(0x07061a), roughness: 0.05, metalness: 0.0, ior: 1.5,
+  clearcoat: 1.0, clearcoatRoughness: 0.02, side: THREE.DoubleSide, flatShading: true
+});
+mat.positionNode = shardPosition();
+{
+  const T = vTemp, fly = vFly;
+  const hotness = smoothstep(0.3, 0.9, T);
+  const n = mx_noise_float(positionWorld.mul(vec3(1.3, 1.9, 1.3)).add(vec3(0.0, U.time.mul(-0.8), U.time.mul(0.2))));
+  const nW = normalWorld.z.abs();                        // 1 on the faces of the code, 0 on its walls
+  const n2 = mx_noise_float(positionWorld.mul(vec3(4.0, 5.0, 4.0)).add(vec3(0.0, U.time.mul(-1.7), 0.0)));
+  const Tf = T.add(n.mul(0.16).add(n2.mul(0.05)).mul(hotness)).add(nW.mul(0.07).sub(0.09).mul(hotness));
+  const V = positionViewDirection;
+  const ndv = abs(dot(normalView, V)).clamp(0.0, 1.0);
+  const fres = pow(ndv.oneMinus(), 3.0);
+  const glow = thermal(Tf);
+  // thin bright edges on every flying shard: light caught in the cut edge of the glass
+  const bary = attribute('bary', 'vec3');
+  const mb = min(bary.x, min(bary.y, bary.z));
+  const edge = smoothstep(fwidth(mb).mul(1.6), float(0.0), mb).mul(fly);
+  // glass: environment seen through the shard (refracted), tinted by its temperature
+  const refrDir = V.negate().refract(normalView, 1.0 / 1.5).transformDirection(cameraWorldMatrix);
+  const seen = pmremTexture(scene.userData.envTex, refrDir, float(0.1));
+  const tint = mix(color(0x9BE8FF), color(0xFFD9B0), hotness.mul(0.6));
+  const body = mix(1.0, 0.26, fly);                      // flying shards glow mostly from their edges
+  mat.emissiveNode = glow.mul(mix(0.7, 1.0, ndv)).mul(body)
+    .add(glow.mul(fres).mul(1.4))
+    .add(glow.mul(edge).mul(vCrack.mul(4.0).add(2.6)))
+    .add(seen.rgb.mul(tint).mul(ndv.mul(mix(0.12, 0.3, fly))));
+}
+
+let layout = null, mesh = null, stackedNow = null;
+function setLayout(stacked) {
+  if (stackedNow === stacked && mesh) return;
+  stackedNow = stacked;
+  if (!layoutCache[stacked ? 1 : 0]) layoutCache[stacked ? 1 : 0] = buildLayout(stacked);
+  layout = layoutCache[stacked ? 1 : 0];
+  if (!mesh) { mesh = new THREE.Mesh(layout.geometry, mat); mesh.frustumCulled = false; scene.add(mesh); }
+  else mesh.geometry = layout.geometry;
+  document.getElementById('tech-shards').textContent =
+    `${layout.N.toLocaleString('en-US')} glass shards moved by one TSL positionNode, a pure function of time`;
+}
+const layoutCache = [null, null];
+
+/* ---------- post: scene pass -> bokeh DOF -> bloom ---------- */
+const pipeline = new THREE.RenderPipeline(renderer);
+const scenePass = pass(scene, camera);
+const sceneColor = scenePass.getTextureNode('output');
+const sceneViewZ = scenePass.getViewZNode();
+const uFocus = uniform(30), uFocalLen = uniform(9), uBokeh = uniform(4);
+// the background is a smooth gradient: keep it out of the blur so in-focus code never bleeds into it
+const dofViewZ = sceneViewZ.lessThan(uFocus.mul(-2.2)).select(uFocus.negate(), sceneViewZ);
+const dofNode = USE_DOF ? dof(sceneColor, dofViewZ, uFocus, uFocalLen, uBokeh) : sceneColor;
+const bloomNode = bloom(dofNode, 0.42, 0.22, 0.95);
+{
+  const v = screenUV.sub(0.5).length();
+  const hdr = (USE_BLOOM ? dofNode.add(bloomNode) : dofNode).rgb.mul(mix(1.0, 0.9, smoothstep(0.4, 0.9, v)));
+  // linear up to the knee, then a soft shoulder: hot things burn toward white like a thermal camera clipping
+  const K = 0.7, over = hdr.sub(K).max(0.0);
+  pipeline.outputNode = vec4(hdr.min(K).add(exp(over.div(1 - K).negate()).oneMinus().mul(1 - K)), 1.0);
+}
+
+/* ---------- timeline: t -> uniforms ---------- */
+const ONE_HOT = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)];
+function beatInfo(t) {
+  const tm = ((t % PERIOD) + PERIOD) % PERIOD;
+  const beat = tm < BEAT ? 0 : 1;
+  const s = tm - beat * BEAT;
+  const hot = beat === 0 ? 0 : 2, next = beat === 0 ? 2 : 0;
+  return { tm, beat, s, hot, next };
+}
+function applyTime(t) {
+  const { s, hot, next } = beatInfo(t);
+  U.time.value = ((t % 1024) + 1024) % 1024;   // shader time stays small so flicker keeps float precision
+  if (s < T_CREEP) {
+    U.mode.value = 0;
+    U.from.value.copy(ONE_HOT[hot]); U.to.value.copy(ONE_HOT[1]);
+    U.tau.value = s - T_CRACK;
+    U.halfFrom.value = layout.meta[hot].halfW; U.halfTo.value = layout.meta[1].halfW;
+    U.impactX.value = layout.meta[hot].impactX;
+    U.tremble.value = smooth(0.15, T_CRACK, s);
+    U.spinDir.value = hot === 0 ? 1 : -1;
+    U.creep.value = 0;
+  } else {
+    U.mode.value = 1;
+    U.from.value.copy(ONE_HOT[1]); U.to.value.copy(ONE_HOT[next]);
+    U.tau.value = 99;
+    U.halfFrom.value = layout.meta[1].halfW; U.halfTo.value = layout.meta[next].halfW;
+    U.impactX.value = 0;
+    U.tremble.value = 0;
+    U.creep.value = clamp01((s - T_CREEP) / CREEP_LEN);
+  }
+  // caption follows the meaning of what is on screen
+  let cap, cold;
+  if (s < T_CRACK + L0 + 0.6) { cap = hot; cold = false; }
+  else if (s < T_CREEP + 0.35) { cap = 1; cold = true; }
+  else { cap = next; cold = false; }
+  setCaption(cap, cold);
+}
+const CAPTIONS = [
+  '<code>eval</code> runs whatever the user sent as code',
+  '<code>JSON.parse</code> reads the same input as data and never runs it',
+  '<code>new Function</code> is <code>eval</code> under another name'
+];
+let capNow = -1;
+function setCaption(k, cold) {
+  if (k === capNow) return;
+  capNow = k;
+  captionText.innerHTML = CAPTIONS[k];
+  captionEl.classList.toggle('cold', cold);
+}
+
+/* ---------- camera: slow dolly driven by t, drag to orbit ---------- */
+let camDist = 30, portrait = false, viewW = 1, viewH = 1;
+const target = new THREE.Vector3();
+function frame() {
+  const w = window.innerWidth, h = window.innerHeight, aspect = w / h;
+  portrait = aspect < 0.8;
+  setLayout(portrait);
+  camera.fov = portrait ? 40 : aspect < 1.25 ? 34 : 30;
+  camera.aspect = aspect;
+  const vHalf = THREE.MathUtils.degToRad(camera.fov / 2), tanH = Math.tan(vHalf) * aspect;
+  const fill = portrait ? 0.84 : 0.78;
+  camDist = (layout.blockW / 2) / (tanH * fill) + 0.4;
+  camDist = Math.max(camDist, (layout.blockH / 2) / (Math.tan(vHalf) * 0.5));
+  viewW = w; viewH = h;
+  camera.updateProjectionMatrix();
+  controls.minDistance = camDist * 0.35; controls.maxDistance = camDist * 1.8;
+  U.rhoMin.value = portrait ? 1.3 : 1.0; U.rhoSpread.value = portrait ? 3.6 : 3.3; U.squeeze.value = portrait ? 0.8 : 0.5;
+  U.axisY.value = layout.axisY;
+}
+function autoCam(t, out) {
+  const { tm, s, beat } = beatInfo(t);
+  // during the vortex the camera swings round to look along the line, so the barrel of shards reads in depth
+  const vort = smooth(T_CRACK + 0.05, T_CRACK + 1.6, s) * (1 - smooth(T_CRACK + 2.7, T_CRACK + 4.3, s));
+  const ph = tm / PERIOD * Math.PI * 2;
+  const side = beat === 0 ? 1 : -1;
+  const elev = THREE.MathUtils.degToRad(3 + 10 * vort + 1.2 * Math.sin(ph * 2));
+  const yaw = THREE.MathUtils.degToRad(3 * Math.sin(ph) + (portrait ? 20 : 36) * vort * side);
+  const d = camDist * (1 - 0.3 * vort) * (1 + 0.02 * Math.sin(ph * 2 + 1));
+  out.set(Math.sin(yaw) * Math.cos(elev), Math.sin(elev), Math.cos(yaw) * Math.cos(elev)).multiplyScalar(d);
+  // the code sits a little high so the notes card (bottom left) never covers it; the vortex gets the full frame
+  camera.setViewOffset(viewW, viewH, 0, Math.round(viewH * (portrait ? 0.03 : 0.07) * (1 - 0.85 * vort)), viewW, viewH);
+  return vort;
+}
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.07; controls.enablePan = false; controls.rotateSpeed = 0.6; controls.zoomSpeed = 0.7;
+let userCam = false, interacting = false, releasedAt = 0, blendStart = -1;
+const blendFrom = new THREE.Vector3(), vCam = new THREE.Vector3();
+controls.addEventListener('start', () => { userCam = true; interacting = true; blendStart = -1; });
+controls.addEventListener('end', () => { interacting = false; releasedAt = performance.now(); });
+controls.addEventListener('change', () => { dirty = true; });
+
+let vortNow = 0;
+function updateCamera(t, now) {
+  if (!userCam) {
+    vortNow = autoCam(t, camera.position); controls.target.copy(target); camera.lookAt(target);
+  } else if (interacting || now - releasedAt < 3500) {
+    controls.update();
+  } else {
+    if (blendStart < 0) { blendStart = now; blendFrom.copy(camera.position); }
+    const b = Math.min((now - blendStart) / 1800, 1), e = b * b * (3 - 2 * b);
+    vortNow = autoCam(t, vCam);
+    const la = blendFrom.length(), lb = vCam.length();
+    camera.position.copy(blendFrom).divideScalar(la).lerp(vCam.divideScalar(lb), e).normalize().multiplyScalar(la + (lb - la) * e);
+    controls.target.copy(target); camera.lookAt(target);
+    if (b >= 1) userCam = false;
+  }
+  // focus on the code plane; the range narrows a little during the vortex so near shards go soft
+  uFocus.value = camera.position.distanceTo(target);
+  uFocalLen.value = camDist * (0.36 - 0.2 * vortNow);
+  uBokeh.value = (2 + 6 * vortNow) * renderer.getPixelRatio();
+}
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setPixelRatio(PR());
+  renderer.setSize(w, h, false);
+  frame();
+  dirty = true;
+}
+
+/* ---------- loop + hooks ---------- */
+let t = 0, playing = true, dirty = true, last = performance.now();
+function setPlaying(p) {
+  playing = p; last = performance.now(); dirty = true;
+  pp.textContent = p ? 'Pause' : 'Play';
+  pp.setAttribute('aria-pressed', String(!p));
+}
+function renderAt(now) { applyTime(t); updateCamera(t, now); pipeline.render(); dirty = false; }
+
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min((now - last) / 1000, 0.1); last = now;
+  if (playing) t += dt;
+  if (playing || userCam || dirty) renderAt(now);
+}
+window.addEventListener('resize', resize);
+
+/* ---------- notes UI ---------- */
+const notes = document.getElementById('notes'), showBtn = document.getElementById('show-notes');
+function setNotes(v) { notes.hidden = !v; showBtn.hidden = v; }
+document.getElementById('hide-notes').addEventListener('click', () => { setNotes(false); showBtn.focus(); });
+showBtn.addEventListener('click', () => { setNotes(true); document.getElementById('hide-notes').focus(); });
+pp.addEventListener('click', () => setPlaying(!playing));
+window.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'h' || e.key === 'H') { setNotes(notes.hidden); }
+  else if (e.code === 'Space' || e.key === ' ') {
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'BUTTON' || ae.tagName === 'A')) return;
+    e.preventDefault(); setPlaying(!playing);
+  }
+});
+
+/* ---------- start ---------- */
+resize();
+if (Number.isFinite(T_PARAM)) { t = T_PARAM; setPlaying(false); }
+else if (REDUCED) { t = HERO_T; setPlaying(false); }
+else setPlaying(true);
+applyTime(t); updateCamera(t, performance.now());
+await renderer.compileAsync(scene, camera);
+renderAt(performance.now());
+
+window.__seek = (tt) => {
+  t = Number(tt) || 0;
+  setPlaying(false);
+  userCam = false; interacting = false; blendStart = -1;
+  renderAt(performance.now());
+  dirty = true;   // passes update once per renderer frame: paint the same t again on the next frame so it always lands
+};
+window.__play = () => setPlaying(true);
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

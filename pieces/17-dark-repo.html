@@ -1,0 +1,1445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dark repo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--void)}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair;background:var(--void)}
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="A dark floor plan of a code repository lit only by freshly typed code, until a reviewer's torch sweeps the corridors and a SQL injection in a back room ignites red-hot"></canvas>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Dark repo</h1>
+  <p>A repository at night, drawn as a floor plan. The only light comes from code an agent is typing, until a reviewer's torch finds the SQL injection waiting in a back room.</p>
+  <ul class="tech">
+    <li>2D global illumination with radiance cascades in raw WebGL2: five cascade levels, probes spaced 2 to 32 px, 16 to 4,096 ray directions, merged top-down with bilinear probe interpolation</li>
+    <li>A jump flood pass rebuilds the distance field every frame, and every ray interval is sphere-traced through it</li>
+    <li>Bilinear fix on the near cascades: each ray aims at the four upper probes it merges with, so intervals meet without ringing</li>
+    <li>Typed code glyphs from a Martian Mono atlas are the light sources; the torch is a directional emitter</li>
+    <li>Move the pointer to carry your own torch; the scripted review comes back after 10 s idle</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<!-- ======================= shaders ======================= -->
+<script id="vs-full" type="x-shader/x-vertex">#version 300 es
+void main(){
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}
+</script>
+
+<!-- instanced quads: walls, file blocks, glyph strips, cursor, torch -->
+<script id="vs-inst" type="x-shader/x-vertex">#version 300 es
+layout(location=0) in vec4 aRect;   // centre xy, half size zw (world units)
+layout(location=1) in vec4 aEm;     // emission rgb, intensity
+layout(location=2) in vec4 aAlb;    // albedo rgb, kind
+layout(location=3) in vec4 aP;      // kind parameters
+layout(location=4) in vec4 aUV;     // atlas rect
+uniform vec3 uXf;                   // world -> target px (scale, offset)
+uniform vec2 uTgt;                  // target size px
+uniform float uPad;                 // AA padding in target px
+out vec2 vLocal;
+flat out vec4 vRect;
+flat out vec4 vEm;
+flat out vec4 vAlb;
+flat out vec4 vP;
+flat out vec4 vUV;
+const vec2 C[6] = vec2[6](vec2(-1.,-1.), vec2(1.,-1.), vec2(1.,1.), vec2(-1.,-1.), vec2(1.,1.), vec2(-1.,1.));
+void main(){
+  vec2 c = C[gl_VertexID];
+  vec2 hw = aRect.zw + uPad / uXf.x;
+  vec2 w = aRect.xy + c * hw;
+  vec2 px = w * uXf.x + uXf.yz;
+  gl_Position = vec4(px.x / uTgt.x * 2.0 - 1.0, 1.0 - px.y / uTgt.y * 2.0, 0.0, 1.0);
+  vLocal = c * hw;
+  vRect = aRect; vEm = aEm; vAlb = aAlb; vP = aP; vUV = aUV;
+}
+</script>
+
+<script id="fs-inst" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+uniform int uMode;          // 0 = GI scene (emission + opacity), 1 = full-res materials (MRT)
+uniform sampler2D uAtlas;
+uniform float uPx;          // world units per target pixel
+uniform float uLod;         // atlas lod for the GI pass
+in vec2 vLocal;
+flat in vec4 vRect;
+flat in vec4 vEm;
+flat in vec4 vAlb;
+flat in vec4 vP;
+flat in vec4 vUV;
+layout(location=0) out vec4 o0;   // albedo, coverage
+layout(location=1) out vec4 o1;   // emission, coverage
+layout(location=2) out vec4 o2;   // top-surface flag, coverage
+
+float sdBox(vec2 p, vec2 b){ vec2 d = abs(p) - b; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
+float h2(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+void mat(vec3 alb, vec3 em, float top, float cov){ o0 = vec4(alb, cov); o1 = vec4(em, cov); o2 = vec4(top, 0.0, 0.0, cov); }
+vec3 ironbow(float x){
+  x = clamp(x, 0.0, 1.0) * 5.0;
+  vec3 c = mix(vec3(58., 15., 107.), vec3(155., 29., 143.), clamp(x, 0.0, 1.0));
+  c = mix(c, vec3(240., 48., 106.), clamp(x - 1.0, 0.0, 1.0));
+  c = mix(c, vec3(255., 122., 47.), clamp(x - 2.0, 0.0, 1.0));
+  c = mix(c, vec3(255., 211., 107.), clamp(x - 3.0, 0.0, 1.0));
+  c = mix(c, vec3(255., 246., 224.), clamp(x - 4.0, 0.0, 1.0));
+  return pow(c / 255.0, vec3(2.2));
+}
+vec3 coldbow(float x){
+  x = clamp(x, 0.0, 1.0) * 4.0;
+  vec3 c = mix(vec3(27., 23., 71.), vec3(47., 79., 168.), clamp(x, 0.0, 1.0));
+  c = mix(c, vec3(79., 163., 224.), clamp(x - 1.0, 0.0, 1.0));
+  c = mix(c, vec3(155., 232., 255.), clamp(x - 2.0, 0.0, 1.0));
+  c = mix(c, vec3(232., 247., 255.), clamp(x - 3.0, 0.0, 1.0));
+  return pow(c / 255.0, vec3(2.2));
+}
+
+void main(){
+  int kind = int(vAlb.w + 0.5);
+  vec2 hw = vRect.zw;
+  vec2 uv = vLocal / hw * 0.5 + 0.5;
+  vec3 em = vEm.rgb * vEm.a;
+
+  if (kind <= 1){                                   // solid rect / file block
+    float d = sdBox(vLocal, hw);
+    if (uMode == 0){ if (d > 0.0) discard; o0 = vec4(em, 1.0); return; }
+    float cov = clamp(0.5 - d / uPx, 0.0, 1.0);
+    if (cov <= 0.0) discard;
+    if (kind == 0){ mat(vAlb.rgb, em, vP.x, cov); return; }
+    // file block: bevelled lid with a faint code minimap
+    vec3 alb = vAlb.rgb;
+    float inside = -d;
+    float bw = max(uPx * 1.25, 1.4);
+    alb = mix(alb, vec3(0.15, 0.17, 0.33), (1.0 - smoothstep(bw * 0.5, bw * 1.5, inside)) * 0.9);
+    float pitch = vP.y;
+    if (pitch > 0.0){
+      vec2 q = vLocal + hw;
+      float header = pitch * 2.6;
+      float ry = (q.y - header) / pitch;
+      float row = floor(ry);
+      float rows = floor((2.0 * hw.y - header - pitch * 0.4) / pitch);
+      if (ry >= 0.0 && row < rows){
+        float hr = h2(vec2(vP.x * 1.7, row + 3.1));
+        float cw = pitch * 0.62;
+        float ind = cw * (1.6 + 2.0 * floor(hr * 3.0));
+        float avail = 2.0 * hw.x - ind - cw * 1.6;
+        float len = avail * (0.3 + 0.7 * fract(hr * 7.31));
+        float xx = q.x - ind;
+        float cell = cw * 6.0;
+        float wl = cw * (2.0 + floor(h2(vec2(row * 1.3 + vP.x, floor(xx / cell))) * 4.0));
+        float inx = step(0.0, xx) * step(xx, len) * step(mod(xx, cell), wl);
+        float fy = abs(fract(ry) - 0.5);
+        float bar = inx * (1.0 - smoothstep(0.16, 0.16 + uPx / pitch, fy));
+        alb = mix(alb, vec3(0.085, 0.095, 0.2), bar);
+      }
+    }
+    if (vP.z > 0.001){                              // the vulnerable file glows like a heated plate
+      float cr = length((uv - 0.5) * vec2(1.0, 1.8));
+      float centre = 1.0 - smoothstep(0.0, 0.85, cr);
+      float edge = 1.0 - smoothstep(bw * 0.5, bw * 3.0, inside);
+      float grain = h2(floor(vLocal / max(uPx * 2.0, 1.5)));
+      float x = vP.z * (0.5 + 0.38 * centre * centre) + 0.06 * edge + 0.03 * grain;
+      em += ironbow(x) * vP.w * (0.5 + 0.8 * centre + 0.35 * edge);
+    }
+    if (vUV.y > 0.001){                             // after the fix: a calm ice glow
+      float cr = length((uv - 0.5) * vec2(1.0, 1.8));
+      float centre = 1.0 - smoothstep(0.0, 0.9, cr);
+      float edge = 1.0 - smoothstep(bw * 0.5, bw * 3.0, inside);
+      em += coldbow(0.5 + 0.35 * centre + 0.1 * edge) * vUV.y * (0.45 + 0.7 * centre + 0.3 * edge);
+    }
+    mat(alb, em, 1.0 - vUV.z, cov);
+    return;
+  }
+
+  if (kind <= 4){                                   // glyph strip from the atlas
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) discard;
+    float n = vP.w;
+    float ci = floor(uv.x * n);
+    float typed = vP.x;
+    if (ci + 1.0 > typed) discard;
+    float age = max(typed - ci - 1.0, 0.0) / max(vP.y, 1e-3);
+    float br = 1.0 + vP.z * exp(-age * 2.6);
+    vec2 auv = mix(vUV.xy, vUV.zw, uv);
+    if (uMode == 0){
+      float c = textureLod(uAtlas, auv, uLod).a;
+      if (c < 0.16) discard;
+      o0 = vec4(em * br, 1.0);
+      return;
+    }
+    float cov = texture(uAtlas, auv).a;
+    cov = smoothstep(0.02, 0.8, cov);
+    if (cov < 0.003) discard;
+    if (kind == 2) mat(vec3(0.0), em * br, 0.0, cov);
+    else mat(vAlb.rgb, em, kind == 4 ? 1.0 : 0.0, cov);
+    return;
+  }
+
+  if (kind == 5){                                   // disc
+    float r = length(vLocal);
+    float d = r - hw.x;
+    if (uMode == 0){ if (d > 0.0) discard; o0 = vec4(em, 1.0); return; }
+    float cov = clamp(0.5 - d / uPx, 0.0, 1.0);
+    if (cov <= 0.0) discard;
+    float core = 1.0 - smoothstep(0.0, hw.x, r);
+    mat(vAlb.rgb, em * (0.55 + 0.9 * core * core), vP.x, cov);
+    return;
+  }
+
+  // kind 6: dashed outline of a file being written
+  float d = sdBox(vLocal, hw - vP.x);
+  float line = 1.0 - smoothstep(vP.x * 0.5, vP.x * 0.5 + uPx, abs(d));
+  float along = abs(vLocal.x) > hw.x - vP.x * 2.0 ? vLocal.y : vLocal.x;
+  float dash = step(fract(along / vP.y), 0.55);
+  float cov = line * dash * vP.z;
+  if (cov < 0.003) discard;
+  mat(vAlb.rgb, em, 0.0, cov);
+}
+</script>
+
+<!-- jump flood: seed, flood, distance + nearest emission -->
+<script id="fs-seed" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+uniform sampler2D uScene;
+out vec4 o;
+void main(){
+  float a = texelFetch(uScene, ivec2(gl_FragCoord.xy), 0).a;
+  o = a > 0.5 ? vec4(gl_FragCoord.xy, 0.0, 1.0) : vec4(-1e5, -1e5, 0.0, 1.0);
+}
+</script>
+<script id="fs-jfa" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+uniform sampler2D uJ;
+uniform float uStep;
+uniform vec2 uSize;
+out vec4 o;
+void main(){
+  vec2 p = gl_FragCoord.xy;
+  vec2 best = vec2(-1e5);
+  float bd = 1e20;
+  for (int y = -1; y <= 1; y++){
+    for (int x = -1; x <= 1; x++){
+      vec2 q = p + vec2(float(x), float(y)) * uStep;
+      if (q.x < 0.0 || q.y < 0.0 || q.x >= uSize.x || q.y >= uSize.y) continue;
+      vec2 s = texelFetch(uJ, ivec2(q), 0).xy;
+      if (s.x < -1e4) continue;
+      vec2 dv = s - p;
+      float d = dot(dv, dv);
+      if (d < bd){ bd = d; best = s; }
+    }
+  }
+  o = vec4(best, 0.0, 1.0);
+}
+</script>
+<script id="fs-df" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+uniform sampler2D uJ;
+uniform sampler2D uScene;
+out vec4 o;
+void main(){
+  vec2 p = gl_FragCoord.xy;
+  vec2 s = texelFetch(uJ, ivec2(p), 0).xy;
+  if (s.x < -1e4){ o = vec4(0.0, 0.0, 0.0, 1e4); return; }
+  // rgb: emission of the nearest occupied texel, a: distance to it in GI pixels
+  o = vec4(texelFetch(uScene, ivec2(s), 0).rgb, length(s - p));
+}
+</script>
+
+<!-- radiance cascades: one pass per cascade, top-down -->
+<script id="fs-rc" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+uniform sampler2D uDF;      // rgb nearest emission, a distance
+uniform sampler2D uUp;      // cascade c+1 (already merged)
+uniform vec2 uSize;         // GI texture size (multiple of the top probe spacing)
+uniform float uC;           // cascade index
+uniform float uN;           // cascade count
+uniform float uS0;          // probe spacing of cascade 0
+uniform float uB0;          // direction blocks per side of cascade 0
+uniform float uI0;          // interval length of cascade 0
+uniform int uFix;           // bilinear fix on this level
+uniform vec4 uTorch;        // torch head position (GI px), beam direction
+uniform vec3 uTorchK;       // head radius, cos outer, cos inner
+out vec4 o;
+const float TAU = 6.28318530718;
+
+// sphere-trace one interval; a = 1 when the ray stopped (hit or left the scene)
+vec4 march(vec2 p0, vec2 d, float len){
+  float t = 0.0;
+  for (int i = 0; i < 48; i++){
+    vec2 p = p0 + d * t;
+    if (p.x < 0.0 || p.y < 0.0 || p.x > uSize.x || p.y > uSize.y) return vec4(0.0, 0.0, 0.0, 1.0);
+    vec4 s = textureLod(uDF, p / uSize, 0.0);
+    if (s.a < 0.9){
+      vec3 e = s.rgb;
+      vec2 tv = p - uTorch.xy;
+      float rr = uTorchK.x + 2.5;
+      if (dot(tv, tv) < rr * rr){
+        e *= mix(0.025, 1.0, smoothstep(uTorchK.y, uTorchK.z, dot(-d, uTorch.zw)));
+      }
+      return vec4(e, 1.0);
+    }
+    t += s.a;
+    if (t >= len) break;
+  }
+  return vec4(0.0);
+}
+
+void main(){
+  float s = uS0 * exp2(uC);
+  float b = uB0 * exp2(uC);
+  vec2 pg = uSize / s;                       // probes per block
+  vec2 fc = floor(gl_FragCoord.xy);
+  vec2 blk = floor(fc / pg);                 // direction block
+  vec2 pr = fc - blk * pg;                   // probe index
+  float bin = blk.x + blk.y * b;
+  vec2 P = (pr + 0.5) * s;                   // probe centre
+  float nr = 4.0 * b * b;                    // rays at this level (4 per stored bin)
+  float t0 = uI0 * (exp2(2.0 * uC) - 1.0) / 3.0;
+  float t1 = uI0 * (exp2(2.0 * uC + 2.0) - 1.0) / 3.0;
+  bool topLevel = uC > uN - 1.5;
+  float s2 = s * 2.0;
+  float b2 = b * 2.0;
+  vec2 pg2 = pg * 0.5;
+  vec2 f = P / s2 - 0.5;                     // position in the upper probe grid
+  vec2 bq = floor(f);
+  vec2 w = f - bq;
+  vec3 acc = vec3(0.0);
+  for (int i = 0; i < 4; i++){
+    float k = bin * 4.0 + float(i);
+    float ang = TAU * (k + 0.5) / nr;
+    vec2 d = vec2(cos(ang), sin(ang));
+    vec2 ub = vec2(mod(k, b2), floor(k / b2)) * pg2;   // upper block origin for this ray
+    if (topLevel){
+      acc += march(P + d * t0, d, t1 - t0).rgb;
+    } else if (uFix == 0){
+      vec4 r = march(P + d * t0, d, t1 - t0);
+      if (r.a < 0.5){
+        vec2 q = clamp(P / s2, vec2(0.5), pg2 - 0.5);
+        r.rgb += textureLod(uUp, (ub + q) / uSize, 0.0).rgb;
+      }
+      acc += r.rgb;
+    } else {
+      // bilinear fix: trace towards each of the four upper probes' interval starts
+      vec3 sum = vec3(0.0);
+      for (int j = 0; j < 4; j++){
+        vec2 off = vec2(float(j & 1), float(j >> 1));
+        vec2 q = clamp(bq + off, vec2(0.0), pg2 - 1.0);
+        vec2 Q = (q + 0.5) * s2;
+        vec2 a = P + d * t0;
+        vec2 e = Q + d * t1;
+        vec2 dd = e - a;
+        float L = max(length(dd), 1e-3);
+        vec4 r = march(a, dd / L, L);
+        if (r.a < 0.5) r.rgb += texelFetch(uUp, ivec2(ub + q), 0).rgb;
+        float wj = mix(1.0 - w.x, w.x, off.x) * mix(1.0 - w.y, w.y, off.y);
+        sum += r.rgb * wj;
+      }
+      acc += sum;
+    }
+  }
+  o = vec4(acc * 0.25, 1.0);
+}
+</script>
+
+<!-- cascade 0 bins averaged into an irradiance map -->
+<script id="fs-irr" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+uniform sampler2D uC0;
+uniform vec2 uPG;
+uniform float uB0;
+out vec4 o;
+void main(){
+  vec2 p = floor(gl_FragCoord.xy);
+  vec3 s = vec3(0.0);
+  int nb = int(uB0 + 0.5);
+  for (int y = 0; y < 4; y++){
+    if (y >= nb) break;
+    for (int x = 0; x < 4; x++){
+      if (x >= nb) break;
+      s += texelFetch(uC0, ivec2(vec2(float(x), float(y)) * uPG + p), 0).rgb;
+    }
+  }
+  o = vec4(s / (uB0 * uB0), 1.0);
+}
+</script>
+
+<!-- final composite: materials x irradiance, tone map, grain -->
+<script id="fs-comp" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+uniform sampler2D uT0;
+uniform sampler2D uT1;
+uniform sampler2D uT2;
+uniform sampler2D uIrr;
+uniform vec2 uCanvas;
+uniform float uDpr;
+uniform vec2 uGI;
+uniform float uG;
+uniform vec3 uXf;       // world -> css px
+uniform float uTime;
+uniform float uExp;
+uniform int uView;
+out vec4 o;
+float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+vec3 irr(vec2 uv){ return textureLod(uIrr, uv, 0.0).rgb; }
+vec3 rimTap(vec2 uv, vec2 e){
+  return max(max(irr(uv + vec2(e.x, 0.0)), irr(uv - vec2(e.x, 0.0))), max(irr(uv + vec2(0.0, e.y)), irr(uv - vec2(0.0, e.y))));
+}
+void main(){
+  vec2 fc = gl_FragCoord.xy;
+  vec2 uv = fc / uCanvas;
+  vec4 a = texture(uT0, uv);
+  vec4 e = texture(uT1, uv);
+  vec4 f = texture(uT2, uv);
+  vec2 sp = vec2(fc.x, uCanvas.y - fc.y) / uDpr;
+  vec2 gp = sp * uG;
+  vec2 iuv = vec2(gp.x / uGI.x, 1.0 - gp.y / uGI.y);
+  vec2 w = (sp - uXf.yz) / uXf.x;
+  float pxw = 1.0 / (uXf.x * uDpr);
+
+  // floor plan paper: a 40-unit grid with finer 8-unit ticks
+  vec2 m = abs(fract(w / 40.0 + 0.5) - 0.5) * 40.0;
+  float gline = 1.0 - smoothstep(0.3, 0.3 + pxw * 1.3, min(m.x, m.y));
+  vec2 m2 = abs(fract(w / 8.0 + 0.5) - 0.5) * 8.0;
+  float tick = (1.0 - smoothstep(0.25, 0.25 + pxw, length(m2))) * 0.6;
+  vec3 floorAlb = vec3(0.115, 0.115, 0.15) + vec3(0.10, 0.11, 0.17) * max(gline, tick);
+  vec3 alb = a.rgb + floorAlb * (1.0 - a.a);
+  float top = clamp(f.r, 0.0, 1.0);
+
+  vec3 L0 = irr(iuv);
+  vec2 px = 1.0 / uGI;
+  vec3 r1 = rimTap(iuv, px * 2.0);
+  vec3 r2 = rimTap(iuv, px * 5.0);
+  vec3 amb = textureLod(uIrr, iuv, 3.2).rgb;
+  vec3 Lt = max(r1 * 0.75, r2 * 0.3) + amb * 0.12;
+  vec3 L = mix(L0, Lt, top);
+
+  vec3 col = alb * (L + mix(0.0025, 0.012, top)) + e.rgb;
+  if (uView == 1) col = L0;
+  col = 1.0 - exp(-col * uExp);
+  col = pow(col, vec3(1.0 / 2.2));
+
+  // the void is the floor of the display, not black
+  vec3 voidC = vec3(16.0, 12.0, 42.0) / 255.0;
+  col = 1.0 - (1.0 - voidC) * (1.0 - col);
+  vec2 dc = (uv - 0.5) * vec2(uCanvas.x / uCanvas.y, 1.0);
+  col = mix(col, voidC * 0.7, smoothstep(0.55, 1.25, length(dc)) * 0.6);
+  col += (hash12(fc + fract(uTime * 7.31) * 113.0) - 0.5) * 0.028;
+  o = vec4(col, 1.0);
+}
+</script>
+
+<script>
+(() => {
+  'use strict';
+  const params = new URLSearchParams(location.search);
+  const LOW = params.get('q') === 'low' || params.has('low');
+  const VIEW = params.get('view') === 'irr' ? 1 : 0;
+  const FIXP = params.has('fix') ? parseInt(params.get('fix'), 10) : null;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PERIOD = 20;
+  const HERO_T = 11.7;
+
+  const canvas = document.getElementById('c');
+  const notes = document.getElementById('notes');
+  const showNotes = document.getElementById('show-notes');
+  const hideNotes = document.getElementById('hide-notes');
+  const playBtn = document.getElementById('playpause');
+
+  let t = 0, playing = true;
+  if (params.has('t') && isFinite(parseFloat(params.get('t')))) { t = parseFloat(params.get('t')); playing = false; }
+  else if (reduced) { t = HERO_T; playing = false; }
+  function setButton(){
+    playBtn.textContent = playing ? 'Pause' : 'Play';
+    playBtn.setAttribute('aria-pressed', playing ? 'false' : 'true');
+  }
+  setButton();
+
+  // ---------------------------------------------------------------- helpers
+  const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
+  const sat = x => clamp(x, 0, 1);
+  const sstep = (a, b, x) => { const u = sat((x - a) / (b - a)); return u * u * (3 - 2 * u); };
+  const lin = v => Math.pow(v / 255, 2.2);
+  const hexl = h => [1, 3, 5].map(i => lin(parseInt(h.slice(i, i + 2), 16)));
+  const HEAT = ['#3A0F6B', '#9B1D8F', '#F0306A', '#FF7A2F', '#FFD36B', '#FFF6E0'].map(h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)));
+  const COLD = ['#1B1747', '#2F4FA8', '#4FA3E0', '#9BE8FF', '#E8F7FF'].map(h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)));
+  function ramp(stops, x){
+    x = sat(x) * (stops.length - 1);
+    const i = Math.min(Math.floor(x), stops.length - 2), f = x - i;
+    return [0, 1, 2].map(k => lin(stops[i][k] + (stops[i + 1][k] - stops[i][k]) * f));
+  }
+  const ironbow = x => ramp(HEAT, x);
+  const coldbow = x => ramp(COLD, x);
+  const ICE = hexl('#9BE8FF'), FROST = hexl('#E8F7FF'), WARM = hexl('#FFF6E0'), MIST = hexl('#8C93C4');
+  const mixc = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+  function hash1(n){ let x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+
+  // cubic Hermite through keyframes [t, v0, v1, ...]; holds stay still
+  function curve(keys, tt){
+    const n = keys.length;
+    if (tt <= keys[0][0]) return keys[0].slice(1);
+    if (tt >= keys[n - 1][0]) return keys[n - 1].slice(1);
+    let i = 0;
+    while (i < n - 2 && tt >= keys[i + 1][0]) i++;
+    const k0 = keys[Math.max(i - 1, 0)], k1 = keys[i], k2 = keys[i + 1], k3 = keys[Math.min(i + 2, n - 1)];
+    const h = k2[0] - k1[0], u = (tt - k1[0]) / h;
+    const u2 = u * u, u3 = u2 * u;
+    const out = [];
+    for (let d = 1; d < k1.length; d++){
+      const still1 = k1[d] === k0[d] || k1[d] === k2[d] || k0 === k1;
+      const still2 = k2[d] === k3[d] || k2[d] === k1[d] || k3 === k2;
+      const m1 = still1 ? 0 : (k2[d] - k0[d]) / (k2[0] - k0[0]) * h;
+      const m2 = still2 ? 0 : (k3[d] - k1[d]) / (k3[0] - k1[0]) * h;
+      out.push((2 * u3 - 3 * u2 + 1) * k1[d] + (u3 - 2 * u2 + u) * m1 + (-2 * u3 + 3 * u2) * k2[d] + (u3 - u2) * m2);
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------- the code
+  const API_LINES = [
+    '@router.get("/orders/{uid}")',
+    'async def list_orders(uid: str):',
+    '    rows = await find_orders(uid)',
+    '    return [Order(**r) for r in rows]',
+  ];
+  const MDL_LINES = ['class Order(BaseModel):', '    id: int', '    uid: str', '    total: Decimal'];
+  const VUL_LINES = [
+    'async def find_orders(uid):',
+    '  q = ("SELECT * FROM orders "',
+    '       f"WHERE uid = \'{uid}\'")',
+    '  return await db.fetch(q)',
+  ];
+  const FIX3 = '       "WHERE uid = $1")';
+  const FIX4 = '  return await db.fetch(q, uid)';
+
+  function sched(lines, t0, rate, pause){
+    let tt = t0;
+    return lines.map(s => {
+      const ind = s.length - s.trimStart().length;
+      const L = { s, ind, st: tt, rate, n: s.length, dur: (s.length - ind) / rate };
+      tt += L.dur + pause;
+      return L;
+    });
+  }
+  const typedAt = (L, tt) => tt < L.st ? 0 : Math.min(L.n, L.ind + (tt - L.st) * L.rate);
+  const API_S = sched(API_LINES, 0.12, 52, 0.13);
+  const MDL_S = sched(MDL_LINES, 5.2, 40, 0.12);
+  const API_END = API_S[3].st + API_S[3].dur;
+  const MDL_END = MDL_S[3].st + MDL_S[3].dur;
+  const FOUND_T = 11.0;          // the torch lands on the bug
+  const FIX_T = 13.8;            // the agent starts editing
+  // fix edits on line 3 and 4 of the vulnerable file
+  const DEL3_T = FIX_T, DEL3_R = 80;
+  const N3 = VUL_LINES[2].length, IND3 = 7;
+  const TYP3_T = DEL3_T + (N3 - IND3) / DEL3_R + 0.1, TYP3_R = 34;
+  const N3F = FIX3.length;
+  const L4_T = TYP3_T + (N3F - IND3) / TYP3_R + 0.12;
+  const PRE4 = 25;                // '  return await db.fetch(q' is shared
+  const TYP4_T = L4_T + 0.08, TYP4_R = 30;
+  const FIX_END = TYP4_T + (FIX4.length - PRE4) / TYP4_R;
+
+  // ---------------------------------------------------------------- floor plans
+  const LAND = {
+    W: 1600, H: 1000, wt: 8,
+    bld: [30, 30, 1540, 940], ent: [462, 538],
+    f: { code: 15, lh: 24, title: 18, file: 9, vul: 10.5, vlh: 16, note: 10.5, nlh: 16 },
+    pitch: 6,
+    rooms: [
+      { name: 'src/auth/', r: [30, 30, 510, 430], doors: [['B', 392, 468]], lab: [58, 44], files: [
+        ['session.py', 70, 100, 170, 60], ['tokens.py', 300, 96, 150, 60], ['middleware.py', 80, 250, 190, 62], ['oauth.py', 330, 256, 140, 58], ['keys.py', 190, 372, 130, 52]] },
+      { name: 'src/api/', r: [620, 30, 460, 430], doors: [['B', 800, 880], ['R', 112, 182]], lab: [648, 44], files: [
+        ['routes.py', 650, 92, 160, 56], ['schemas.py', 866, 92, 166, 56], ['deps.py', 650, 360, 140, 58], ['__init__.py', 912, 360, 140, 58]] },
+      { name: 'config/', r: [1160, 30, 410, 430], doors: [['B', 1222, 1292]], lab: [1188, 44], files: [
+        ['settings.py', 1200, 100, 160, 60], ['logging.yaml', 1396, 100, 140, 60], ['.env.example', 1206, 276, 170, 60], ['pyproject.toml', 1396, 266, 150, 60]] },
+      { name: 'tests/', r: [30, 540, 510, 430], doors: [['T', 160, 232]], lab: [58, 556], files: [
+        ['test_orders.py', 70, 640, 190, 60], ['conftest.py', 320, 630, 140, 60], ['test_auth.py', 90, 800, 170, 60], ['test_db.py', 330, 806, 140, 60]] },
+      { name: 'src/models/', r: [620, 540, 460, 430], doors: [['T', 690, 770]], lab: [884, 556], files: [
+        ['user.py', 940, 620, 120, 58], ['base.py', 940, 760, 120, 58], ['enums.py', 660, 850, 150, 56]] },
+      { name: 'src/db/', r: [1160, 540, 410, 430], doors: [['T', 1190, 1262]], lab: [1440, 556], files: [
+        ['pool.py', 1330, 588, 120, 50], ['migrate.py', 1186, 724, 120, 56], ['schema.sql', 1426, 694, 124, 56]] },
+    ],
+    root: [['README.md', 547, 286, 66, 74], ['LICENSE', 547, 690, 66, 62], ['Makefile', 1087, 236, 66, 66], ['.gitignore', 1087, 650, 66, 70]],
+    api: { x: 668, y: 192, frame: [652, 174, 412, 114, 'orders.py'] },
+    mdl: { x: 668, y: 622, frame: [652, 604, 262, 114, 'order.py'] },
+    vuln: { r: [1322, 822, 232, 126], name: 'queries.py' },
+    note: { x: 1168, y: 810, lines: ['SQL injection', 'uid from the URL', 'lands in the query'], fix: ['Parameterised', 'the driver binds', 'uid as $1'] },
+    torchP: [[3.4, -60, 500], [4.4, 110, 502], [5.4, 330, 500], [6.2, 500, 500], [7.2, 760, 502], [8.0, 960, 500], [8.8, 1150, 500],
+      [9.4, 1226, 540], [10.0, 1230, 612], [10.7, 1284, 670], [13.5, 1284, 670], [14.3, 1236, 650], [16.7, 1236, 650],
+      [17.5, 1226, 560], [18.3, 1200, 500], [19.6, 860, 500]],
+    torchA: [[3.4, 0], [4.6, -8], [5.3, -72], [5.9, -28], [6.5, 12], [7.1, -68], [7.7, -10], [8.2, 70], [8.7, 14], [9.2, 70], [9.8, 96],
+      [10.2, 18], [10.45, 40], [10.68, 'V'], [13.5, 'V'], [14.3, 'V'], [16.7, 'V'], [17.3, -90], [18.2, -180], [19.6, -180]],
+    cur1: [[0, 'apiEnd'], [0.35, 846, 420], [0.7, 846, 500], [1.1, 730, 560], [1.5, 'mdlStart']],
+    cur2: [[0, 'mdlEnd'], [0.3, 730, 600], [0.6, 730, 500], [1.0, 1130, 500], [1.3, 1226, 566], [1.65, 'fixPos']],
+  };
+  const PORT = {
+    W: 900, H: 1800, wt: 10,
+    bld: [30, 30, 840, 1740], ent: [502, 578],
+    f: { code: 22, lh: 34, title: 28, file: 14, vul: 15.5, vlh: 23, note: 14, nlh: 22 },
+    pitch: 9,
+    rooms: [
+      { name: 'src/api/', r: [30, 30, 840, 470], doors: [['B', 300, 380]], lab: [60, 44], files: [
+        ['routes.py', 690, 110, 150, 80], ['schemas.py', 690, 246, 150, 80], ['deps.py', 70, 392, 190, 74], ['__init__.py', 500, 392, 170, 74]] },
+      { name: 'src/models/', r: [30, 580, 380, 510], doors: [['T', 300, 370]], lab: [60, 596], files: [
+        ['user.py', 60, 870, 150, 74], ['base.py', 240, 880, 140, 70], ['enums.py', 80, 990, 180, 66]] },
+      { name: 'src/db/', r: [490, 580, 380, 510], doors: [['L', 632, 702]], lab: [690, 596], files: [
+        ['pool.py', 690, 652, 160, 58], ['migrate.py', 510, 776, 140, 68], ['schema.sql', 732, 776, 118, 68]] },
+      { name: 'src/auth/', r: [30, 1170, 380, 600], doors: [['T', 300, 370]], lab: [60, 1186], files: [
+        ['session.py', 70, 1270, 150, 74], ['tokens.py', 240, 1290, 130, 70], ['oauth.py', 80, 1420, 160, 70]] },
+      { name: 'tests/', r: [490, 1170, 380, 600], doors: [['T', 510, 580]], lab: [700, 1186], files: [
+        ['conftest.py', 620, 1270, 200, 74], ['test_db.py', 520, 1410, 150, 70], ['test_api.py', 700, 1420, 150, 70]] },
+    ],
+    root: [['README.md', 640, 508, 110, 24], ['LICENSE', 418, 930, 64, 62], ['Makefile', 110, 1100, 110, 24], ['.gitignore', 600, 1138, 110, 24]],
+    api: { x: 64, y: 142, frame: [48, 122, 606, 156, 'orders.py'] },
+    mdl: { x: 60, y: 690, frame: [44, 670, 352, 156, 'order.py'] },
+    vuln: { r: [528, 900, 328, 172], name: 'queries.py' },
+    note: { x: 506, y: 1098, lines: ['SQL injection', 'uid from the URL lands in the query'], fix: ['Parameterised query', 'the driver now binds uid as $1'] },
+    torchP: [[3.4, -60, 540], [4.4, 120, 540], [5.4, 320, 540], [6.3, 450, 548], [7.3, 450, 600], [8.1, 450, 667], [8.9, 560, 670],
+      [9.6, 650, 728], [10.25, 690, 742], [13.4, 690, 742], [14.2, 612, 726], [16.6, 612, 726], [17.4, 450, 667], [18.4, 450, 560], [19.6, 160, 540]],
+    torchA: [[3.4, 0], [4.6, 0], [5.3, -78], [5.8, 80], [6.3, 10], [6.8, 90], [7.6, 90], [8.2, 8], [8.9, -8], [9.4, 40], [9.9, -16],
+      [10.4, 'V'], [13.4, 'V'], [14.2, 'V'], [16.6, 'V'], [17.2, -150], [18.2, -100], [19.6, -180]],
+    cur1: [[0, 'apiEnd'], [0.35, 340, 440], [0.7, 340, 540], [1.1, 335, 620], [1.5, 'mdlStart']],
+    cur2: [[0, 'mdlEnd'], [0.3, 335, 640], [0.6, 335, 540], [0.9, 450, 540], [1.2, 450, 667], [1.4, 520, 667], [1.65, 'fixPos']],
+  };
+
+  // ---------------------------------------------------------------- glyph atlas
+  const ATLAS_W = 2048, ROW_H = 48, AFS = 30;
+  const STYLES = {
+    code: { w: 400, st: 'normal' },
+    title: { w: 300, st: 'semi-expanded' },
+    file: { w: 500, st: 'normal' },
+    note: { w: 500, st: 'normal' },
+  };
+  const atlasRows = new Map();
+  const atlasCanvas = document.createElement('canvas');
+  let atlasReady = false, codeAdvPx = 18;
+  function atlasKey(style, text){ return style + '|' + text; }
+  function registerText(style, text){ const k = atlasKey(style, text); if (!atlasRows.has(k)) atlasRows.set(k, { style, text }); }
+  function fontStr(style){ const s = STYLES[style]; return `${s.w} ${s.st === 'normal' ? '' : s.st + ' '}${AFS}px "Martian Mono", ui-monospace, monospace`; }
+  function buildAtlas(){
+    for (const s of [LAND, PORT]) {
+      for (const r of s.rooms) { registerText('title', r.name); for (const f of r.files) registerText('file', f[0]); }
+      for (const f of s.root) registerText('file', f[0]);
+      registerText('file', s.api.frame[4]); registerText('file', s.mdl.frame[4]); registerText('file', s.vuln.name);
+      for (const l of s.note.lines) registerText('note', l);
+      for (const l of s.note.fix) registerText('note', l);
+    }
+    for (const l of [...API_LINES, ...MDL_LINES, ...VUL_LINES, FIX3, FIX4]) registerText('code', l);
+    const rows = atlasRows.size;
+    atlasCanvas.width = ATLAS_W; atlasCanvas.height = Math.max(64, rows * ROW_H);
+    const ctx = atlasCanvas.getContext('2d');
+    ctx.clearRect(0, 0, atlasCanvas.width, atlasCanvas.height);
+    ctx.fillStyle = '#fff';
+    ctx.textBaseline = 'alphabetic';
+    let i = 0;
+    for (const [, r] of atlasRows) {
+      ctx.font = fontStr(r.style);
+      if ('fontStretch' in ctx) ctx.fontStretch = STYLES[r.style].st;
+      const w = Math.min(ATLAS_W - 8, ctx.measureText(r.text).width);
+      ctx.fillText(r.text, 4, i * ROW_H + 34);
+      r.wpx = w; r.n = r.text.length;
+      r.u0 = 4 / ATLAS_W; r.u1 = (4 + w) / ATLAS_W;
+      r.v0 = i * ROW_H / atlasCanvas.height; r.v1 = (i + 1) * ROW_H / atlasCanvas.height;
+      i++;
+    }
+    ctx.font = fontStr('code');
+    if ('fontStretch' in ctx) ctx.fontStretch = 'normal';
+    codeAdvPx = ctx.measureText('0000000000').width / 10;
+  }
+
+  // ---------------------------------------------------------------- GL
+  const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false,
+    premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
+  const noGL = msg => {
+    notes.querySelector('p').textContent = msg;
+    window.__seek = () => {}; window.__play = () => {};
+  };
+  if (!gl) { noGL('This piece needs WebGL2, which this browser does not provide.'); return; }
+  const extF32 = gl.getExtension('EXT_color_buffer_float');
+  const extF16 = extF32 ? null : gl.getExtension('EXT_color_buffer_half_float');
+  if (!extF32 && !extF16) { noGL('This piece needs floating-point render targets for its light simulation, which this GPU does not offer.'); return; }
+
+  function compile(type, src){
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src.trim());
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  }
+  function program(vsId, fsId){
+    const p = gl.createProgram();
+    gl.attachShader(p, compile(gl.VERTEX_SHADER, document.getElementById(vsId).textContent));
+    gl.attachShader(p, compile(gl.FRAGMENT_SHADER, document.getElementById(fsId).textContent));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const u = {};
+    const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) { const a = gl.getActiveUniform(p, i); u[a.name] = gl.getUniformLocation(p, a.name); }
+    return { p, u };
+  }
+  const P = {
+    inst: program('vs-inst', 'fs-inst'),
+    seed: program('vs-full', 'fs-seed'),
+    jfa: program('vs-full', 'fs-jfa'),
+    df: program('vs-full', 'fs-df'),
+    rc: program('vs-full', 'fs-rc'),
+    irr: program('vs-full', 'fs-irr'),
+    comp: program('vs-full', 'fs-comp'),
+  };
+  const emptyVao = gl.createVertexArray();
+
+  // instance buffer layout: 5 x vec4
+  const IF = 20;
+  function makeBuf(){ return { a: new Float32Array(IF * 512), n: 0 }; }
+  function put(B, cx, cy, hw, hh, er, eg, eb, ei, ar, ag, ab, kind, p0, p1, p2, p3, u0, v0, u1, v1){
+    if ((B.n + 1) * IF > B.a.length) { const na = new Float32Array(B.a.length * 2); na.set(B.a); B.a = na; }
+    const a = B.a, o = B.n * IF;
+    a[o] = cx; a[o + 1] = cy; a[o + 2] = hw; a[o + 3] = hh;
+    a[o + 4] = er; a[o + 5] = eg; a[o + 6] = eb; a[o + 7] = ei;
+    a[o + 8] = ar; a[o + 9] = ag; a[o + 10] = ab; a[o + 11] = kind;
+    a[o + 12] = p0; a[o + 13] = p1; a[o + 14] = p2; a[o + 15] = p3;
+    a[o + 16] = u0; a[o + 17] = v0; a[o + 18] = u1; a[o + 19] = v1;
+    B.n++;
+  }
+  const GIB = makeBuf(), MTB = makeBuf();
+  const instVbo = gl.createBuffer();
+  const instVao = gl.createVertexArray();
+  gl.bindVertexArray(instVao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, instVbo);
+  for (let i = 0; i < 5; i++) {
+    gl.enableVertexAttribArray(i);
+    gl.vertexAttribPointer(i, 4, gl.FLOAT, false, IF * 4, i * 16);
+    gl.vertexAttribDivisor(i, 1);
+  }
+  gl.bindVertexArray(null);
+
+  function mkTex(w, h, ifmt, fmt, type, filter, mip){
+    const tx = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tx);
+    gl.texImage2D(gl.TEXTURE_2D, 0, ifmt, w, h, 0, fmt, type, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mip ? gl.LINEAR_MIPMAP_LINEAR : filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    if (mip) gl.generateMipmap(gl.TEXTURE_2D);
+    return tx;
+  }
+  function mkFbo(texs){
+    const f = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+    texs.forEach((tx, i) => gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, tx, 0));
+    gl.drawBuffers(texs.map((_, i) => gl.COLOR_ATTACHMENT0 + i));
+    const st = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (st !== gl.FRAMEBUFFER_COMPLETE) throw new Error('framebuffer incomplete ' + st);
+    return f;
+  }
+  const H16 = [gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT];
+  const JF = extF32 ? [gl.RG32F, gl.RG, gl.FLOAT] : H16;
+
+  // atlas texture
+  const atlasTex = gl.createTexture();
+  function uploadAtlas(){
+    gl.bindTexture(gl.TEXTURE_2D, atlasTex);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, atlasCanvas);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.generateMipmap(gl.TEXTURE_2D);
+  }
+  gl.bindTexture(gl.TEXTURE_2D, atlasTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+
+  // ---------------------------------------------------------------- GI resources
+  const S0 = 2, B0 = 2, I0 = 4;
+  const BUDGETS = [150000, 210000, 290000, 380000, 480000, 600000];
+  let tier = 3;
+  const GI = { W: 0, H: 0, N: 0, g: 0.5, tex: {}, fb: {} };
+  function freeGI(){
+    for (const k in GI.tex) gl.deleteTexture(GI.tex[k]);
+    for (const k in GI.fb) gl.deleteFramebuffer(GI.fb[k]);
+    GI.tex = {}; GI.fb = {};
+  }
+  function allocGI(cssW, cssH){
+    const budget = LOW ? 95000 : BUDGETS[tier];
+    const g = clamp(Math.sqrt(budget / (cssW * cssH)), 0.22, 1.0);
+    const w = Math.ceil(cssW * g), h = Math.ceil(cssH * g);
+    const N = Math.max(3, Math.ceil(Math.log(3 * Math.hypot(w, h) / I0 + 1) / Math.log(4)));
+    const m = S0 * (1 << (N - 1));
+    const W = Math.ceil(w / m) * m, H = Math.ceil(h / m) * m;
+    if (W === GI.W && H === GI.H && N === GI.N && Math.abs(g - GI.g) < 1e-6) return;
+    freeGI();
+    GI.W = W; GI.H = H; GI.N = N; GI.g = g;
+    const T = GI.tex, F = GI.fb;
+    T.scene = mkTex(W, H, ...H16, gl.NEAREST);
+    T.ja = mkTex(W, H, ...JF, gl.NEAREST);
+    T.jb = mkTex(W, H, ...JF, gl.NEAREST);
+    T.df = mkTex(W, H, ...H16, gl.LINEAR);
+    T.ca = mkTex(W, H, ...H16, gl.LINEAR);
+    T.cb = mkTex(W, H, ...H16, gl.LINEAR);
+    T.irr = mkTex(W / S0, H / S0, ...H16, gl.LINEAR, true);
+    for (const k of ['scene', 'ja', 'jb', 'df', 'ca', 'cb', 'irr']) F[k] = mkFbo([T[k]]);
+  }
+
+  const MT = { W: 0, H: 0, tex: [], fb: null };
+  function allocMat(W, H){
+    if (W === MT.W && H === MT.H) return;
+    MT.tex.forEach(tx => gl.deleteTexture(tx));
+    if (MT.fb) gl.deleteFramebuffer(MT.fb);
+    MT.W = W; MT.H = H;
+    MT.tex = [
+      mkTex(W, H, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST),
+      mkTex(W, H, ...H16, gl.NEAREST),
+      mkTex(W, H, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST),
+    ];
+    MT.fb = mkFbo(MT.tex);
+  }
+
+  // ---------------------------------------------------------------- layout
+  let spec = null, view = { sc: 1, ox: 0, oy: 0, cssW: 1, cssH: 1, dpr: 1 };
+  const LAY = {};   // derived geometry for the current spec
+  function wallsOf(x, y, w, h, doors, wt, out){
+    const sides = [['T', x, x + w, y, true], ['B', x, x + w, y + h, true], ['L', y, y + h, x, false], ['R', y, y + h, x + w, false]];
+    for (const [sd, a0, a1, fx, horiz] of sides) {
+      const gaps = doors.filter(d => d[0] === sd).map(d => [d[1], d[2]]).sort((p, q) => p[0] - q[0]);
+      let cur = a0;
+      const seg = (s0, s1) => {
+        if (s1 - s0 <= 0) return;
+        if (horiz) out.push([s0 - wt / 2, fx - wt / 2, s1 - s0 + wt, wt]);
+        else out.push([fx - wt / 2, s0 - wt / 2, wt, s1 - s0 + wt]);
+      };
+      for (const [g0, g1] of gaps) { seg(cur, g0); cur = g1; }
+      seg(cur, a1);
+    }
+  }
+  function textBox(style, text, f){
+    const r = atlasRows.get(atlasKey(style, text));
+    return { r, w: r ? r.wpx / AFS * f : text.length * f * 0.62, h: ROW_H / AFS * f };
+  }
+  function deriveLayout(){
+    const S = spec;
+    const walls = [];
+    const [bx, by, bw, bh] = S.bld;
+    wallsOf(bx, by, bw, bh, [['L', S.ent[0], S.ent[1]]], S.wt * 1.4, walls);
+    for (const r of S.rooms) wallsOf(...r.r, r.doors, S.wt, walls);
+    LAY.walls = walls;
+    // solid ground outside the building (GI only), with the entrance corridor left open
+    const BIG = 4000, e0 = S.ent[0], e1 = S.ent[1];
+    LAY.outside = [
+      [-BIG, -BIG, 2 * BIG + S.W, BIG + by],                      // above
+      [-BIG, by + bh, 2 * BIG + S.W, BIG],                        // below
+      [bx + bw, by - 1, BIG, bh + 2],                             // right
+      [-BIG, by - 1, BIG + bx, e0 - by + 1],                      // left, above the entrance
+      [-BIG, e1, BIG + bx, by + bh - e1 + 1],                     // left, below the entrance
+    ];
+    LAY.blocks = [];
+    S.rooms.forEach((r, ri) => r.files.forEach((f, fi) => LAY.blocks.push({ name: f[0], x: f[1], y: f[2], w: f[3], h: f[4], seed: ri * 13 + fi * 7 + 1 })));
+    S.root.forEach((f, fi) => LAY.blocks.push({ name: f[0], x: f[1], y: f[2], w: f[3], h: f[4], seed: 91 + fi * 5, root: true }));
+    const adv = codeAdvPx / AFS;   // advance per unit font size
+    // fit code fonts to their frames
+    const apiF = Math.min(S.f.code, (S.api.frame[2] - 30) / (37 * adv));
+    const mdlF = Math.min(S.f.code, (S.mdl.frame[2] - 26) / (23 * adv));
+    const vr = S.vuln.r;
+    const vulF = Math.min(S.f.vul, (vr[2] - 24) / (31 * adv));
+    LAY.apiF = apiF; LAY.mdlF = mdlF; LAY.vulF = vulF;
+    LAY.adv = adv;
+    LAY.vtx = vr[0] + 12; LAY.vty = vr[1] + S.f.file * 2.1;
+    LAY.vlh = Math.min(S.f.vlh, (vr[3] - (LAY.vty - vr[1]) - 6) / 4);
+    LAY.vc = [vr[0] + vr[2] / 2, vr[1] + vr[3] / 2];
+    // caret geometry for a code line at (x, top) with font f after c chars
+    LAY.caret = (x, top, f, c) => [x + (c + 0.5) * adv * f, top + 0.82 * f];
+    const apiLineTop = i => S.api.y + i * S.f.lh * (apiF / S.f.code);
+    const mdlLineTop = i => S.mdl.y + i * S.f.lh * (mdlF / S.f.code);
+    LAY.apiTop = apiLineTop; LAY.mdlTop = mdlLineTop;
+    LAY.vulTop = i => LAY.vty + i * LAY.vlh;
+    const named = {
+      apiEnd: LAY.caret(S.api.x, apiLineTop(3), apiF, API_LINES[3].length),
+      mdlStart: LAY.caret(S.mdl.x, mdlLineTop(0), mdlF, 0),
+      mdlEnd: LAY.caret(S.mdl.x, mdlLineTop(3), mdlF, MDL_LINES[3].length),
+      fixPos: LAY.caret(LAY.vtx, LAY.vulTop(2), vulF, N3),
+    };
+    const resolve = (keys, t0) => keys.map(k => typeof k[1] === 'string' ? [t0 + k[0], ...named[k[1]]] : [t0 + k[0], k[1], k[2]]);
+    LAY.cur1 = resolve(S.cur1, API_END + 0.25);
+    LAY.cur2 = resolve(S.cur2, 12.0);
+    LAY.cur1End = LAY.cur1[LAY.cur1.length - 1][0];
+    LAY.cur2End = LAY.cur2[LAY.cur2.length - 1][0];
+    // torch angles: 'V' aims at the vulnerable file; unwrap to keep turns short
+    const ang = [];
+    let prev = 0;
+    for (const k of S.torchA) {
+      let a;
+      if (k[1] === 'V') { const p = curve(S.torchP, k[0]); a = Math.atan2(LAY.vc[1] - p[1], LAY.vc[0] - p[0]) * 180 / Math.PI; }
+      else a = k[1];
+      while (a - prev > 180) a -= 360;
+      while (a - prev < -180) a += 360;
+      ang.push([k[0], a]); prev = a;
+    }
+    LAY.torchA = ang;
+    LAY.occ = walls.concat(LAY.blocks.map(b => [b.x, b.y, b.w, b.h]));
+  }
+
+  function fitView(){
+    const cssW = canvas.clientWidth || innerWidth, cssH = canvas.clientHeight || innerHeight;
+    const portrait = cssW / cssH < 0.85;
+    const S = portrait ? PORT : LAND;
+    if (S !== spec) { spec = S; if (atlasReady) deriveLayout(); }
+    const sc = Math.min(cssW / S.W, cssH / S.H);
+    view.sc = sc; view.ox = (cssW - S.W * sc) / 2; view.oy = (cssH - S.H * sc) / 2;
+    view.cssW = cssW; view.cssH = cssH;
+  }
+
+  // ---------------------------------------------------------------- live torch
+  const NOT_FOUND = 1e6;
+  let live = false, lastInput = -1e9, liveFound = NOT_FOUND, liveLit = 0;
+  const lt = { x: 0, y: 0, a: 0, ta: 0, has: false };
+  function segHitsRect(x0, y0, x1, y1, r){
+    // Liang-Barsky clip against an axis-aligned rect
+    let t0 = 0, t1 = 1;
+    const dx = x1 - x0, dy = y1 - y0;
+    const p = [-dx, dx, -dy, dy], q = [x0 - r[0], r[0] + r[2] - x0, y0 - r[1], r[1] + r[3] - y0];
+    for (let i = 0; i < 4; i++) {
+      if (p[i] === 0) { if (q[i] < 0) return false; }
+      else { const u = q[i] / p[i]; if (p[i] < 0) { if (u > t1) return false; if (u > t0) t0 = u; } else { if (u < t0) return false; if (u < t1) t1 = u; } }
+    }
+    return t0 < t1;
+  }
+  function torchSeesBug(tx, ty, a){
+    const [vx, vy] = LAY.vc;
+    const dx = vx - tx, dy = vy - ty, d = Math.hypot(dx, dy);
+    if (d > 720 || d < 1) return false;
+    if ((dx * Math.cos(a) + dy * Math.sin(a)) / d < Math.cos(28 * Math.PI / 180)) return false;
+    const vr = spec.vuln.r;
+    // aim at the near face of the file, not its centre
+    const ex = clamp(tx, vr[0] + 2, vr[0] + vr[2] - 2), ey = clamp(ty, vr[1] + 2, vr[1] + vr[3] - 2);
+    for (const r of LAY.occ) if (segHitsRect(tx, ty, ex, ey, r)) return false;
+    return true;
+  }
+
+  // ---------------------------------------------------------------- frame state, pure in t
+  function torchScript(tt){
+    const p = curve(spec.torchP, tt);
+    let a = curve(LAY.torchA, tt)[0] * Math.PI / 180;
+    a += 0.035 * Math.sin(tt * 2.3) + 0.02 * Math.sin(tt * 5.1 + 1.3);   // hand-held
+    const on = sstep(3.4, 3.9, tt) * (1 - sstep(18.7, 19.0, tt));
+    return { x: p[0], y: p[1], a, on };
+  }
+  function vulnState(tt, foundT){
+    let heat = 0, flash = 0;
+    if (tt >= foundT && foundT < FIX_T + 0.4) {
+      const a = tt - foundT;
+      heat = a < 0.08 ? a / 0.08 : 0.82 + 0.18 * Math.exp(-(a - 0.08) * 2.5);
+      flash = a < 0.06 ? a / 0.06 : Math.exp(-(a - 0.06) * 5.0);
+      heat += 0.03 * Math.sin(tt * 31.0) * Math.sin(tt * 7.7);
+    }
+    const cool = 1 - sstep(FIX_T + 0.1, FIX_END + 0.3, tt);
+    heat *= cool; flash *= cool;
+    const cold = sstep(TYP3_T + 0.2, FIX_END + 0.9, tt) * (1 - sstep(18.3, 19.4, tt));
+    return { heat: Math.max(0, heat), cold, flash };
+  }
+
+  const FRESH = 5.0;
+  function lineGlow(L, tt){                // steady glow of a typed line, cools then fades out at the loop end
+    const age = Math.max(0, tt - L.st - L.dur);
+    return (0.2 + 0.8 * Math.exp(-age / 2.6)) * (1 - sstep(18.2, 19.5, tt));
+  }
+
+  function emitText(style, text, x, top, f, kind, em, ei, giEi, alb, typed, rate, fresh, gi){
+    const tb = textBox(style, text, f);
+    if (!tb.r) return;
+    const r = tb.r;
+    const cx = x + tb.w / 2, cy = top + tb.h / 2;
+    put(MTB, cx, cy, tb.w / 2, tb.h / 2, em[0], em[1], em[2], ei, alb[0], alb[1], alb[2], kind, typed, rate, fresh, r.n, r.u0, r.v0, r.u1, r.v1);
+    if (gi && giEi > 0) put(GIB, cx, cy, tb.w / 2, tb.h / 2, em[0], em[1], em[2], giEi, 0, 0, 0, 2, typed, rate, fresh, r.n, r.u0, r.v0, r.u1, r.v1);
+  }
+
+  function buildScene(tt){
+    const S = spec;
+    GIB.n = 0; MTB.n = 0;
+    const end = 1 - sstep(18.2, 19.5, tt);
+    for (const w of LAY.outside) put(GIB, w[0] + w[2] / 2, w[1] + w[3] / 2, w[2] / 2, w[3] / 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    // walls
+    const wallAlb = [0.26, 0.29, 0.52];
+    for (const w of LAY.walls) {
+      const cx = w[0] + w[2] / 2, cy = w[1] + w[3] / 2;
+      put(GIB, cx, cy, w[2] / 2, w[3] / 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+      put(MTB, cx, cy, w[2] / 2, w[3] / 2, 0, 0, 0, 0, ...wallAlb, 0, 1, 0, 0, 0, 0, 0, 0, 0);
+    }
+    // room names printed on the floor
+    for (const r of S.rooms) emitText('title', r.name, r.lab[0], r.lab[1], S.f.title, 3, [0, 0, 0], 0, 0, [0.34, 0.37, 0.62], 1e4, 1, 0, false);
+    // file blocks
+    const blkAlb = [0.032, 0.03, 0.085];
+    for (const b of LAY.blocks) {
+      const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+      put(GIB, cx, cy, b.w / 2, b.h / 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+      put(MTB, cx, cy, b.w / 2, b.h / 2, 0, 0, 0, 0, ...blkAlb, 1, b.seed, S.pitch, 0, 0, 0, 0, 0, 0);
+      emitText('file', b.name, b.x + S.pitch * 0.9, b.y + S.pitch * 0.35, S.f.file, 4, [0, 0, 0], 0, 0, [0.30, 0.33, 0.58], 1e4, 1, 0, false);
+    }
+
+    // files being written: dashed outlines
+    const frame = (fr, st) => {
+      const vis = sstep(st - 0.3, st, tt) * end;
+      if (vis <= 0) return;
+      put(MTB, fr[0] + fr[2] / 2, fr[1] + fr[3] / 2, fr[2] / 2, fr[3] / 2, 0, 0, 0, 0, 0.30, 0.36, 0.62, 6, Math.max(1.2, S.wt * 0.22), S.wt * 1.3, vis, 0, 0, 0, 0, 0);
+      emitText('file', fr[4], fr[0] + 2, fr[1] - S.f.file * 1.75, S.f.file, 3, [0, 0, 0], 0, 0, [0.42, 0.47, 0.78], 1e4, 1, 0, false);
+    };
+    frame(S.api.frame, API_S[0].st);
+    frame(S.mdl.frame, MDL_S[0].st);
+
+    // typed code: the only light in the building
+    const codeLines = (SCH, x, topF, f) => {
+      SCH.forEach((L, i) => {
+        const ty = typedAt(L, tt);
+        if (ty <= L.ind) return;
+        const g = lineGlow(L, tt);
+        if (g <= 0.002) return;
+        const fr = SCH === API_S && i === 0 ? FRESH * 1.5 : FRESH;
+        emitText('code', L.s, x, topF(i), f, 2, ICE, 1.25 * g, 3.4 * g, [0, 0, 0], ty, L.rate, fr, true);
+      });
+    };
+    codeLines(API_S, S.api.x, LAY.apiTop, LAY.apiF);
+    codeLines(MDL_S, S.mdl.x, LAY.mdlTop, LAY.mdlF);
+
+    // the vulnerable file
+    const foundT = live ? liveFound : FOUND_T;
+    const vs = vulnState(tt, foundT);
+    const vr = S.vuln.r;
+    const vcx = vr[0] + vr[2] / 2, vcy = vr[1] + vr[3] / 2;
+    const hx0 = vs.heat + vs.flash;
+    const hotC = ironbow(0.44 + 0.14 * vs.heat + 0.32 * vs.flash), coldC = coldbow(0.62);
+    const hotI = 15 * vs.heat + 16 * vs.flash, coldI = vs.cold * 1.15;
+    const plate = [hotC[0] * hotI + coldC[0] * coldI, hotC[1] * hotI + coldC[1] * coldI, hotC[2] * hotI + coldC[2] * coldI];
+    const hint = ironbow(0.08);
+    const reset = tt >= 19.42;           // the loop restarts with the bug back in place
+    const hintI = 0.02 * (0.6 + 0.4 * Math.sin(tt * 1.7)) * (1 - sat(vs.heat * 4 + vs.cold * 2)) * (tt < 17 ? 1 : sstep(19.3, 19.95, tt));
+    // a flat sheet on the floor: lit by whatever reaches it until it ignites and becomes an emitter
+    const emits = hx0 > 0.004 || vs.cold > 0.004;
+    if (emits) put(GIB, vcx, vcy, vr[2] / 2, vr[3] / 2, plate[0], plate[1], plate[2], 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    put(MTB, vcx, vcy, vr[2] / 2, vr[3] / 2, hint[0], hint[1], hint[2], hintI,
+      0.085, 0.07, 0.14, 1, 99, 0, Math.min(1.2, vs.heat + 0.6 * vs.flash), (0.35 + 1.25 * sat(vs.heat * 1.25) + 2.5 * vs.flash) * sat(hx0 * 3), 0, coldI * 0.32, emits ? 0 : 1, 0);
+    emitText('file', S.vuln.name, vr[0] + 12, vr[1] + S.pitch * 0.4, S.f.file, emits ? 4 : 3, mixc(ironbow(0.3), coldC, sat(vs.cold * 2)), 0.25 * hx0 + 0.3 * vs.cold, 0, [0.42, 0.44, 0.72], 1e4, 1, 0, false);
+    // its code, engraved into the plate; line 3 is the injection, lines 3 and 4 get rewritten
+    const eh = ironbow(0.22), ec = coldbow(0.3);
+    const engr = [eh[0] * 0.35 * hx0 + ec[0] * 0.25 * vs.cold + 0.002, eh[1] * 0.35 * hx0 + ec[1] * 0.25 * vs.cold + 0.002, eh[2] * 0.35 * hx0 + ec[2] * 0.25 * vs.cold + 0.004];
+    const lineAlb = [0.46, 0.48, 0.78];
+    const pk = emits ? 4 : 3;
+    for (let i = 0; i < 2; i++) emitText('code', VUL_LINES[i], LAY.vtx, LAY.vulTop(i), LAY.vulF, pk, engr, 1, 0, lineAlb, 1e4, 1, 0, false);
+    // line 3
+    let l3s = VUL_LINES[2], l3n = N3, l3fresh = 0, l3rate = 1;
+    if (tt >= DEL3_T && !reset) { l3n = Math.max(IND3, N3 - (tt - DEL3_T) * DEL3_R); }
+    if (tt >= TYP3_T && !reset) { l3s = FIX3; l3n = Math.min(N3F, IND3 + (tt - TYP3_T) * TYP3_R); l3fresh = 3; l3rate = TYP3_R; }
+    const fixed3 = l3s === FIX3;
+    const vulnLineC = vs.heat > 0.01 ? mixc(ironbow(0.82), ironbow(1.0), sat(vs.heat)) : ironbow(0.2);
+    const vulnLineI = fixed3 ? (0.9 + 0.6 * vs.cold) * end : (3.4 * vs.heat + 4 * vs.flash) * end + hintI * 0.8;
+    if (!fixed3 && hx0 < 0.01) emitText('code', l3s, LAY.vtx, LAY.vulTop(2), LAY.vulF, pk, ironbow(0.2), hintI * 1.4, 0, [0.62, 0.5, 0.72], l3n, 1, 0, false);
+    else emitText('code', l3s, LAY.vtx, LAY.vulTop(2), LAY.vulF, 2, fixed3 ? ICE : vulnLineC, vulnLineI, 0, lineAlb, l3n, l3rate, l3fresh, false);
+    // line 4
+    let l4s = VUL_LINES[3], l4n = VUL_LINES[3].length, l4fresh = 0, l4rate = 1, l4k = 4;
+    if (tt >= L4_T && !reset) l4n = PRE4;
+    if (tt >= TYP4_T && !reset) { l4s = FIX4; l4n = Math.min(FIX4.length, PRE4 + (tt - TYP4_T) * TYP4_R); l4fresh = 3; l4rate = TYP4_R; }
+    if (l4s === FIX4) emitText('code', l4s, LAY.vtx, LAY.vulTop(3), LAY.vulF, 2, ICE, (0.9 + 0.6 * vs.cold) * end, 0, lineAlb, l4n, l4rate, l4fresh, false);
+    else emitText('code', l4s, LAY.vtx, LAY.vulTop(3), LAY.vulF, pk, engr, 1, 0, lineAlb, l4n, 1, 0, false);
+
+    // annotation: typed out next to the bug once found, rewritten after the fix
+    const noteF = S.f.note;
+    if (tt >= foundT + 0.35 && tt < FIX_T + 0.5 && foundT < FIX_T) {
+      let c0 = (tt - foundT - 0.35) * 38;
+      const fade = 1 - sstep(FIX_T, FIX_T + 0.5, tt);
+      S.note.lines.forEach((l, i) => {
+        const n = clamp(c0, 0, l.length); c0 -= l.length + 4;
+        if (n <= 0) return;
+        const c = i === 0 ? ironbow(0.62) : ironbow(0.45);
+        emitText('note', l, S.note.x, S.note.y + i * S.f.nlh, i === 0 ? noteF * 1.12 : noteF, 2, c, (i === 0 ? 1.5 : 0.9) * fade, 0, [0, 0, 0], n, 38, 1.5, false);
+      });
+    }
+    if (tt >= FIX_END + 0.25 && end > 0.01) {
+      let c0 = (tt - FIX_END - 0.25) * 38;
+      S.note.fix.forEach((l, i) => {
+        const n = clamp(c0, 0, l.length); c0 -= l.length + 4;
+        if (n <= 0) return;
+        emitText('note', l, S.note.x, S.note.y + i * S.f.nlh, i === 0 ? noteF * 1.12 : noteF, 2, i === 0 ? ICE : coldbow(0.7), (i === 0 ? 1.1 : 0.7) * end, 0, [0, 0, 0], n, 38, 1.5, false);
+      });
+    }
+
+    // the agent's cursor
+    const cur = cursorAt(tt);
+    if (cur.vis > 0.002) {
+      const f = cur.f;
+      if (cur.mode === 'travel') {
+        const r = f * 0.38;
+        for (let i = 6; i >= 1; i--) {
+          const pp = cur.trail(tt - i * 0.035);
+          const k = (1 - i / 7) * cur.vis;
+          put(GIB, pp[0], pp[1], r * (1 - i * 0.08), r, ICE[0], ICE[1], ICE[2], 5.0 * k, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0);
+          put(MTB, pp[0], pp[1], r * (1 - i * 0.08), r, FROST[0], FROST[1], FROST[2], 1.4 * k, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0);
+        }
+        put(GIB, cur.x, cur.y, r * 1.1, r * 1.1, ICE[0], ICE[1], ICE[2], 9.0 * cur.vis, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0);
+        put(MTB, cur.x, cur.y, r * 1.1, r * 1.1, FROST[0], FROST[1], FROST[2], 3.0 * cur.vis, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0);
+      } else {
+        const blink = cur.mode === 'idle' ? (((tt * 1.7) % 1) < 0.58 ? 1 : 0.12) : 1;
+        const k = blink * cur.vis;
+        const cw = LAY.adv * f * 0.92, ch = f * 0.95;
+        put(GIB, cur.x, cur.y, cw / 2, ch / 2, ICE[0], ICE[1], ICE[2], 6.0 * k, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        put(MTB, cur.x, cur.y, cw / 2, ch / 2, FROST[0], FROST[1], FROST[2], 2.2 * k, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+      }
+    }
+
+    // the reviewer and the torch
+    const tr = live ? { x: lt.x, y: lt.y, a: lt.a, on: 1 } : torchScript(tt);
+    const lowered = 1 - 0.4 * sstep(foundT + 0.05, foundT + 0.6, tt) * (1 - sstep(FIX_END, FIX_END + 1.5, tt));
+    const pxPerWorldGI = view.sc * GI.g;
+    const headR = Math.max(4.2 / pxPerWorldGI, S.wt * 0.7);
+    const bodyR = S.wt * 1.45;
+    const ca = Math.cos(tr.a), sa = Math.sin(tr.a);
+    const hx = tr.x + ca * bodyR * 0.85, hy = tr.y + sa * bodyR * 0.85;
+    const visT = tr.on;
+    if (visT > 0.001) {
+      put(GIB, tr.x, tr.y, bodyR, bodyR, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0);
+      put(GIB, hx, hy, headR, headR, WARM[0], WARM[1], WARM[2], 38 * visT * lowered, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0);
+      put(MTB, tr.x, tr.y, bodyR, bodyR, 0, 0, 0, 0, 0.30, 0.33, 0.55, 5, 1, 0, 0, 0, 0, 0, 0, 0);
+      put(MTB, hx, hy, S.wt * 0.55, S.wt * 0.55, WARM[0], WARM[1], WARM[2], 6 * visT, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
+    return {
+      torch: { x: hx, y: hy, a: tr.a, r: headR, on: visT },
+    };
+  }
+
+  function cursorAt(tt){
+    const S = spec;
+    const apiCaret = (i, c) => LAY.caret(S.api.x, LAY.apiTop(i), LAY.apiF, c);
+    const mdlCaret = (i, c) => LAY.caret(S.mdl.x, LAY.mdlTop(i), LAY.mdlF, c);
+    const vulCaret = (i, c) => LAY.caret(LAY.vtx, LAY.vulTop(i), LAY.vulF, c);
+    let x, y, mode = 'idle', vis = 1, f = LAY.apiF, trail = null;
+    const typingIn = (SCH, caret) => {
+      let i = 0;
+      while (i < SCH.length - 1 && tt >= SCH[i + 1].st) i++;
+      const L = SCH[i];
+      const c = typedAt(L, tt);
+      const p = caret(i, Math.max(c, L.ind));
+      const active = tt >= L.st && tt <= L.st + L.dur;
+      return { p, active };
+    };
+    if (tt < API_END + 0.25) {
+      const r = typingIn(API_S, apiCaret);
+      [x, y] = r.p; mode = r.active ? 'type' : 'idle';
+      vis = sstep(-0.01, 0.0, tt) * (tt < 0.05 ? 1 : 1);
+    } else if (tt < LAY.cur1End) {
+      [x, y] = curve(LAY.cur1, tt); mode = 'travel'; f = LAY.mdlF;
+      trail = q => curve(LAY.cur1, Math.max(q, LAY.cur1[0][0]));
+    } else if (tt < 12.0) {
+      const r = typingIn(MDL_S, mdlCaret);
+      [x, y] = r.p; mode = r.active ? 'type' : 'idle'; f = LAY.mdlF;
+    } else if (tt < LAY.cur2End) {
+      [x, y] = curve(LAY.cur2, tt); mode = 'travel'; f = LAY.vulF;
+      trail = q => curve(LAY.cur2, Math.max(q, LAY.cur2[0][0]));
+    } else {
+      f = LAY.vulF;
+      if (tt < TYP3_T) { const n = tt < DEL3_T ? N3 : Math.max(IND3, N3 - (tt - DEL3_T) * DEL3_R); [x, y] = vulCaret(2, n); mode = tt < DEL3_T ? 'idle' : 'type'; }
+      else if (tt < L4_T) { [x, y] = vulCaret(2, Math.min(N3F, IND3 + (tt - TYP3_T) * TYP3_R)); mode = 'type'; }
+      else if (tt < TYP4_T) { [x, y] = vulCaret(3, PRE4); mode = 'type'; }
+      else { [x, y] = vulCaret(3, Math.min(FIX4.length, PRE4 + (tt - TYP4_T) * TYP4_R)); mode = tt < FIX_END ? 'type' : 'idle'; }
+      vis = 1 - sstep(18.3, 18.7, tt);
+    }
+    // re-appear at the start of the api file for the loop
+    if (tt > 19.3) { [x, y] = apiCaret(0, 0); mode = 'idle'; f = LAY.apiF; vis = sstep(19.35, 19.8, tt); }
+    return { x, y, mode, vis, f, trail };
+  }
+
+  // ---------------------------------------------------------------- render
+  function bindTex(unit, tx){ gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tx); }
+  function fullPass(prog, fb, w, h){
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.viewport(0, 0, w, h);
+    gl.useProgram(prog.p);
+    gl.bindVertexArray(emptyVao);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  function drawInst(B, mode, xf, tw, th, pxw, pad){
+    const u = P.inst.u;
+    gl.useProgram(P.inst.p);
+    gl.uniform1i(u.uMode, mode);
+    gl.uniform3f(u.uXf, xf[0], xf[1], xf[2]);
+    gl.uniform2f(u.uTgt, tw, th);
+    gl.uniform1f(u.uPad, pad);
+    gl.uniform1f(u.uPx, pxw);
+    gl.uniform1f(u.uLod, LAY.lod || 0);
+    bindTex(0, atlasTex);
+    gl.uniform1i(u.uAtlas, 0);
+    gl.bindVertexArray(instVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, instVbo);
+    gl.bufferData(gl.ARRAY_BUFFER, B.a.subarray(0, B.n * IF), gl.STREAM_DRAW);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, B.n);
+    gl.bindVertexArray(null);
+  }
+
+  function render(tt){
+    if (!atlasReady) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.clearColor(16 / 255, 12 / 255, 42 / 255, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+      return;
+    }
+    const st = buildScene(tt);
+    const { W, H, N, g } = GI;
+    const sc = view.sc;
+    // GI atlas lod: atlas px per GI px for the code font
+    LAY.lod = Math.max(0, Math.log2((AFS / LAY.apiF) / (sc * g)) + 0.4);
+
+    gl.disable(gl.BLEND);
+    // 1. emitters and occluders at GI resolution
+    gl.bindFramebuffer(gl.FRAMEBUFFER, GI.fb.scene);
+    gl.viewport(0, 0, W, H);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+    drawInst(GIB, 0, [sc * g, view.ox * g, view.oy * g], W, H, 1 / (sc * g), 0);
+
+    // 2. jump flood
+    gl.useProgram(P.seed.p); bindTex(0, GI.tex.scene); gl.uniform1i(P.seed.u.uScene, 0);
+    fullPass(P.seed, GI.fb.ja, W, H);
+    let src = 'ja', dst = 'jb';
+    let step = 1 << Math.ceil(Math.log2(Math.max(W, H)));
+    const steps = [];
+    for (step >>= 1; step >= 1; step >>= 1) steps.push(step);
+    steps.push(1);
+    gl.useProgram(P.jfa.p);
+    gl.uniform2f(P.jfa.u.uSize, W, H);
+    for (const s of steps) {
+      gl.useProgram(P.jfa.p);
+      bindTex(0, GI.tex[src]); gl.uniform1i(P.jfa.u.uJ, 0);
+      gl.uniform1f(P.jfa.u.uStep, s);
+      fullPass(P.jfa, GI.fb[dst], W, H);
+      [src, dst] = [dst, src];
+    }
+    gl.useProgram(P.df.p);
+    bindTex(0, GI.tex[src]); gl.uniform1i(P.df.u.uJ, 0);
+    bindTex(1, GI.tex.scene); gl.uniform1i(P.df.u.uScene, 1);
+    fullPass(P.df, GI.fb.df, W, H);
+
+    // 3. radiance cascades, top level first
+    const u = P.rc.u;
+    gl.useProgram(P.rc.p);
+    gl.uniform2f(u.uSize, W, H);
+    gl.uniform1f(u.uN, N);
+    gl.uniform1f(u.uS0, S0); gl.uniform1f(u.uB0, B0); gl.uniform1f(u.uI0, I0);
+    const T = st.torch;
+    const tgx = (view.ox + T.x * sc) * g, tgy = H - (view.oy + T.y * sc) * g;
+    gl.uniform4f(u.uTorch, tgx, tgy, Math.cos(T.a), -Math.sin(T.a));
+    gl.uniform3f(u.uTorchK, T.r * sc * g, Math.cos(31 * Math.PI / 180), Math.cos(17 * Math.PI / 180));
+    let cs = 'ca', cd = 'cb';
+    const fixMax = FIXP !== null ? FIXP : LOW ? 2 : (tier >= 2 ? 2 : 1);
+    for (let c = N - 1; c >= 0; c--) {
+      gl.useProgram(P.rc.p);
+      bindTex(0, GI.tex.df); gl.uniform1i(u.uDF, 0);
+      bindTex(1, GI.tex[cs]); gl.uniform1i(u.uUp, 1);
+      gl.uniform1f(u.uC, c);
+      gl.uniform1i(u.uFix, c <= fixMax ? 1 : 0);
+      fullPass(P.rc, GI.fb[cd], W, H);
+      [cs, cd] = [cd, cs];
+    }
+    // 4. irradiance from cascade 0
+    gl.useProgram(P.irr.p);
+    bindTex(0, GI.tex[cs]); gl.uniform1i(P.irr.u.uC0, 0);
+    gl.uniform2f(P.irr.u.uPG, W / S0, H / S0);
+    gl.uniform1f(P.irr.u.uB0, B0);
+    fullPass(P.irr, GI.fb.irr, W / S0, H / S0);
+    bindTex(0, GI.tex.irr);
+    gl.generateMipmap(gl.TEXTURE_2D);
+
+    // 5. materials at full resolution
+    const dpr = view.dpr;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, MT.fb);
+    gl.viewport(0, 0, MT.W, MT.H);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    drawInst(MTB, 1, [sc * dpr, view.ox * dpr, view.oy * dpr], MT.W, MT.H, 1 / (sc * dpr), 1.5);
+    gl.disable(gl.BLEND);
+
+    // 6. composite
+    const cu = P.comp.u;
+    gl.useProgram(P.comp.p);
+    for (let i = 0; i < 3; i++) { bindTex(i, MT.tex[i]); }
+    gl.uniform1i(cu.uT0, 0); gl.uniform1i(cu.uT1, 1); gl.uniform1i(cu.uT2, 2);
+    bindTex(3, GI.tex.irr); gl.uniform1i(cu.uIrr, 3);
+    gl.uniform2f(cu.uCanvas, canvas.width, canvas.height);
+    gl.uniform1f(cu.uDpr, dpr);
+    gl.uniform2f(cu.uGI, W, H);
+    gl.uniform1f(cu.uG, g);
+    gl.uniform3f(cu.uXf, sc, view.ox, view.oy);
+    gl.uniform1f(cu.uTime, tt);
+    gl.uniform1f(cu.uExp, 1.0);
+    gl.uniform1i(cu.uView, VIEW);
+    fullPass(P.comp, null, canvas.width, canvas.height);
+  }
+
+  // ---------------------------------------------------------------- sizing
+  function resize(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    fitView();
+    const w = Math.max(1, Math.round(view.cssW * dpr)), h = Math.max(1, Math.round(view.cssH * dpr));
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    view.dpr = w / view.cssW;
+    allocGI(view.cssW, view.cssH);
+    allocMat(w, h);
+    dirty = true; settle = 6;
+  }
+
+  // ---------------------------------------------------------------- adaptive quality
+  let ema = 16.7, since = 0, settle = 6;
+  function adapt(dtMs){
+    if (LOW) return;
+    if (settle > 0) { settle--; return; }
+    if (dtMs > 250) return;
+    ema += (dtMs - ema) * 0.07;
+    since++;
+    if (since < 30) return;
+    if (ema > 20.5 && tier > 0) { tier--; since = 0; ema = 16.7; allocGI(view.cssW, view.cssH); settle = 6; }
+    else if (ema < 15.5 && since > 240 && tier < BUDGETS.length - 2) { tier++; since = 0; allocGI(view.cssW, view.cssH); settle = 6; }
+  }
+
+  // ---------------------------------------------------------------- loop + hooks
+  const wrap = x => ((x % PERIOD) + PERIOD) % PERIOD;
+  let dirty = true, last = performance.now(), prevWrapped = 0;
+  function frame(now){
+    requestAnimationFrame(frame);
+    const dtMs = now - last; last = now;
+    if (live && now - lastInput > 10000) { live = false; dirty = true; }
+    if (playing) {
+      t += Math.min(dtMs, 100) / 1000;
+      const w = wrap(t);
+      if (w < prevWrapped) { liveFound = NOT_FOUND; liveLit = 0; }
+      prevWrapped = w;
+      if (live) updateLive(w, Math.min(dtMs, 100) / 1000);
+      adapt(dtMs);
+      render(w);
+    } else if (dirty) {
+      if (live) updateLive(wrap(t), 0);
+      render(wrap(t));
+      dirty = false;
+    }
+  }
+  function updateLive(tt, dt){
+    if (!lt.has || !atlasReady) return;
+    let da = lt.ta - lt.a;
+    while (da > Math.PI) da -= 2 * Math.PI;
+    while (da < -Math.PI) da += 2 * Math.PI;
+    lt.a += da * (1 - Math.exp(-dt * 7));
+    if (liveFound === NOT_FOUND && tt < FIX_T) {
+      if (torchSeesBug(lt.x, lt.y, lt.a)) { liveLit += dt; if (liveLit > 0.25) liveFound = tt; }
+      else liveLit = Math.max(0, liveLit - dt * 0.5);
+    }
+  }
+  function toWorld(e){
+    const r = canvas.getBoundingClientRect();
+    return [(e.clientX - r.left - view.ox) / view.sc, (e.clientY - r.top - view.oy) / view.sc];
+  }
+  function onPointer(e){
+    if (!atlasReady) return;
+    const [x, y] = toWorld(e);
+    if (!live) {
+      live = true; liveFound = NOT_FOUND; liveLit = 0;
+      const s = torchScript(wrap(t));
+      lt.a = lt.ta = s.a; lt.x = x; lt.y = y; lt.has = true;
+    }
+    const dx = x - lt.x, dy = y - lt.y;
+    if (Math.hypot(dx, dy) > 1.5) lt.ta = Math.atan2(dy, dx);
+    lt.x = x; lt.y = y;
+    lastInput = performance.now();
+    dirty = true;
+  }
+  canvas.addEventListener('pointermove', onPointer);
+  canvas.addEventListener('pointerdown', onPointer);
+
+  function setPlaying(p){
+    playing = p; last = performance.now(); settle = 6;
+    if (!p) dirty = true;
+    setButton();
+  }
+  window.__seek = (time) => {
+    t = +time || 0;
+    live = false; liveFound = NOT_FOUND; liveLit = 0;
+    playing = false; setButton();
+    resize();
+    render(wrap(t));
+    dirty = false;
+  };
+  window.__play = () => setPlaying(true);
+
+  playBtn.addEventListener('click', () => setPlaying(!playing));
+  function toggleNotes(){
+    const hide = !notes.hidden;
+    notes.hidden = hide;
+    showNotes.hidden = !hide;
+    (hide ? showNotes : hideNotes).focus({ preventScroll: true });
+  }
+  hideNotes.addEventListener('click', toggleNotes);
+  showNotes.addEventListener('click', toggleNotes);
+  window.addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'h' || e.key === 'H') toggleNotes();
+    else if (e.code === 'Space' || e.key === ' ') {
+      const a = document.activeElement;
+      if (a && (a.tagName === 'BUTTON' || a.tagName === 'A')) return;
+      e.preventDefault();
+      setPlaying(!playing);
+    }
+  });
+  window.addEventListener('resize', resize);
+
+  resize();
+  render(wrap(t));
+  requestAnimationFrame(frame);
+
+  // rasterise the glyph atlas once the fonts are in
+  const fontLoads = ['400 30px "Martian Mono"', '300 30px "Martian Mono"', '500 30px "Martian Mono"'].map(f => document.fonts.load(f).catch(() => null));
+  Promise.race([Promise.all(fontLoads).then(() => document.fonts.ready), new Promise(r => setTimeout(r, 2500))]).then(() => {
+    buildAtlas();
+    uploadAtlas();
+    atlasReady = true;
+    deriveLayout();
+    dirty = true;
+    render(wrap(t));
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Codebase nebula</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--void)}
+body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab;outline:none}
+#c:active{cursor:grabbing}
+
+.cap{position:fixed;top:22px;left:24px;max-width:min(470px,calc(100vw - 48px));margin:0;
+  color:var(--frost);font:400 15px/1.45 "Schibsted Grotesk",system-ui,sans-serif;opacity:0;
+  pointer-events:none;z-index:5;text-shadow:0 1px 12px rgba(16,12,42,.9)}
+.cap code{font:400 13px/1 "Martian Mono",ui-monospace,monospace;color:var(--ice)}
+.cap .hot{color:var(--heat-3)}
+
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+
+.notes p a{color:var(--ice);text-decoration-color:rgba(155,232,255,.4)}
+@media (max-width:600px){
+  .cap{top:16px;left:16px;max-width:calc(100vw - 32px);font-size:14px}
+  .cap code{font-size:12px}
+}
+</style>
+</head>
+<body>
+<canvas id="c" role="img" aria-label="A spiral nebula of soft blue splats, one cloud per source file of a code repository. One file flares white-hot, the heat spreads along thin import filaments, the camera dives until a single line of code made of splats is readable, and the fixed line re-forms in ice blue as everything cools."></canvas>
+<p class="cap" id="cap" aria-hidden="true"></p>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Codebase nebula</h1>
+  <p>A 40-file repository drawn as a nebula of Gaussian splats. <code>readSession()</code> hands a cookie to node-serialize, which runs functions hidden in its input (<a href="https://nvd.nist.gov/vuln/detail/CVE-2017-5941">CVE-2017-5941</a>), so the file flares, its heat runs along the import graph to every dependant, and the fix cools it all down.</p>
+  <ul class="tech">
+    <li>Spark 2.3.1 procedural splats: <span id="nsplats">about 140,000</span> Gaussians pushed into one SplatMesh with <code>pushSplat</code>, seeded with mulberry32</li>
+    <li>Every source line is rasterised by Spark's <code>textSplats()</code>, then re-packed with its syntax class, line and column</li>
+    <li>One GLSL dyno <code>objectModifier</code> moves and recolours every splat from a time uniform: heat waves by graph distance, code condensing out of haze as the camera nears, the patch re-forming</li>
+    <li>Depth of field from Spark's aperture, UnrealBloomPass on the white-hot splats, and a seek hook that waits for Spark's sort worker</li>
+    <li>Drag to orbit; the camera returns to its flight path</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/",
+    "@sparkjsdev/spark": "https://cdn.jsdelivr.net/npm/@sparkjsdev/spark@2.3.1/dist/spark.module.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { SparkRenderer, SplatMesh, ExtSplats, textSplats, dyno } from '@sparkjsdev/spark';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+/* ================= storyboard (24 s loop) =================
+   0.0  wide shot, cold nebula turning; 0.55 a scanner flags session.ts: shock ring + white-hot flare
+   2.3  heat bleeds along import filaments: 1 hop at 2.3, 2 hops at 4.05, 3 hops at 5.8
+   7.4  push in over the galactic core; 10-12 dive down the auth arm, code condenses out of haze
+  13.6  the whole file is legible; 14.5-15.45 push in on line 6, white-hot splat text (hero)
+  15.5  the patch lands: line 6 and the node-serialize import scatter as embers, the fix converges
+  16.7  hold on the fixed line, then pull back; heat drains back along the filaments,
+        outermost first (17.4), the source last (20.3-21.5)
+  21-24 cold wide shot, matches t = 0
+   Rendering: Spark 2.3.1 (three r186, WebGL2). All splats live in one ExtSplats mesh; the
+   per-splat motion and colour are a GLSL dyno objectModifier driven by two uniforms (t, camera).
+=========================================================== */
+
+const params = new URLSearchParams(location.search);
+const LOW = params.get('q') === 'low' || params.has('low');
+const T_PARAM = params.has('t') ? parseFloat(params.get('t')) : NaN;
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const LOOP = 24, HERO_T = 14.9, T_PATCH = 15.5, T_IGN = 0.55;
+const TAU = Math.PI * 2;
+const DENS = LOW ? 0.45 : 1;
+
+/* ---------- seeded randomness ---------- */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const mod = (x, m) => ((x % m) + m) % m;
+
+/* ================= the repository ================= */
+// [path, group, size, code lines]
+const FILES = [
+  ['src/index.ts', 'core', 2, [
+    'import { createServer } from "./api/router";',
+    'import { config } from "./lib/config";',
+    'const app = createServer(config);',
+    'app.listen(config.PORT);']],
+  ['src/worker.ts', 'core', 1, [
+    'import { sendInvoice } from "./billing/invoice";',
+    'queue.consume("invoice.created", async (msg) => {',
+    '  await sendInvoice(msg.invoiceId);',
+    '});']],
+  ['package.json', 'core', 1, [
+    '{ "name": "ledger-api", "version": "4.12.0",',
+    '  "type": "module",',
+    '  "dependencies": { "node-serialize": "0.0.4",',
+    '    "pg": "^8.13.1", "stripe": "^17.4.0" } }']],
+  ['Dockerfile', 'core', 1, [
+    'FROM node:22-alpine',
+    'WORKDIR /app',
+    'COPY . .',
+    'RUN npm ci --omit=dev',
+    'CMD ["node", "dist/index.js"]']],
+
+  ['src/auth/middleware.ts', 'auth', 2, [
+    'import { readSession } from "./session";',
+    'export async function requireUser(req, res, next) {',
+    '  req.user = readSession(req.cookies["sid"]);',
+    '  return req.user ? next() : res.sendStatus(401);']],
+  ['src/auth/oauth.ts', 'auth', 2, [
+    'import { readSession } from "./session";',
+    'export async function callback(code: string) {',
+    '  const { sub } = await google.verify(code);',
+    '  return users.upsert({ sub, provider: "google" });']],
+  ['src/auth/session.ts', 'auth', 3, null],   // the hero, see HERO below
+  ['src/auth/password.ts', 'auth', 1, [
+    'import { hash, verify } from "@node-rs/argon2";',
+    'export function hashPassword(pw: string) {',
+    '  return hash(pw, { memoryCost: 19456 });',
+    '}']],
+  ['src/auth/roles.ts', 'auth', 1, [
+    'export type Role = "owner" | "admin" | "viewer";',
+    'export function can(user: User, action: Action) {',
+    '  return POLICY[user.role].includes(action);',
+    '}']],
+
+  ['src/billing/invoice.ts', 'billing', 3, [
+    'import { requireUser } from "../auth/middleware";',
+    'export async function sendInvoice(orderId: string) {',
+    '  const order = await orders.find(orderId);',
+    '  return stripe.invoices.create({ customer: order.cus });']],
+  ['src/billing/stripe.ts', 'billing', 1, [
+    'import Stripe from "stripe";',
+    'export const stripe = new Stripe(config.STRIPE_KEY, {',
+    '  apiVersion: "2026-08-27",',
+    '});']],
+  ['src/billing/tax.ts', 'billing', 1, [
+    'export function vatFor(country: string, cents: number) {',
+    '  const rate = VAT_RATES[country] ?? 0;',
+    '  return Math.round(cents * rate);',
+    '}']],
+  ['src/billing/refunds.ts', 'billing', 2, [
+    'import { requireUser } from "../auth/middleware";',
+    'export async function refund(charge: string, cents: number) {',
+    '  if (cents <= 0) throw new RangeError("amount");',
+    '  return stripe.refunds.create({ charge, amount: cents });']],
+  ['src/billing/webhooks.ts', 'billing', 2, [
+    'export async function onStripeEvent(req: Request) {',
+    '  const sig = req.headers.get("stripe-signature");',
+    '  const event = stripe.webhooks.constructEvent(body, sig, key);',
+    '  await queue.publish(event.type, event.data);']],
+
+  ['src/api/router.ts', 'api', 3, [
+    'import { requireUser } from "../auth/middleware";',
+    'const r = new Router();',
+    'r.get("/health", health);',
+    'r.use("/v1", requireUser, v1);']],
+  ['src/api/users.ts', 'api', 2, [
+    'import { readSession } from "../auth/session";',
+    'export async function me(req: Request) {',
+    '  const session = readSession(req.cookies.sid);',
+    '  return users.byId(session.userId);']],
+  ['src/api/orders.ts', 'api', 2, [
+    'export async function listOrders(req: Request) {',
+    '  const rows = await db.query(',
+    '    "select * from orders where user_id = $1", [req.user.id]);',
+    '  return rows.map(toOrderDto);']],
+  ['src/api/health.ts', 'api', 1, [
+    'export function health() {',
+    '  return { ok: true, commit: process.env.GIT_SHA };',
+    '}']],
+  ['src/api/errors.ts', 'api', 1, [
+    'export class HttpError extends Error {',
+    '  constructor(public status: number, message: string) {',
+    '    super(message);',
+    '  }']],
+
+  ['src/db/pool.ts', 'db', 2, [
+    'import { Pool } from "pg";',
+    'export const db = new Pool({',
+    '  connectionString: config.DATABASE_URL,',
+    '  max: 20,']],
+  ['src/db/migrate.ts', 'db', 1, [
+    'for (const file of await readdir("migrations")) {',
+    '  await db.query(await readFile(file, "utf8"));',
+    '  log.info({ file }, "migrated");',
+    '}']],
+  ['src/db/users.repo.ts', 'db', 1, [
+    'export const users = {',
+    '  byId: (id: string) =>',
+    '    db.one("select * from users where id = $1", [id]),',
+    '};']],
+  ['src/db/orders.repo.ts', 'db', 1, [
+    'export const orders = {',
+    '  find: (id: string) =>',
+    '    db.one("select * from orders where id = $1", [id]),',
+    '};']],
+
+  ['src/lib/config.ts', 'lib', 2, [
+    'import { z } from "zod";',
+    'const Env = z.object({ PORT: z.coerce.number() });',
+    'export const config = Env.parse(process.env);',
+    'export type Config = z.infer<typeof Env>;']],
+  ['src/lib/logger.ts', 'lib', 1, [
+    'import pino from "pino";',
+    'export const log = pino({',
+    '  redact: ["req.headers.cookie", "*.token"],',
+    '});']],
+  ['src/lib/crypto.ts', 'lib', 1, [
+    'import { randomBytes, timingSafeEqual } from "node:crypto";',
+    'export const token = (n = 32) =>',
+    '  randomBytes(n).toString("base64url");',
+    'export const same = (a, b) => timingSafeEqual(a, b);']],
+  ['src/lib/http.ts', 'lib', 1, [
+    'export async function getJson<T>(url: string): Promise<T> {',
+    '  const res = await fetch(url, { signal: AbortSignal.timeout(5000) });',
+    '  if (!res.ok) throw new HttpError(res.status, url);',
+    '  return res.json() as Promise<T>;']],
+  ['src/lib/cache.ts', 'lib', 1, [
+    'const lru = new LRUCache<string, unknown>({ max: 5000 });',
+    'export function memo<T>(key: string, fn: () => T): T {',
+    '  if (!lru.has(key)) lru.set(key, fn());',
+    '  return lru.get(key) as T;']],
+
+  ['src/web/App.tsx', 'web', 2, [
+    'export function App() {',
+    '  const session = useSession();',
+    '  return session ? <Dashboard /> : <Login />;',
+    '}']],
+  ['src/web/Login.tsx', 'web', 1, [
+    'export function Login() {',
+    '  const [email, setEmail] = useState("");',
+    '  const submit = () => api.post("/login", { email });',
+    '  return <EmailForm value={email} onSubmit={submit} />;']],
+  ['src/web/Checkout.tsx', 'web', 1, [
+    'export function Checkout({ cart }: Props) {',
+    '  const total = cart.reduce((s, i) => s + i.cents, 0);',
+    '  return <Pay amount={total} currency="eur" />;',
+    '}']],
+  ['src/web/useSession.ts', 'web', 1, [
+    'import { readSession } from "../auth/session";',
+    'export function useSession() {',
+    '  const sid = useCookie("sid");',
+    '  return useMemo(() => readSession(sid), [sid]);']],
+
+  ['scripts/deploy.sh', 'scripts', 1, [
+    '#!/usr/bin/env bash',
+    'set -euo pipefail',
+    'docker build -t "$IMAGE:$GIT_SHA" .',
+    'kubectl set image deploy/api api="$IMAGE:$GIT_SHA"']],
+  ['scripts/seed.py', 'scripts', 1, [
+    'import os, psycopg',
+    'with psycopg.connect(os.environ["DATABASE_URL"]) as conn:',
+    '    for user in fixtures.users():',
+    '        conn.execute("insert into users values (%s, %s)", user)']],
+  ['scripts/rotate_keys.py', 'scripts', 1, [
+    'import boto3',
+    'sm = boto3.client("secretsmanager")',
+    'def rotate(name: str) -> None:',
+    '    sm.rotate_secret(SecretId=name)']],
+  ['.github/workflows/release.yml', 'github', 1, [
+    'name: release',
+    'on: { push: { tags: ["v*"] } }',
+    'permissions: { contents: write, id-token: write }',
+    'jobs: { release: { runs-on: ubuntu-24.04 } }']],
+  ['.github/workflows/ci.yml', 'github', 1, [
+    'name: ci',
+    'on: [push, pull_request]',
+    'jobs:',
+    '  test: { runs-on: ubuntu-24.04, steps: [{ run: npm test }] }']],
+  ['tests/auth.test.ts', 'tests', 1, [
+    'import { readSession } from "../src/auth/session";',
+    'test("rejects a tampered cookie", () => {',
+    '  expect(() => readSession(evil)).toThrow();',
+    '});']],
+  ['tests/billing.test.ts', 'tests', 1, [
+    'test("adds VAT for DE", () => {',
+    '  expect(vatFor("DE", 10_000)).toBe(1_900);',
+    '});']],
+  ['infra/main.tf', 'infra', 1, [
+    'resource "aws_db_instance" "ledger" {',
+    '  engine            = "postgres"',
+    '  storage_encrypted = true',
+    '}']],
+];
+
+// importer -> imported
+const EDGES = [
+  ['src/index.ts', 'src/api/router.ts'], ['src/index.ts', 'src/lib/config.ts'], ['src/index.ts', 'src/lib/logger.ts'],
+  ['src/worker.ts', 'src/billing/invoice.ts'], ['src/worker.ts', 'src/lib/logger.ts'],
+  ['src/api/router.ts', 'src/auth/middleware.ts'], ['src/api/router.ts', 'src/api/users.ts'], ['src/api/router.ts', 'src/api/orders.ts'],
+  ['src/api/router.ts', 'src/api/health.ts'], ['src/api/router.ts', 'src/api/errors.ts'],
+  ['src/auth/middleware.ts', 'src/auth/session.ts'], ['src/auth/middleware.ts', 'src/auth/roles.ts'],
+  ['src/auth/oauth.ts', 'src/auth/session.ts'], ['src/auth/oauth.ts', 'src/lib/http.ts'],
+  ['src/auth/session.ts', 'src/lib/crypto.ts'],
+  ['src/api/users.ts', 'src/auth/session.ts'], ['src/api/users.ts', 'src/db/users.repo.ts'],
+  ['src/api/orders.ts', 'src/db/orders.repo.ts'], ['src/api/orders.ts', 'src/api/errors.ts'],
+  ['src/billing/invoice.ts', 'src/auth/middleware.ts'], ['src/billing/invoice.ts', 'src/billing/stripe.ts'],
+  ['src/billing/invoice.ts', 'src/db/orders.repo.ts'], ['src/billing/invoice.ts', 'src/billing/tax.ts'],
+  ['src/billing/refunds.ts', 'src/auth/middleware.ts'], ['src/billing/refunds.ts', 'src/billing/stripe.ts'],
+  ['src/billing/webhooks.ts', 'src/billing/stripe.ts'], ['src/billing/webhooks.ts', 'src/lib/logger.ts'],
+  ['src/billing/stripe.ts', 'src/lib/config.ts'], ['src/db/pool.ts', 'src/lib/config.ts'],
+  ['src/db/users.repo.ts', 'src/db/pool.ts'], ['src/db/orders.repo.ts', 'src/db/pool.ts'], ['src/db/migrate.ts', 'src/db/pool.ts'],
+  ['src/auth/password.ts', 'src/lib/crypto.ts'], ['src/lib/http.ts', 'src/api/errors.ts'], ['src/lib/logger.ts', 'src/lib/config.ts'],
+  ['src/lib/cache.ts', 'src/lib/config.ts'],
+  ['src/web/App.tsx', 'src/web/useSession.ts'], ['src/web/App.tsx', 'src/web/Login.tsx'], ['src/web/App.tsx', 'src/web/Checkout.tsx'],
+  ['src/web/Login.tsx', 'src/lib/http.ts'], ['src/web/Checkout.tsx', 'src/lib/http.ts'],
+  ['src/web/useSession.ts', 'src/auth/session.ts'],
+  ['tests/auth.test.ts', 'src/auth/session.ts'], ['tests/billing.test.ts', 'src/billing/tax.ts'],
+  ['scripts/deploy.sh', 'Dockerfile'], ['Dockerfile', 'package.json'], ['scripts/seed.py', 'src/db/migrate.ts'],
+  ['.github/workflows/release.yml', 'scripts/deploy.sh'], ['.github/workflows/ci.yml', 'package.json'],
+  ['scripts/rotate_keys.py', 'infra/main.tf'],
+];
+
+// the vulnerable file; line 6 hands attacker bytes to node-serialize (CVE-2017-5941)
+const HERO = {
+  path: 'src/auth/session.ts',
+  lines: [
+    'src/auth/session.ts',
+    ' 1  import { unserialize } from "node-serialize";',
+    ' 2  import { Session } from "./schema";',
+    ' 3',
+    ' 4  export function readSession(cookie: string) {',
+    ' 5    const raw = Buffer.from(cookie, "base64").toString();',
+    ' 6    return unserialize(raw);',
+    ' 7  }',
+  ],
+  focus: 6,                                    // the offending line
+  removed: [{ line: 6, from: 'unserialize(raw);', delay: 0 },
+            { line: 1, from: 'import', delay: 0.35 }],
+  added: { line: 6, from: 'unserialize(raw);', text: 'Session.parse(JSON.parse(raw));' },
+};
+
+/* ================= layout ================= */
+const idx = new Map(FILES.map((f, i) => [f[0], i]));
+const HERO_I = idx.get(HERO.path);
+HERO.added.col = HERO.lines[HERO.added.line].indexOf(HERO.added.from);
+const ARMS = ['auth', 'billing', 'api', 'db', 'lib', 'web'];
+const ARM_PHASE = 0.9, ARM_TWIST = 1.75;
+const armTheta = (k, r) => k * TAU / ARMS.length + ARM_PHASE + Math.log(r / 1.1) * ARM_TWIST;
+const SAT = {
+  scripts: new THREE.Vector3(-11.0, 1.7, 4.2),
+  github: new THREE.Vector3(6.8, 2.3, 9.6),
+  tests: new THREE.Vector3(10.6, -1.3, -3.6),
+  infra: new THREE.Vector3(-6.2, -1.9, -10.4),
+};
+const CORE_POS = [new THREE.Vector3(0, 0.22, 0), new THREE.Vector3(0.85, -0.12, -0.5),
+                  new THREE.Vector3(-1.0, 0.08, 0.62), new THREE.Vector3(0.28, 0.04, 1.15)];
+
+const filePos = [];
+{
+  const rng = mulberry32(1607);
+  const armCount = {}, satCount = {};
+  let core = 0;
+  for (const [, g] of FILES) {
+    const k = ARMS.indexOf(g);
+    if (g === 'core') { filePos.push(CORE_POS[core++].clone()); continue; }
+    if (k >= 0) {
+      const i = armCount[g] = (armCount[g] ?? -1) + 1;
+      const r = 2.35 + i * 1.32 + (rng() - 0.5) * 0.3;
+      const th = armTheta(k, r) + (rng() - 0.5) * 0.08;
+      filePos.push(new THREE.Vector3(r * Math.cos(th), (rng() - 0.5) * 0.3, r * Math.sin(th)));
+      continue;
+    }
+    const j = satCount[g] = (satCount[g] ?? -1) + 1;
+    const a = j * 2.3 + rng() * 0.6;
+    filePos.push(SAT[g].clone().add(new THREE.Vector3(Math.cos(a) * 0.95, (rng() - 0.5) * 0.5, Math.sin(a) * 0.95)));
+  }
+}
+const HERO_POS = filePos[HERO_I];
+
+// graph distance from the hero along "is imported by" edges (who depends on it)
+const hop = new Array(FILES.length).fill(Infinity);
+{
+  hop[HERO_I] = 0;
+  const q = [HERO_I];
+  while (q.length) {
+    const cur = q.shift();
+    for (const [a, b] of EDGES) {
+      if (idx.get(b) === cur && hop[idx.get(a)] === Infinity) { hop[idx.get(a)] = hop[cur] + 1; q.push(idx.get(a)); }
+    }
+  }
+}
+
+// spiral arm direction at the hero (outward along the arm), and the close-up direction
+const HERO_R = Math.hypot(HERO_POS.x, HERO_POS.z);
+const heroTh = Math.atan2(HERO_POS.z, HERO_POS.x);
+const armOut = new THREE.Vector3(Math.cos(heroTh), 0, Math.sin(heroTh)).multiplyScalar(1)
+  .add(new THREE.Vector3(-Math.sin(heroTh), 0, Math.cos(heroTh)).multiplyScalar(ARM_TWIST)).normalize();
+const AZ_C = Math.atan2(-armOut.z, -armOut.x) + 0.32;   // camera sits inward along the arm, a little to the side
+const EL_C = 0.24;
+const dirFrom = (az, el, out = new THREE.Vector3()) => out.set(Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az));
+const NRM = dirFrom(AZ_C, EL_C);                       // every text block faces the close-up camera
+const UPV = new THREE.Vector3(0, 1, 0);
+const TXR = new THREE.Vector3().crossVectors(NRM.clone().negate(), UPV).normalize();  // text right
+const TXU = new THREE.Vector3().crossVectors(TXR, NRM.clone().negate()).normalize();  // text up
+const HERO_ANCHOR = HERO_POS.clone().addScaledVector(NRM, 0.42);
+
+/* ================= text: Spark textSplats -> re-packed points ================= */
+const FONT = '"Martian Mono", ui-monospace, monospace';
+const LINE_H = 1.0;
+const metricsCache = new Map();
+function fontMetrics(F) {
+  if (metricsCache.has(F)) return metricsCache.get(F);
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.font = `${F}px ${FONT}`;
+  const m0 = ctx.measureText('');
+  const fontHeight = (m0.fontBoundingBoxAscent + m0.fontBoundingBoxDescent) || F * 1.3;
+  const m = { ctx, LH: fontHeight * LINE_H, adv: ctx.measureText('MMMMMMMMMM').width / 10 };
+  metricsCache.set(F, m);
+  return m;
+}
+// Rasterise one line with textSplats() and recover pen-space pixel coordinates
+// (x from the start of the line, y relative to the baseline) by mirroring its layout math.
+function lineSplats(str, F) {
+  if (!str.trim()) return [];
+  const { ctx } = fontMetrics(F);
+  ctx.textAlign = 'start';
+  const m = ctx.measureText(str);
+  const originLeft = Math.floor(-m.actualBoundingBoxLeft), originTop = Math.floor(-m.actualBoundingBoxAscent);
+  const width = Math.ceil(m.actualBoundingBoxRight) - originLeft, height = Math.ceil(m.actualBoundingBoxDescent) - originTop;
+  const mesh = textSplats({ text: str, font: FONT, fontSize: F, lineHeight: LINE_H });
+  const pts = [];
+  mesh.packedSplats.forEachSplat((i, c, s, q, o) => {
+    pts.push(c.x + 0.5 * (width - 1) + originLeft + 0.5, 0.5 * (height - 1) - c.y + originTop + 0.5, o);
+  });
+  mesh.dispose();
+  return pts;
+}
+
+// tiny tokenizer -> syntax class per column (cold palette in the shader)
+const KW = new Set(('import from export const let var function return async await new if else for of in throw class ' +
+  'extends public private type interface as default def with try catch while true false null undefined None ' +
+  'set name on jobs permissions resource FROM WORKDIR COPY RUN CMD AS').split(' '));
+function tokenize(line, gutter) {
+  const n = line.length, cls = new Uint8Array(n);
+  let i = 0;
+  if (gutter) { const g = line.match(/^\s*\d+/); if (g) { cls.fill(6, 0, g[0].length); i = g[0].length; } }
+  while (i < n) {
+    const ch = line[i];
+    if ((ch === '/' && line[i + 1] === '/') || (ch === '#' && (i === 0 || line[i - 1] === ' '))) { cls.fill(3, i); break; }
+    if (ch === '"' || ch === "'" || ch === '`') {
+      let j = i + 1; while (j < n && line[j] !== ch) j++;
+      cls.fill(2, i, Math.min(n, j + 1)); i = j + 1; continue;
+    }
+    if (/[0-9]/.test(ch) && (i === 0 || !/[A-Za-z_$]/.test(line[i - 1]))) {
+      let j = i; while (j < n && /[0-9_.]/.test(line[j])) j++;
+      cls.fill(4, i, j); i = j; continue;
+    }
+    if (/[A-Za-z_$]/.test(ch)) {
+      let j = i; while (j < n && /[A-Za-z0-9_$]/.test(line[j])) j++;
+      cls.fill(KW.has(line.slice(i, j)) ? 1 : 0, i, j); i = j; continue;
+    }
+    cls[i] = ch === ' ' ? 0 : 5; i++;
+  }
+  return cls;
+}
+
+/* ================= renderer / scene ================= */
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.setClearColor(0x100C2A, 1);
+const PR = () => Math.min(window.devicePixelRatio || 1, LOW ? 1 : 1.75);
+renderer.setPixelRatio(PR());
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 400);
+let dirty = true;
+const spark = new SparkRenderer({ renderer, accumExtSplats: true, onDirty: () => { dirty = true; } });
+scene.add(spark);
+
+// backdrop: indigo gradient with a faint halo toward the galactic core
+{
+  const col = h => new THREE.Color(h);
+  const m = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false,
+    uniforms: { uBot: { value: col('#0A0720') }, uTop: { value: col('#1E1852') }, uHalo: { value: col('#2B2672') } },
+    vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `
+      uniform vec3 uBot, uTop, uHalo; varying vec3 vW;
+      float h12(vec2 p){ vec3 q = fract(vec3(p.xyx) * .1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+      void main(){
+        vec3 d = normalize(vW - cameraPosition);
+        vec3 c = mix(uBot, uTop, smoothstep(-.6, .9, d.y));
+        c += uHalo * pow(max(dot(d, normalize(-cameraPosition)), 0.), 10.) * .22;
+        c += (h12(gl_FragCoord.xy) - .5) * .0012;
+        gl_FragColor = vec4(c, 1.);
+      }`
+  });
+  const bg = new THREE.Mesh(new THREE.SphereGeometry(200, 32, 16), m);
+  bg.renderOrder = -10;
+  scene.add(bg);
+}
+
+/* ================= the per-splat animation (dyno, GLSL) ================= */
+const uT = dyno.dynoFloat(0);
+const uCam = dyno.dynoVec3(new THREE.Vector3());
+const v3 = v => `vec3(${v.x.toFixed(5)}, ${v.y.toFixed(5)}, ${v.z.toFixed(5)})`;
+const GLSL = dyno.unindent(`
+  const float NB_TAU = 6.2831853;
+  const float NB_LOOP = ${LOOP.toFixed(1)};
+  const float NB_PATCH = ${T_PATCH.toFixed(2)};
+  const float NB_IGN = ${T_IGN.toFixed(2)};
+  const vec3 NB_HERO = ${v3(HERO_POS)};
+  const vec3 NB_NRM = ${v3(NRM)};
+
+  uint nbHash(uint x) { x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16; return x; }
+  float nbRand(uint x) { return float(nbHash(x) >> 8) / 16777216.0; }
+  vec3 nbDir(uint s) {
+    float z = nbRand(s) * 2.0 - 1.0, a = nbRand(s ^ 0x9e3779b9u) * NB_TAU, r = sqrt(max(0.0, 1.0 - z * z));
+    return vec3(r * cos(a), z, r * sin(a));
+  }
+  float nbLoopSin(float t, float k, float ph) { return sin(NB_TAU * (t / NB_LOOP) * k + ph); }
+
+  // brief palette, sRGB (Spark linearises splat colours itself)
+  vec3 nbCold(float x) {
+    x = clamp(x, 0.0, 1.0) * 4.0;
+    vec3 c0 = vec3(0.106, 0.090, 0.278), c1 = vec3(0.184, 0.310, 0.659), c2 = vec3(0.310, 0.639, 0.878),
+         c3 = vec3(0.608, 0.910, 1.000), c4 = vec3(0.910, 0.969, 1.000);
+    if (x < 1.0) return mix(c0, c1, x);
+    if (x < 2.0) return mix(c1, c2, x - 1.0);
+    if (x < 3.0) return mix(c2, c3, x - 2.0);
+    return mix(c3, c4, x - 3.0);
+  }
+  vec3 nbIron(float x) {
+    x = clamp(x, 0.0, 1.0) * 5.0;
+    vec3 c0 = vec3(0.227, 0.059, 0.420), c1 = vec3(0.608, 0.114, 0.561), c2 = vec3(0.941, 0.188, 0.416),
+         c3 = vec3(1.000, 0.478, 0.184), c4 = vec3(1.000, 0.827, 0.420), c5 = vec3(1.000, 0.965, 0.878);
+    if (x < 1.0) return mix(c0, c1, x);
+    if (x < 2.0) return mix(c1, c2, x - 1.0);
+    if (x < 3.0) return mix(c2, c3, x - 2.0);
+    if (x < 4.0) return mix(c3, c4, x - 3.0);
+    return mix(c4, c5, x - 4.0);
+  }
+  vec3 nbSyntax(int tok) {
+    if (tok == 1) return vec3(0.608, 0.910, 1.000);          // keyword: ice
+    if (tok == 2) return vec3(0.420, 0.745, 0.940);          // string
+    if (tok == 3) return vec3(0.549, 0.576, 0.769) * 0.85;   // comment: mist
+    if (tok == 4) return vec3(0.608, 0.910, 1.000);          // number
+    if (tok == 5) return vec3(0.600, 0.640, 0.840);          // punctuation
+    if (tok == 6) return vec3(0.380, 0.430, 0.640);          // gutter: steel
+    if (tok == 7) return vec3(0.549, 0.576, 0.769);          // path label: mist
+    return vec3(0.910, 0.969, 1.000);                        // identifiers: frost
+  }
+  // heat by graph distance D (hops from the vulnerable file, fractional along filaments)
+  float nbSpread(float D, float t) {
+    if (D > 4.5) return 0.0;
+    float tA = NB_IGN + D * 1.75;
+    float rise = smoothstep(tA, tA + 0.9, t);
+    float peak = mix(1.0, 0.46, clamp(D / 3.0, 0.0, 1.0));
+    float tC = 17.4 + (3.0 - min(D, 3.0)) * 0.95;           // drains back: outermost first
+    float fall = 1.0 - smoothstep(tC, tC + 1.2, t);
+    return rise * fall * peak;
+  }
+  // the scanner's shock ring at ignition
+  float nbShock(vec3 p, float t) {
+    if (t < NB_IGN || t > NB_IGN + 2.4) return 0.0;
+    float r = (t - NB_IGN) * 5.2;
+    float d = length(p - NB_HERO) - r;
+    return exp(-d * d / 0.35) * (1.0 - smoothstep(NB_IGN, NB_IGN + 2.4, t));
+  }
+
+  void nbModify(inout Gsplat g, float t, vec3 cam) {
+    if ((g.flags & GSPLAT_FLAG_ACTIVE) == 0u) return;
+    vec3 m = floor(g.rgba.rgb * 255.0 + 0.5);
+    int rt = int(m.g);
+    int role = rt / 16;
+    int tok = rt - role * 16;
+    float bb = m.b / 255.0;
+    float D = m.r > 254.5 ? 99.0 : m.r / 50.0;
+    uint id = uint(g.index);
+    float rnd = nbRand(id * 7u + 3u);
+    vec3 p = g.center;
+    vec3 sc = g.scales;
+    float a = g.rgba.a;
+    vec3 col;
+    float dCam = length(p - cam);
+    float heroHeat = nbSpread(0.0, t);
+    float clearing = smoothstep(6.0, 2.2, length(cam - NB_HERO));
+    float nearHero = exp(-dot(p - NB_HERO, p - NB_HERO) / 1.4);
+
+    if (role == 0) {                                   // background stars
+      col = mix(vec3(0.549, 0.576, 0.769), vec3(0.910, 0.969, 1.000), bb);
+      a *= 0.6 + 0.4 * nbLoopSin(t, floor(3.0 + rnd * 9.0), rnd * NB_TAU);
+    } else if (role <= 2) {                            // core bulge (1) and arm gas (2); tok 1 = dust lane
+      p += 0.05 * vec3(nbLoopSin(t, 1.0, rnd * NB_TAU), 0.3 * nbLoopSin(t, 2.0, rnd * 5.0), nbLoopSin(t, 1.0, rnd * NB_TAU + 1.6));
+      if (tok == 1) {
+        col = vec3(0.040, 0.030, 0.115);
+      } else {
+        col = nbCold(bb);
+        float lit = heroHeat * exp(-dot(p - NB_HERO, p - NB_HERO) / 0.9);
+        col = mix(col, nbIron(0.35 + 0.4 * lit), smoothstep(0.0, 0.8, lit) * 0.7);
+        float sh = nbShock(p, t);
+        col = mix(col, nbIron(0.6) * 1.1, clamp(sh, 0.0, 1.0) * 0.85);
+        a = min(1.0, a * (1.0 + 1.6 * sh));
+      }
+      a *= 1.0 - 0.9 * clearing * nearHero;
+      a *= smoothstep(0.4, 1.6, dCam);
+    } else if (role == 3) {                            // a file's cloud
+      float h = nbSpread(D, t) * (0.86 + 0.14 * nbLoopSin(t, 31.0, rnd * NB_TAU));
+      col = mix(nbCold(bb), nbIron(h) * (1.0 + 0.3 * h * h), smoothstep(0.02, 0.22, h));
+      p += nbDir(id) * 0.06 * h * (0.5 + 0.5 * nbLoopSin(t, 23.0, rnd * NB_TAU));
+      float sh = nbShock(p, t);
+      col = mix(col, nbIron(0.6) * 1.1, clamp(sh, 0.0, 1.0) * 0.7);
+      a = min(1.0, a * (1.0 + 0.8 * h + 1.0 * sh));
+      sc *= 1.0 + 0.45 * h;
+      a *= 1.0 - 0.95 * clearing * nearHero;
+      a *= smoothstep(0.35, 1.5, dCam);
+    } else if (role == 4) {                            // import filament
+      float h = nbSpread(D, t);
+      float pulse = h > 0.01 ? smoothstep(0.82, 1.0, fract(D * 3.0 - t * 1.25)) : 0.0;
+      vec3 cold = mix(vec3(0.306, 0.353, 0.549), vec3(0.549, 0.576, 0.769), bb);
+      col = mix(cold, nbIron(min(1.0, h + 0.35 * pulse)) * (1.0 + 0.22 * h), smoothstep(0.01, 0.12, h));
+      a = min(1.0, a * (1.0 + 2.0 * h + 1.5 * pulse * h));
+      sc *= 1.0 + 0.3 * h;
+      a *= 1.0 - 0.9 * clearing * exp(-dot(p - NB_HERO, p - NB_HERO) / 2.0);
+      a *= smoothstep(0.8 + 1.4 * clearing, 2.6 + 2.2 * clearing, dCam);
+    } else {          // code text: 5 other files, 6 removed, 7 added, 8 hero lines, 9 heat glow behind hero lines
+      float r0 = role == 5 ? smoothstep(7.2, 3.4, dCam) : smoothstep(8.5, 3.8, dCam);
+      float u = 1.0 - r0;
+      vec3 dir = nbDir(id * 3u + 1u);
+      int stok = tok >= 8 ? tok - 8 : tok;             // removed code: +8 marks the second, later removal
+      vec3 syn = nbSyntax(stok);
+      float h = 0.0, vis = 1.0;
+      if (role == 5) {
+        h = nbSpread(D, t);
+      } else {
+        float ld = D;                                  // hero splats carry their line's distance from line 6
+        float rise = smoothstep(NB_IGN, NB_IGN + 0.9, t);
+        float peak = ld < 0.5 ? 1.0 : (ld < 1.5 ? 0.22 : 0.0);   // heat localises to the offending line
+        float fall = 1.0 - smoothstep(NB_PATCH + 0.5 + ld * 0.22, NB_PATCH + 1.3 + ld * 0.22, t);
+        h = rise * fall * peak;
+        if (role == 6 || (role == 9 && tok > 0)) {
+          bool later = role == 6 ? tok >= 8 : tok == 2;
+          float t0 = NB_PATCH + (later ? 0.35 : 0.0) + bb * 0.45;
+          float pp = smoothstep(t0, t0 + 0.65, t);
+          h = rise * (later ? 0.62 : 1.0) * (1.0 - pp * 0.85);
+          p += (dir * 0.17 + NB_NRM * 0.2 + vec3(0.0, 0.12, 0.0)) * pow(pp, 1.25) * (0.35 + rnd);
+          p.y += 0.0016 * h * (1.0 - pp) * nbLoopSin(t, 48.0, p.x * 90.0 + p.z * 40.0);
+          vis = (1.0 - pp) * (1.0 - pp) * (1.0 - pp);
+          sc *= 1.0 + 1.6 * pp;
+        } else if (role == 7) {
+          float t0 = NB_PATCH + 0.25 + bb * 0.4;
+          float q = smoothstep(t0, t0 + 0.6, t);
+          p += (dir * 0.045 + NB_NRM * 0.05) * (1.0 - q) * (1.0 - q) * (0.5 + rnd);
+          vis = smoothstep(0.0, 0.35, q);
+          h = 0.0;
+          syn = mix(vec3(0.75, 0.93, 1.0), syn, q);
+          sc *= 1.0 + 1.2 * (1.0 - q);
+        }
+      }
+      if (role == 9 && tok == 3) {                     // embers rising off the hot line
+        float ph = fract(t / 1.6 + rnd);
+        p += vec3(0.0, 0.11, 0.0) * ph + NB_NRM * 0.025 * ph + dir * 0.012 * sin(ph * 6.0 + rnd * 9.0);
+        col = nbIron(0.95 - 0.45 * ph) * 1.2;
+        a *= h * (1.0 - ph) * (1.0 - ph) * smoothstep(0.0, 0.08, ph) * r0 * vis;
+      } else if (role == 9) {
+        col = nbIron(0.2 + 0.8 * h) * 1.25;
+        a *= h * h * r0 * vis;
+      } else {
+        if (role == 8 && rnd < 0.045) p += dir * (0.012 + 0.03 * nbRand(id + 5u)) * (0.7 + 0.3 * nbLoopSin(t, 3.0, rnd * 40.0));
+        p += dir * (0.12 + 0.3 * rnd) * u * u;          // unresolved: the glyph splats are part of the haze
+        sc = mix(vec3(0.008 + 0.012 * rnd), sc, r0);
+        col = mix(syn, nbIron(0.38 + 0.62 * h), smoothstep(0.02, 0.2, h));
+        a *= mix(0.03, 1.0, r0 * r0) * vis;
+      }
+    }
+    if (role >= 1 && role <= 4) { col *= 1.0 - 0.5 * clearing; a *= 1.0 - 0.5 * clearing; }
+    g.center = p;
+    g.scales = sc;
+    g.rgba = vec4(col, clamp(a, 0.0, 1.0));
+  }
+`);
+const nebulaModifier = dyno.dynoBlock({ gsplat: dyno.Gsplat }, { gsplat: dyno.Gsplat }, ({ gsplat }) => {
+  const d = new dyno.Dyno({
+    inTypes: { gsplat: dyno.Gsplat, t: 'float', cam: 'vec3' },
+    outTypes: { gsplat: dyno.Gsplat },
+    globals: () => [dyno.defineGsplat, GLSL],
+    statements: ({ inputs, outputs }) => dyno.unindentLines(`
+      ${outputs.gsplat} = ${inputs.gsplat};
+      nbModify(${outputs.gsplat}, ${inputs.t}, ${inputs.cam});
+    `),
+  });
+  return { gsplat: d.apply({ gsplat, t: uT, cam: uCam }).gsplat };
+});
+
+/* ================= building the splats ================= */
+// metadata rides in the 8-bit colour channels: r = heat distance (D*50, 255 = never heated),
+// g = role*16 + sub-class, b = tone or x-position; the modifier decodes and replaces them.
+const ROLE = { star: 0, core: 1, gas: 2, cloud: 3, filament: 4, text: 5, removed: 6, added: 7, hero: 8, glow: 9 };
+let splatCount = 0;
+function buildSplats(sp) {
+  const rng = mulberry32(90210);
+  const gauss = () => { let u = 0, v = 0; while (u === 0) u = rng(); v = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(TAU * v); };
+  const P = new THREE.Vector3(), S = new THREE.Vector3(), C = new THREE.Color(), QI = new THREE.Quaternion();
+  const Qt = new THREE.Quaternion(), X = new THREE.Vector3(1, 0, 0);
+  const push = (x, y, z, sx, sy, sz, a, code, role, sub, b, q = QI) => {
+    P.set(x, y, z); S.set(sx, sy, sz);
+    C.setRGB(code / 255, (role * 16 + sub) / 255, clamp(Math.round(b), 0, 255) / 255);
+    sp.pushSplat(P, S, q, a, C);
+    splatCount++;
+  };
+  const N = n => Math.max(1, Math.round(n * DENS));
+
+  // stars
+  for (let i = 0, n = N(2600); i < n; i++) {
+    const z = 2 * rng() - 1, ph = rng() * TAU, rr = Math.sqrt(1 - z * z), R = 45 + rng() * 60;
+    const s = 0.05 + rng() * rng() * 0.16;
+    push(rr * Math.cos(ph) * R, z * R * 0.8, rr * Math.sin(ph) * R, s, s, s, 0.45 + rng() * 0.55, 255, ROLE.star, 0, rng() * 255);
+  }
+  // core bulge
+  for (let i = 0, n = N(5200); i < n; i++) {
+    const rr = Math.abs(gauss()) * 0.8 + 0.04, th = rng() * TAU, y = gauss() * 0.34 * Math.exp(-rr * 0.6);
+    const s = 0.04 + rng() * 0.18 * rng();
+    push(rr * Math.cos(th), y, rr * Math.sin(th), s, s * 0.7, s, 0.06 + 0.22 * rng(), 255, ROLE.core, 0, 255 * (0.66 + 0.34 * Math.exp(-rr * 0.8) * (0.4 + 0.6 * rng())));
+  }
+  // spiral arms: gas, dust lanes and young-star sparkle
+  for (let k = 0; k < ARMS.length; k++) {
+    for (let i = 0, n = N(3000); i < n; i++) {
+      const r = 0.9 + Math.pow(rng(), 0.8) * 9.2;
+      const kind = rng();
+      const dust = kind < 0.16, spark = kind > 0.9;
+      const th = armTheta(k, r) + gauss() * (dust ? 0.045 : spark ? 0.06 : 0.085) + (dust ? -0.075 : 0);
+      const rad = r + gauss() * 0.18 * (1 + r * 0.05);
+      const y = gauss() * (0.08 + r * 0.01);
+      const fade = 1.12 - r / 12;
+      if (spark) {
+        const s2 = 0.012 + rng() * 0.025;
+        push(rad * Math.cos(th), y, rad * Math.sin(th), s2, s2, s2, 0.5 + 0.4 * rng(), 255, ROLE.gas, 0, 255 * (0.8 + 0.2 * rng()));
+        continue;
+      }
+      const sz = dust ? 0.1 + rng() * 0.2 : 0.07 + rng() * rng() * 0.38;
+      const tone = (0.28 + 0.44 * rng()) * fade;
+      push(rad * Math.cos(th), y, rad * Math.sin(th), sz, sz * 0.32, sz, dust ? 0.22 + 0.16 * rng() : (0.07 + 0.11 * rng()) * fade,
+        255, ROLE.gas, dust ? 1 : 0, tone * 255);
+    }
+  }
+  // faint inter-arm disc haze
+  for (let i = 0, n = N(2200); i < n; i++) {
+    const r = Math.min(10.5, 0.8 + Math.abs(gauss()) * 3.4), th = rng() * TAU, sz = 0.25 + rng() * 0.45;
+    push(r * Math.cos(th), gauss() * 0.13, r * Math.sin(th), sz, sz * 0.3, sz, 0.012 + 0.022 * rng(), 255, ROLE.gas, 0, 255 * (0.14 + 0.16 * rng()));
+  }
+  // satellite clusters (scripts, CI, tests, infra live outside src/)
+  for (const c of Object.values(SAT)) {
+    for (let i = 0, n = N(300); i < n; i++) {
+      const sz = 0.05 + rng() * 0.2;
+      push(c.x + gauss() * 0.75, c.y + gauss() * 0.3, c.z + gauss() * 0.75, sz, sz * 0.6, sz, 0.02 + 0.04 * rng(), 255, ROLE.gas, 0, 255 * (0.18 + 0.3 * rng()));
+    }
+  }
+  // one cloud per file: a compact bright knot with a soft halo
+  FILES.forEach((f, i) => {
+    const c = filePos[i], size = f[2], D = hop[i];
+    const code = D === Infinity ? 255 : Math.round(D * 50);
+    const R = 0.15 + 0.05 * size;
+    for (let j = 0, n = N(200 + 120 * size); j < n; j++) {
+      const g1 = gauss(), g2 = gauss(), g3 = gauss();
+      const rr = Math.hypot(g1, g2, g3);
+      const sz = 0.014 + rng() * rng() * 0.07;
+      push(c.x + g1 * R, c.y + g2 * R * 0.6, c.z + g3 * R, sz, sz, sz, 0.12 + 0.3 * rng() * Math.exp(-rr * 0.5),
+        code, ROLE.cloud, 0, 255 * clamp(0.5 + 0.48 * Math.exp(-rr * 0.9) * (0.6 + 0.4 * rng()), 0, 1));
+    }
+    for (let j = 0, n = N(26 + 10 * size); j < n; j++) {   // halo
+      const sz = 0.12 + rng() * 0.18;
+      push(c.x + gauss() * R * 1.6, c.y + gauss() * R * 0.8, c.z + gauss() * R * 1.6, sz, sz * 0.6, sz, 0.035 + 0.04 * rng(),
+        code, ROLE.cloud, 0, 255 * (0.42 + 0.2 * rng()));
+    }
+    for (let j = 0; j < 4; j++) {   // bright kernel
+      const sz = 0.035 + rng() * 0.03;
+      push(c.x + gauss() * 0.03, c.y + gauss() * 0.02, c.z + gauss() * 0.03, sz, sz, sz, 0.7, code, ROLE.cloud, 0, 252);
+    }
+  });
+  // import filaments: quadratic curves of tiny elongated splats
+  const A = new THREE.Vector3(), B = new THREE.Vector3(), M = new THREE.Vector3(), T = new THREE.Vector3(), Pt = new THREE.Vector3();
+  for (const [from, to] of EDGES) {
+    const ia = idx.get(from), ib = idx.get(to);
+    A.copy(filePos[ib]); B.copy(filePos[ia]);           // s = 0 at the imported file, 1 at the importer
+    const len = A.distanceTo(B);
+    M.addVectors(A, B).multiplyScalar(0.5).addScaledVector(UPV, 0.12 * len + 0.1);
+    const heated = hop[ib] !== Infinity && hop[ia] === hop[ib] + 1;
+    const n = N(40 + 26 * len);
+    for (let j = 0; j < n; j++) {
+      const s = (j + rng()) / n, u = 1 - s;
+      Pt.set(0, 0, 0).addScaledVector(A, u * u).addScaledVector(M, 2 * u * s).addScaledVector(B, s * s);
+      T.set(0, 0, 0).addScaledVector(A, -2 * u).addScaledVector(M, 2 * (u - s)).addScaledVector(B, 2 * s).normalize();
+      Qt.setFromUnitVectors(X, T);
+      const w = 0.006 + rng() * 0.008;
+      const code = heated ? Math.round((hop[ib] + s) * 50) : 255;
+      push(Pt.x + gauss() * 0.012, Pt.y + gauss() * 0.012, Pt.z + gauss() * 0.012, w * 3.2, w, w,
+        0.1 + 0.15 * rng(), code, ROLE.filament, 0, rng() * 255, Qt);
+    }
+  }
+  // code text
+  const placeBlock = (lines, F, charW, anchor, perLine) => {
+    const { LH, adv } = fontMetrics(F);
+    const sPx = charW / adv;
+    const cols = Math.max(...lines.map(l => l.length));
+    const wPx = cols * adv, hPx = lines.length * LH;
+    const out = { sPx, adv, LH, wPx, hPx, anchor, F };
+    lines.forEach((ln, li) => perLine(ln, li, (x, y, a, role, sub, code, bOverride, sMul = 1, zOff = 0) => {
+      const lx = (x - wPx / 2) * sPx, ly = -(li * LH + y - hPx / 2 + LH * 0.25) * sPx;
+      const z = gauss() * 0.0015 + zOff;
+      const s = sPx * 0.6 * sMul;
+      push(anchor.x + TXR.x * lx + TXU.x * ly + NRM.x * z, anchor.y + TXR.y * lx + TXU.y * ly + NRM.y * z,
+        anchor.z + TXR.z * lx + TXU.z * ly + NRM.z * z, s, s, s, a, code, role, sub, bOverride ?? 255 * x / wPx);
+    }));
+    return out;
+  };
+  const F_TXT = LOW ? 8 : 11, F_HERO = LOW ? 15 : 21;
+  FILES.forEach((f, i) => {
+    if (i === HERO_I) return;
+    const lines = [f[0], ...f[3]];
+    const D = hop[i], code = D === Infinity ? 255 : Math.round(D * 50);
+    const anchor = filePos[i].clone().addScaledVector(NRM, 0.2).addScaledVector(TXU, 0.05);
+    placeBlock(lines, F_TXT, 0.021, anchor, (ln, li, emit) => {
+      const cls = li === 0 ? new Uint8Array(ln.length).fill(7) : tokenize(ln, false);
+      const pts = lineSplats(ln, F_TXT), adv = fontMetrics(F_TXT).adv;
+      for (let k = 0; k < pts.length; k += 3) {
+        if (pts[k + 2] < 0.2) continue;
+        const col = clamp(Math.floor(pts[k] / adv), 0, ln.length - 1);
+        emit(pts[k], pts[k + 1], pts[k + 2], ROLE.text, cls[col], code);
+      }
+    });
+  });
+  // the hero file, with the removed and added code
+  heroInfo = placeBlock(HERO.lines, F_HERO, 0.026, HERO_ANCHOR, (ln, li, emit) => {
+    const cls = li === 0 ? new Uint8Array(ln.length).fill(7) : tokenize(ln, true);
+    const adv = fontMetrics(F_HERO).adv;
+    const ld = Math.min(5, Math.abs(li - HERO.focus));
+    const rem = HERO.removed.find(r => r.line === li);
+    const remFrom = rem ? ln.indexOf(rem.from) : Infinity;
+    const remEnd = rem ? ln.length : Infinity;
+    const pts = lineSplats(ln, F_HERO);
+    for (let k = 0; k < pts.length; k += 3) {
+      if (pts[k + 2] < 0.06) continue;
+      const col = clamp(Math.floor(pts[k] / adv), 0, ln.length - 1);
+      if (col >= remFrom && col < remEnd) {
+        // removed code: the sub-class carries the syntax class (+8 marks the second, later removal)
+        const xN = (col - remFrom) / Math.max(1, remEnd - remFrom);
+        emit(pts[k], pts[k + 1], pts[k + 2], ROLE.removed, cls[col] + (rem.delay > 0 ? 8 : 0), Math.round(ld * 50), 255 * xN);
+        if (k % 27 === 0) emit(pts[k], pts[k + 1], 0.05, ROLE.glow, rem.delay > 0 ? 2 : 1, Math.round(ld * 50), 255 * xN, 6.5, -0.018);
+      } else {
+        emit(pts[k], pts[k + 1], pts[k + 2], ROLE.hero, cls[col], Math.round(ld * 50));
+        if (k % 27 === 0 && li > 0 && ld < 2) emit(pts[k], pts[k + 1], 0.05, ROLE.glow, 0, Math.round(ld * 50), 0, 6.5, -0.018);
+      }
+      if (li === HERO.focus && k % 21 === 0) emit(pts[k], pts[k + 1], 0.9, ROLE.glow, 3, 0, 0, 0.55, 0.002);
+    }
+    if (li === HERO.added.line) {
+      const pre = ln.slice(0, HERO.added.col);
+      const full = pre + HERO.added.text, fcls = tokenize(full, true);
+      const ap = lineSplats(full, F_HERO);
+      for (let k = 0; k < ap.length; k += 3) {
+        if (ap[k + 2] < 0.06) continue;
+        const col = clamp(Math.floor(ap[k] / adv), 0, full.length - 1);
+        if (col < HERO.added.col) continue;
+        const xN = (col - HERO.added.col) / HERO.added.text.length;
+        emit(ap[k], ap[k + 1], ap[k + 2], ROLE.added, fcls[col], 0, 255 * xN);
+      }
+    }
+  });
+}
+let heroInfo = null;
+
+/* ================= camera path (pure function of t) ================= */
+const C0 = new THREE.Vector3(0, -0.2, 0);
+let distScale = 1, tanH = 0.55, portrait = false;
+const lerpV = (a, b, k) => a.clone().lerp(b, k);
+function heroPoint(line, colA, colB) {
+  // world position of the middle of a span of the hero block (columns colA..colB on a line)
+  const { sPx, adv, LH, wPx, hPx, anchor, F } = heroInfo;
+  const lx = (((colA + colB) / 2) * adv - wPx / 2) * sPx;
+  const ly = -(line * LH - 0.36 * F - hPx / 2 + LH * 0.25) * sPx;
+  return anchor.clone().addScaledVector(TXR, lx).addScaledVector(TXU, ly);
+}
+let track = null;
+function buildTrack() {
+  const fit = (W, fill) => W / (2 * tanH * fill);
+  const wide = d => d * distScale;
+  const blockW = heroInfo.wPx * heroInfo.sPx;
+  const lineCols = HERO.lines[HERO.focus].length;
+  const addEnd = HERO.added.col + HERO.added.text.length;
+  const BC = heroPoint((HERO.lines.length - 1) / 2 + 0.3, 0, Math.max(...HERO.lines.map(l => l.length)));
+  const cw = heroInfo.adv * heroInfo.sPx;            // one character, in world units
+  const hot0 = portrait ? 5 : 0, hot1 = lineCols + 1;               // the offending line, gutter included
+  const FL1 = heroPoint(HERO.focus - (portrait ? 0 : 0.55), hot0, hot1), span1 = (hot1 - hot0 + 1) * cw;
+  const FL2 = portrait ? heroPoint(HERO.focus, 4, addEnd + 1) : heroPoint(HERO.focus, -1, Math.max(lineCols, addEnd) + 3);
+  const span2 = portrait ? (addEnd - 2) * cw : (Math.max(lineCols, addEnd) + 4) * cw;
+  const A0 = AZ_C - 1.25, el0 = portrait ? 0.98 : 0.74;
+  const nf = notesOpen && !portrait ? 0.72 : 1;   // leave room for the notes card
+  const K = [
+    [0.0, C0, wide(29.5), A0, el0],
+    [4.0, C0, wide(27.5), A0 + 0.28, el0 + 0.02],
+    [7.4, lerpV(C0, HERO_POS, 0.3), wide(15.5), A0 + 0.62, el0 + 0.06],
+    [10.0, lerpV(C0, HERO_POS, 0.78), wide(6.8), AZ_C - 0.38, 0.5],
+    [12.0, HERO_ANCHOR, Math.max(fit(blockW, 0.42), 3.0), AZ_C - 0.1, EL_C + 0.12],
+    [13.6, BC, fit(blockW, (portrait ? 0.96 : 0.8) * nf), AZ_C - 0.015, EL_C + 0.01],
+    [14.5, FL1, fit(span1, (portrait ? 0.9 : 0.8) * nf), AZ_C + 0.01, EL_C],
+    [15.45, FL1, fit(span1, (portrait ? 0.96 : 0.9) * nf), AZ_C + 0.05, EL_C + 0.015],
+    [16.7, FL2, fit(span2, (portrait ? 0.94 : 0.84) * nf), AZ_C + 0.03, EL_C + 0.01],
+    [17.9, portrait ? FL2 : HERO_ANCHOR, portrait ? fit(span2, 0.62) : fit(blockW, 0.4), AZ_C + 0.1, EL_C + 0.09],
+    [19.9, lerpV(HERO_POS, C0, 0.5), wide(11.5), AZ_C - 0.45, portrait ? 1.05 : 0.92],
+    [22.0, C0, wide(26.5), A0 + 0.22, el0 + 0.06],
+    [24.0, C0, wide(29.5), A0, el0],
+  ].map(([t, T, d, az, el]) => [t, T.x, T.y, T.z, Math.log(d), az, el]);
+  track = makeTrack(K);
+}
+// monotone cubic Hermite per component, periodic over the loop (no overshoot at holds)
+function makeTrack(keys) {
+  const n = keys.length, dim = keys[0].length - 1;
+  const m = keys.map(() => new Float64Array(dim));
+  for (let c = 0; c < dim; c++) {
+    const v = i => keys[i][c + 1], tt = i => keys[i][0];
+    const sec = [], hh = [];
+    for (let i = 0; i < n - 1; i++) { hh.push(tt(i + 1) - tt(i)); sec.push((v(i + 1) - v(i)) / hh[i]); }
+    for (let i = 0; i < n; i++) {
+      const ip = i === 0 ? n - 2 : i - 1, inx = i === n - 1 ? 0 : i;
+      const sP = sec[ip], sN = sec[inx], hP = hh[ip], hN = hh[inx];
+      let mi = 0;
+      if (sP * sN > 0) {
+        mi = (sP * hN + sN * hP) / (hP + hN);
+        const a = mi / sP, b = mi / sN, s2 = a * a + b * b;
+        if (s2 > 9) mi *= 3 / Math.sqrt(s2);
+      }
+      m[i][c] = mi;
+    }
+  }
+  return (t, out) => {
+    t = mod(t, LOOP);
+    let i = 0; while (i < n - 2 && t >= keys[i + 1][0]) i++;
+    const t0 = keys[i][0], h = keys[i + 1][0] - t0, s = (t - t0) / h, s2 = s * s, s3 = s2 * s;
+    const h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2, h11 = s3 - s2;
+    for (let c = 0; c < dim; c++) out[c] = h00 * keys[i][c + 1] + h10 * h * m[i][c] + h01 * keys[i + 1][c + 1] + h11 * h * m[i + 1][c];
+    return out;
+  };
+}
+
+// live interaction: drag adds a yaw/pitch offset that eases back to the flight path when idle
+const user = { yaw: 0, pitch: 0, zoom: 0, down: false, lastX: 0, lastY: 0, lastInput: -1e9 };
+const camState = new Float64Array(6), camTarget = new THREE.Vector3(), tmpDir = new THREE.Vector3();
+let camDist = 1;
+function placeCamera(t) {
+  track(t, camState);
+  camTarget.set(camState[0], camState[1], camState[2]);
+  camDist = Math.exp(camState[3] + user.zoom);
+  const el = clamp(camState[5] + user.pitch, -1.2, 1.45);
+  dirFrom(camState[4] + user.yaw, el, tmpDir);
+  camera.position.copy(camTarget).addScaledVector(tmpDir, camDist);
+  camera.up.set(0, 1, 0);
+  camera.lookAt(camTarget);
+  camera.updateMatrixWorld();
+  // frame away from the notes card: wide shots lean right, close-ups move up and right while it is open
+  const w = window.innerWidth, h = window.innerHeight, wideK = smooth(4, 11, camDist), closeK = smooth(5.0, 2.4, camDist);
+  const ox = portrait ? 0 : -(0.035 * wideK + (notesOpen ? 0.135 * closeK : 0));
+  const oy = portrait ? 0.05 * wideK + (notesOpen ? 0.1 * closeK : 0) : (notesOpen ? 0.15 * closeK : 0);
+  camera.setViewOffset(w, h, Math.round(w * ox), Math.round(h * oy), w, h);
+}
+
+/* ================= captions (pure function of t) ================= */
+const CAPS = [
+  [0.0, 2.4, 'A 40-file repository as a nebula. Each file is a cloud of Gaussian splats; each import is a filament.'],
+  [2.4, 8.4, '<code>src/auth/session.ts</code> passes the session cookie to node-serialize, which runs functions hidden in its input. Heat flows to every file that depends on it.'],
+  [8.4, 15.3, 'Line 6 turns a cookie into code. One crafted request is remote code execution.'],
+  [15.3, 18.6, 'The patch parses plain JSON and validates it against a schema. The node-serialize import is deleted.'],
+  [18.6, 23.6, 'Heat drains back along the imports until every file runs cold.'],
+];
+const capEl = document.getElementById('cap');
+let capIdx = -1;
+function updateCaption(t) {
+  const tt = mod(t, LOOP);
+  let k = CAPS.findIndex(c => tt >= c[0] && tt < c[1]);
+  if (!notesOpen) k = -1;
+  if (k !== capIdx) { capIdx = k; capEl.innerHTML = k >= 0 ? CAPS[k][2] : ''; }
+  capEl.style.opacity = k >= 0 ? String(Math.min(smooth(CAPS[k][0], CAPS[k][0] + 0.45, tt), 1 - smooth(CAPS[k][1] - 0.4, CAPS[k][1], tt))) : '0';
+}
+
+/* ================= post ================= */
+const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 0 });
+const composer = new EffectComposer(renderer, rt);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.4, 0.95);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+function frame() {
+  const w = window.innerWidth, h = window.innerHeight, aspect = w / h;
+  portrait = aspect < 0.8;
+  camera.fov = portrait ? 56 : aspect < 1.25 ? 46 : 38;
+  camera.aspect = aspect;
+  camera.updateProjectionMatrix();
+  tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * aspect;
+  distScale = Math.max(1, (Math.tan(THREE.MathUtils.degToRad(19)) * 1.6) / tanH) * (portrait ? 0.8 : 1);
+  if (heroInfo) buildTrack();
+}
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setPixelRatio(PR());
+  renderer.setSize(w, h, false);
+  composer.setPixelRatio(PR());
+  composer.setSize(w, h);
+  if (LOW) bloom.setSize(Math.round(w * 0.5), Math.round(h * 0.5));
+  frame();
+  dirty = true;
+}
+
+/* ================= per-frame state ================= */
+let mesh = null;
+let notesOpen = true;
+function applyFrame(t, now) {
+  const tt = mod(t, LOOP);
+  const open = !notes.hidden && getComputedStyle(notes).display !== 'none';
+  if (open !== notesOpen) { notesOpen = open; buildTrack(); }
+  // interaction offsets decay back to the scripted flight when idle
+  if (!user.down && now - user.lastInput > 2500) {
+    const k = Math.exp(-(now - user.lastFrame || 16) / 900);
+    user.yaw *= k; user.pitch *= k; user.zoom *= k;
+  }
+  user.lastFrame = now;
+  placeCamera(tt);
+  // regenerate splats only when the time or the viewpoint actually changed
+  if (uT.value !== tt || !uCam.value.equals(camera.position)) {
+    uT.value = tt;
+    uCam.value.copy(camera.position);
+    mesh.updateVersion();
+  }
+  // depth of field only for the close-ups
+  const close = smooth(3.4, 1.9, camDist);
+  spark.focalDistance = camDist;
+  spark.apertureAngle = 0.008 * close;
+  updateCaption(tt);
+}
+
+const ready = (async () => {
+  try { await document.fonts.load(`400 24px "Martian Mono"`); await document.fonts.ready; } catch (e) { /* fall back to monospace */ }
+  resize();
+  // Build into a scratch ExtSplats (float32 centres keep 1 px glyph spacing exact), then hand the
+  // finished arrays to a fresh ExtSplats: Spark 2.3.1 only creates the GPU textures on that path.
+  const scratch = new ExtSplats();
+  buildSplats(scratch);
+  const es = new ExtSplats({ extArrays: scratch.extArrays, numSplats: scratch.numSplats });
+  mesh = new SplatMesh({ extSplats: es, objectModifier: nebulaModifier });
+  scene.add(mesh);
+  await mesh.initialized;
+  frame();
+  const ns = document.getElementById('nsplats');
+  if (ns) ns.textContent = `${splatCount.toLocaleString('en-US')}`;
+})();
+
+/* ================= loop + hooks ================= */
+let t = 0, playing = true, last = performance.now(), isReady = false;
+ready.then(() => { isReady = true; dirty = true; });
+const pp = document.getElementById('playpause');
+function setPlaying(p) {
+  playing = p; last = performance.now(); dirty = true;
+  pp.textContent = p ? 'Pause' : 'Play';
+  pp.setAttribute('aria-pressed', String(!p));
+}
+function renderNow(now) { applyFrame(t, now); composer.render(); dirty = false; }
+
+async function settleSpark() {
+  for (let k = 0; k < 2; k++) {
+    await spark.update({ scene, camera });
+    for (let g = 0; g < 600 && (spark.sorting || spark.sortDirty); g++) await new Promise(r => setTimeout(r, 10));
+  }
+}
+let seekToken = 0;
+window.__seek = async (tt) => {
+  const my = ++seekToken;
+  t = Number(tt) || 0;
+  setPlaying(false);
+  user.yaw = user.pitch = user.zoom = 0; user.down = false; user.lastInput = -1e9;
+  await ready;
+  if (my !== seekToken) return;
+  applyFrame(t, performance.now());
+  await settleSpark();
+  if (my !== seekToken) return;
+  composer.render();
+  dirty = false;
+};
+window.__play = () => setPlaying(true);
+
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min((now - last) / 1000, 0.1); last = now;
+  if (!isReady) return;
+  if (playing) t += dt;
+  const interacting = user.down || now - user.lastInput < 4000 || Math.abs(user.yaw) + Math.abs(user.pitch) + Math.abs(user.zoom) > 1e-3;
+  if (playing || interacting || dirty) renderNow(now);
+}
+
+/* ---------- drag to orbit ---------- */
+canvas.addEventListener('pointerdown', (e) => {
+  user.down = true; user.lastX = e.clientX; user.lastY = e.clientY; user.lastInput = performance.now();
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (!user.down) return;
+  const k = 3.2 / Math.max(window.innerWidth, window.innerHeight);
+  user.yaw += (e.clientX - user.lastX) * k;
+  user.pitch = clamp(user.pitch + (e.clientY - user.lastY) * k, -1.0, 1.0);
+  user.lastX = e.clientX; user.lastY = e.clientY; user.lastInput = performance.now(); dirty = true;
+});
+const endDrag = () => { user.down = false; user.lastInput = performance.now(); };
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  user.zoom = clamp(user.zoom + e.deltaY * 0.0012, -0.9, 0.9); user.lastInput = performance.now(); dirty = true;
+}, { passive: false });
+window.addEventListener('resize', resize);
+
+/* ---------- notes UI ---------- */
+const notes = document.getElementById('notes'), showBtn = document.getElementById('show-notes');
+function setNotes(v) { notes.hidden = !v; showBtn.hidden = v; dirty = true; }
+document.getElementById('hide-notes').addEventListener('click', () => { setNotes(false); showBtn.focus(); });
+showBtn.addEventListener('click', () => { setNotes(true); document.getElementById('hide-notes').focus(); });
+pp.addEventListener('click', () => setPlaying(!playing));
+window.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'h' || e.key === 'H') { setNotes(notes.hidden); }
+  else if (e.code === 'Space' || e.key === ' ') {
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'BUTTON' || ae.tagName === 'A')) return;
+    e.preventDefault(); setPlaying(!playing);
+  }
+});
+
+/* ---------- start ---------- */
+if (Number.isFinite(T_PARAM)) { t = T_PARAM; setPlaying(false); }
+else if (REDUCED) { t = HERO_T; setPlaying(false); }
+else setPlaying(true);
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

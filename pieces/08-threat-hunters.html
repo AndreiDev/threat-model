@@ -1,0 +1,1598 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Threat hunters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--void)}
+canvas.stage{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:manipulation}
+canvas.stage.live{cursor:crosshair}
+
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+
+.notes p.missing{color:var(--frost);font-size:13px;border-left:2px solid var(--ice);padding-left:10px}
+
+/* anomaly labels, positioned over the simulation */
+.tags{position:fixed;inset:0;pointer-events:none;z-index:5}
+.tag{position:absolute;left:0;top:0;white-space:nowrap;transition:opacity .4s;will-change:transform}
+.tag b{display:block;font:500 12.5px/1.25 "Schibsted Grotesk",system-ui,sans-serif;color:var(--heat-4);
+  text-shadow:0 0 10px rgba(16,12,42,.95),0 0 3px rgba(16,12,42,.9)}
+.tag span{display:block;font:400 10.5px/1.4 "Martian Mono",ui-monospace,monospace;color:var(--heat-3);
+  text-shadow:0 0 8px rgba(16,12,42,.95),0 0 3px rgba(16,12,42,.9)}
+.tag.cold b{color:var(--frost)}
+.tag.cold span{color:var(--ice)}
+.tag.above{text-align:center}
+.hud{position:fixed;right:18px;bottom:16px;z-index:5;text-align:right;pointer-events:none;
+  font:400 11px/1.55 "Martian Mono",ui-monospace,monospace;color:var(--mist);
+  text-shadow:0 0 8px rgba(16,12,42,.95)}
+.hud b{font-weight:500;color:var(--frost)}
+.hud .hot{color:var(--heat-3)}
+@media (max-width:600px){.tag b{font-size:11.5px}.tag span{font-size:9.5px}.hud{font-size:10px;left:12px;right:auto;top:10px;bottom:auto;text-align:left}}
+
+.fallback{position:fixed;inset:0;display:grid;place-items:center;color:var(--mist);
+  font:400 15px/1.5 "Schibsted Grotesk",system-ui,sans-serif;padding:24px;text-align:center}
+</style>
+</head>
+<body>
+<canvas class="stage" id="c" role="img" aria-label="A glowing blue web of slime-mould-like trails connecting machines on a network. Hot white and orange anomalies flare up; the web re-routes thick veins toward each one until it cools to ice and leaves a faint frozen ring."></canvas>
+<div class="tags" id="tags" aria-hidden="true"></div>
+<div class="hud" id="hud" aria-hidden="true"></div>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Threat hunters</h1>
+  <p>An AI security system's hunters forage across an organisation's network like slime mould. When an anomaly flares up, the whole web re-routes its veins toward it, and once enough hunters arrive it is contained and freezes into a scar.</p>
+  <ul class="tech" id="tech">
+    <li id="tech-agents">Physarum agents (Jones 2010) stepped by hand-written WGSL compute shaders</li>
+    <li>Each hunter senses its trail at three forward sensors; deposits land with fixed-point atomicAdd, then a 3×3 diffuse and decay pass</li>
+    <li>Anomalies emit attractant into a field buffer; hunters near each one are tallied with workgroup atomics, so containment is decided on the GPU</li>
+    <li>Fixed 60 Hz timestep: seeking re-simulates from the seed in batched command buffers</li>
+    <li>Click or tap to drop a honeypot</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<script>
+(() => {
+'use strict';
+
+/* ------------------------------------------------------------------
+   Storyboard (seconds). Loop = 40 s, fixed 60 Hz simulation step.
+     0.0 -  3.0  hunters burst out of every host as rings, collide, link up
+     4.5         anomaly 1 lands inside the web; nearby veins thicken onto it
+    10.8         anomaly 2 lands far from the web, top right: the whole
+                 network re-plumbs itself toward it (the moment)
+    18.0         anomaly 3 moves (lateral movement), needs more hunters
+    26.0         anomaly 4 lands, splits in two at 28.0 (a worm)
+    33.8         anomaly 5, a quick one inside the web
+    38.8 - 40.0  fade, loop
+   Containment is emergent: when hunter density at an anomaly stays above
+   a threshold long enough, it freezes. Decided on the GPU, every step.
+   ------------------------------------------------------------------ */
+const DT = 1 / 60, PERIOD = 40, PERIOD_STEPS = Math.round(PERIOD / DT);
+const MAXA = 16, MAXH = 16, SEED = 0x51A7E;
+const REDUCED_T = 17;
+const qs = new URLSearchParams(location.search);
+const LOW = qs.get('q') === 'low';
+const FULL = qs.get('q') === 'full';
+const FORCE_GL = qs.has('gl') && qs.get('gl') !== '0';
+const DEBUG = qs.has('debug');
+
+const notes = document.getElementById('notes');
+const showNotes = document.getElementById('show-notes');
+const hideNotes = document.getElementById('hide-notes');
+const playBtn = document.getElementById('playpause');
+const tagsEl = document.getElementById('tags');
+const hudEl = document.getElementById('hud');
+let canvas = document.getElementById('c');
+
+/* ---------------- seeded PRNG ---------------- */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let r = Math.imul(a ^ a >>> 15, 1 | a);
+    r = r + Math.imul(r ^ r >>> 7, 61 | r) ^ r;
+    return ((r ^ r >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------------- tuning ---------------- */
+// Model parameters. Distances are css px so the look holds at any trail resolution.
+const TUNE = {
+  sd: 16,          // sensor distance
+  sa: 0.5,         // sensor angle, rad
+  ra: 0.6,         // rotation per step, rad
+  step: 1.3,       // move per step
+  decay: 0.86,     // trail kept per step
+  dvar: 0.853,     // trail spread per step, px^2 (one 3x3 box pass = 2/3 cell^2)
+  jitter: 0.4,     // random wobble per step, rad
+  hostK: 1.5,      // host attractant (faint food that keeps hosts on the map)
+  hostS: 26,       // host attractant sigma
+  hostKF: 0, hostL: 160,
+  hostT0: 1.6, hostT1: 4.5,   // hosts start to pull once the opening burst has left them
+  hostFrac: 0.9,   // share of hunters that start on a host ring
+  ringR: 8, ringW: 0, ringJ: 0,
+  respawn: 0.15,   // per hunter per second: re-dispatched from a host
+  kn: 70, sn: 46,  // anomaly attractant, near term
+  kf: 40, lf: 500, // anomaly attractant, far term: this is what re-plumbs the whole web
+  gain: 1.0,
+  alert: 0.15,     // per step, at full far-field strength: chance a hunter climbs the field
+  thr: 5,          // containment: hunter density, times a uniform spread
+  thrGL: 5,        // same, read from trail density in the WebGL2 fallback
+  vScale: 0.045,   // trail tone mapping
+  vGamma: 1.0,
+  gScale: 0.12,    // glow tone mapping
+};
+
+/* ---------------- story ---------------- */
+const HOSTS_L = [[0.09,0.15],[0.25,0.31],[0.14,0.52],[0.42,0.12],[0.47,0.45],[0.37,0.71],
+                 [0.62,0.25],[0.65,0.63],[0.53,0.89],[0.86,0.79]];
+const HOSTS_P = [[0.15,0.13],[0.16,0.30],[0.48,0.37],[0.84,0.46],[0.25,0.55],[0.66,0.62],[0.14,0.72],[0.86,0.74],[0.50,0.84]];
+// p, p1 (move target), t0, ms (move start after t0), md (move duration), tough, r, minAge, wob
+const STORY_L = [
+  { name: 'Impossible travel sign-in', t0: 4.5, p: [0.33, 0.21], tough: 1.0, r: 26, minAge: 2.2 },
+  { name: 'Beaconing to a new domain', t0: 10.8, p: [0.885, 0.17], tough: 1.2, r: 28, minAge: 5.6 },
+  { name: 'Lateral movement over SMB', t0: 18.0, p: [0.74, 0.93], p1: [0.77, 0.55], ms: 0.6, md: 6.5, tough: 1.8, r: 26, minAge: 4.5, wob: 34 },
+  { name: 'Worm spreading over SSH', t0: 26.0, p: [0.555, 0.40], p1: [0.45, 0.22], ms: 2.0, md: 3.2, tough: 1.1, r: 24, minAge: 3.4 },
+  { name: 'Worm spreading over SSH', child: true, t0: 28.0, p: [0.555, 0.40], p1: [0.65, 0.64], ms: 0, md: 3.4, tough: 1.8, r: 24, minAge: 5.0 },
+  { name: 'Token replay from an unknown host', t0: 33.8, p: [0.19, 0.30], tough: 0.8, r: 24, minAge: 1.8 },
+];
+const STORY_P = [
+  { name: 'Impossible travel sign-in', t0: 4.5, p: [0.32, 0.43], tough: 1.0, r: 22, minAge: 2.2 },
+  { name: 'Beaconing to a new domain', t0: 10.8, p: [0.70, 0.08], tough: 1.2, r: 24, minAge: 5.6 },
+  { name: 'Lateral movement over SMB', t0: 18.0, p: [0.10, 0.62], p1: [0.58, 0.50], ms: 0.6, md: 6.5, tough: 1.8, r: 22, minAge: 4.5, wob: 26 },
+  { name: 'Worm spreading over SSH', t0: 26.0, p: [0.55, 0.30], p1: [0.78, 0.20], ms: 2.0, md: 3.2, tough: 1.1, r: 21, minAge: 3.4 },
+  { name: 'Worm spreading over SSH', child: true, t0: 28.0, p: [0.55, 0.30], p1: [0.30, 0.22], ms: 0, md: 3.4, tough: 1.8, r: 21, minAge: 5.0 },
+  { name: 'Token replay from an unknown host', t0: 33.8, p: [0.42, 0.66], tough: 0.8, r: 21, minAge: 1.8 },
+];
+
+/* ---------------- state ---------------- */
+let backend = null, cfg = null;
+let W = 1, H = 1, dpr = 1;
+let simStep = 0, loops = 0, t = 0, acc = 0;
+let playing = true, raf = 0, last = null, busy = false, seekToken = 0;
+let sched = [];            // active schedule (story + honeypots)
+let stateCache = null;     // last read-back anomaly state (Float32Array, 33 vec4)
+const tParam = qs.get('t');
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let startT = 0;
+if (tParam !== null && isFinite(parseFloat(tParam))) { startT = parseFloat(tParam); playing = false; }
+else if (reduced) { startT = REDUCED_T; playing = false; }
+
+/* ---------------- layout + schedule ---------------- */
+let agentScale = 1;   // halved by the start-up benchmark on slower GPUs
+function buildConfig() {
+  W = Math.max(1, innerWidth); H = Math.max(1, innerHeight);
+  dpr = LOW ? 1 : Math.min(2, window.devicePixelRatio || 1);
+  const portrait = W < 700 && H > W * 1.15;
+  const cssCells = W * H;
+  // the model is defined in css px; cells only set the sampling resolution
+  let cellPx = LOW ? 2 : Math.max(1.5, Math.sqrt(cssCells / 1.0e6));
+  if (backend && backend.kind === 'gl') cellPx = LOW ? 2.5 : Math.max(1.75, Math.sqrt(cssCells / 0.7e6));
+  const tw = Math.max(8, Math.ceil(W / cellPx)), th = Math.max(8, Math.ceil(H / cellPx));
+  const rng = mulberry32(SEED);
+  const hostsN = portrait ? HOSTS_P : HOSTS_L;
+  const hosts = hostsN.map(([x, y]) => [
+    (x + (rng() - 0.5) * 0.03) * W, (y + (rng() - 0.5) * 0.03) * H
+  ]);
+  const story = portrait ? STORY_P : STORY_L;
+  const s = story.map(a => {
+    const jx = (rng() - 0.5) * 0.02, jy = (rng() - 0.5) * 0.02;
+    const p = [(a.p[0] + jx) * W, (a.p[1] + jy) * H];
+    const p1 = a.p1 ? [(a.p1[0] + jx) * W, (a.p1[1] + jy) * H] : p.slice();
+    const sc = portrait ? 0.9 : 1;
+    return {
+      name: a.name, child: !!a.child, x0: p[0], y0: p[1], x1: p1[0], y1: p1[1],
+      t0: a.t0 + (a.child ? 0 : (rng() - 0.5) * 0.2), ms: a.ms || 0, md: a.md || 0,
+      tough: a.tough, r: a.r * sc, minAge: a.minAge || 2, emit: 1, wob: (a.wob || 0) * sc,
+    };
+  });
+  // a split child starts exactly where its parent is at the split
+  for (let i = 0; i < s.length; i++) if (s[i].child && i > 0) {
+    const pp = anomPosJS(s[i - 1], s[i].t0);
+    s[i].x0 = pp[0]; s[i].y0 = pp[1];
+    s[i - 1].t0 = Math.min(s[i - 1].t0, s[i].t0 - 1.8);
+  }
+  let density = backend && backend.kind === 'gl' ? (LOW ? 0.95 : 1.4) : (LOW ? 0.95 : 2.6);
+  let N = Math.round(tw * th * density * agentScale);
+  N = Math.min(N, backend ? backend.maxAgents : 1 << 21);
+  N = Math.max(256, Math.ceil(N / 256) * 256);
+  return { W, H, dpr, portrait, cellPx, tw, th, N, hosts, story: s };
+}
+function diffuseFor(c) { return Math.min(1, TUNE.dvar / (0.6667 * c.cellPx * c.cellPx)); }
+function anomPosJS(a, time) {
+  let u = a.md > 0 ? Math.min(1, Math.max(0, (time - a.t0 - a.ms) / a.md)) : 0;
+  const e = u * u * (3 - 2 * u);
+  let x = a.x0 + (a.x1 - a.x0) * e, y = a.y0 + (a.y1 - a.y0) * e;
+  const dx = a.x1 - a.x0, dy = a.y1 - a.y0, L = Math.hypot(dx, dy);
+  if (L > 0 && a.wob) {
+    const w = a.wob * Math.sin(Math.PI * u) * Math.sin(Math.PI * 3 * u);
+    x += -dy / L * w; y += dx / L * w;
+  }
+  return [x, y];
+}
+
+/* ---------------- shared shader pieces ---------------- */
+const PARAMS_WGSL = /* wgsl */`
+struct Params {
+  tw: u32, th: u32, n: u32, seed: u32,
+  fw: u32, fh: u32, nHosts: u32, nAnoms: u32,
+  cellPx: f32, dt: f32, decay: f32, diffuse: f32,
+  depFixed: f32, sd: f32, sa: f32, ra: f32,
+  stepLen: f32, fieldGain: f32, thr: f32, hostFrac: f32,
+  fieldCell: f32, kn: f32, sn: f32, kf: f32,
+  lf: f32, jitter: f32, gw: f32, gh: f32,
+  ringR: f32, ringW: f32, ringJ: f32, respawn: f32,
+  hostT0: f32, hostT1: f32, hostKF: f32, hostL: f32,
+  alert: f32, pad1: f32, pad2: f32, pad3: f32,
+  hosts: array<vec4f, ${MAXH}>,
+};
+@group(0) @binding(0) var<uniform> P: Params;
+const TAU = 6.28318531;
+const STEP_IDX = ${2 * MAXA}u;
+fn pcg(v: u32) -> u32 {
+  let s = v * 747796405u + 2891336453u;
+  let w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+  return (w >> 22u) ^ w;
+}
+fn u01(v: u32) -> f32 { return f32(pcg(v) >> 8u) * (1.0 / 16777216.0); }
+`;
+const PARAMS_FLOATS = 40 + MAXH * 4;
+
+// wg: tally hunters per anomaly in workgroup memory first (real GPUs). Software adapters
+// run barriers as coroutines and crawl, so there each hunter adds to the global counter.
+const SIM_WGSL = wg => PARAMS_WGSL + /* wgsl */`
+@group(0) @binding(1) var<storage, read_write> agents: array<vec4f>;
+@group(0) @binding(2) var<storage, read> trailIn: array<f32>;
+@group(0) @binding(3) var<storage, read_write> trailOut: array<f32>;
+@group(0) @binding(4) var<storage, read_write> dep: array<atomic<u32>>;
+@group(0) @binding(5) var<storage, read_write> field: array<f32>;
+@group(0) @binding(6) var<storage, read> sched: array<vec4f>;
+@group(0) @binding(7) var<storage, read_write> state: array<vec4f>;
+@group(0) @binding(8) var<storage, read_write> counts: array<atomic<u32>>;
+@group(0) @binding(9) var<storage, read> glowSrc: array<f32>;
+@group(0) @binding(10) var<storage, read_write> glowDst: array<f32>;
+
+// ---- initial state: hunters burst out of every host, a few start anywhere
+@compute @workgroup_size(256)
+fn initAgents(@builtin(global_invocation_id) gid: vec3u) {
+  let i = gid.x;
+  if (i >= P.n) { return; }
+  let b = pcg(i * 5u + P.seed * 0x9E3779B9u);
+  let r0 = u01(b); let r1 = u01(b ^ 0x68E31DA4u); let r2 = u01(b + 0xB5297A4Du);
+  let r3 = u01(b ^ 0x1B56C4E9u); let r4 = u01(b + 0x3C6EF372u);
+  var p: vec2f; var ang: f32;
+  let W = f32(P.tw) * P.cellPx; let H = f32(P.th) * P.cellPx;
+  if (r0 < P.hostFrac && P.nHosts > 0u) {
+    let k = i % P.nHosts;
+    let h = P.hosts[k];
+    // a clean ring: every hunter at the same radius, heading straight out
+    let th = (f32(i / P.nHosts) + r3) * TAU / max(1.0, f32(P.n) * P.hostFrac / f32(P.nHosts));
+    let rad = P.ringR + r2 * P.ringW;
+    p = h.xy + vec2f(cos(th), sin(th)) * rad;
+    ang = th + (r4 - 0.5) * P.ringJ;
+  } else {
+    p = vec2f(r1 * W, r2 * H);
+    ang = r3 * TAU;
+  }
+  p = clamp(p, vec2f(1.0), vec2f(W, H) - 1.0);
+  agents[i] = vec4f(p / P.cellPx, ang, 0.0);
+}
+
+// ---- anomaly field: hosts are faint food, live anomalies are strong attractant
+@compute @workgroup_size(16, 16)
+fn computeField(@builtin(global_invocation_id) gid: vec3u) {
+  if (gid.x >= P.fw || gid.y >= P.fh) { return; }
+  let px = (vec2f(gid.xy) + 0.5) * P.fieldCell * P.cellPx;
+  // hosts only start to pull once the opening burst has left them
+  let t = state[STEP_IDX].x * P.dt;
+  let hostAmp = smoothstep(P.hostT0, P.hostT1, t);
+  var f = 0.0;
+  for (var k = 0u; k < P.nHosts; k++) {
+    let h = P.hosts[k];
+    let d = px - h.xy;
+    f += hostAmp * (h.z * exp(-dot(d, d) / (2.0 * h.w * h.w)) + P.hostKF * exp(-length(d) / P.hostL));
+  }
+  for (var k = 0u; k < P.nAnoms; k++) {
+    let e = state[k].w;
+    if (e > 0.001) {
+      let dd = distance(px, state[${MAXA}u + k].xy);
+      f += e * (P.kn * exp(-dd * dd / (2.0 * P.sn * P.sn)) + P.kf * exp(-dd / P.lf));
+    }
+  }
+  field[gid.y * P.fw + gid.x] = f;
+}
+
+fn trailAt(p: vec2f) -> f32 {
+  if (p.x < 0.0 || p.y < 0.0 || p.x >= f32(P.tw) || p.y >= f32(P.th)) { return -8.0; }
+  return trailIn[u32(p.y) * P.tw + u32(p.x)];
+}
+fn fieldAt(p: vec2f) -> f32 {
+  let q = clamp(p / P.fieldCell - 0.5, vec2f(0.0), vec2f(f32(P.fw) - 1.001, f32(P.fh) - 1.001));
+  let i = vec2u(q);
+  let f = q - vec2f(i);
+  let o = i.y * P.fw + i.x;
+  let a = field[o]; let b = field[o + 1u];
+  let c = field[o + P.fw]; let d = field[o + P.fw + 1u];
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+fn sense(p: vec2f, f: f32) -> f32 { return trailAt(p) + P.fieldGain * f; }
+
+var<workgroup> wgCount: array<atomic<u32>, ${MAXA}>;
+
+// ---- agent step: sense three forward sensors, rotate, move, deposit, get counted
+@compute @workgroup_size(256)
+fn stepAgents(@builtin(global_invocation_id) gid: vec3u, @builtin(local_invocation_index) li: u32) {
+  ${wg ? `if (li < ${MAXA}u) { atomicStore(&wgCount[li], 0u); }
+  workgroupBarrier();` : ''}
+  let i = gid.x;
+  if (i < P.n) {
+    let stepI = u32(state[STEP_IDX].x);
+    var a = agents[i];
+    let h = pcg(i ^ pcg(stepI * 0x2545F491u + P.seed));
+    let sa = P.sa;
+    let pF = a.xy + P.sd * vec2f(cos(a.z), sin(a.z));
+    let pL = a.xy + P.sd * vec2f(cos(a.z + sa), sin(a.z + sa));
+    let pR = a.xy + P.sd * vec2f(cos(a.z - sa), sin(a.z - sa));
+    let fF = fieldAt(pF); let fL = fieldAt(pL); let fR = fieldAt(pR);
+    let F = sense(pF, fF); let L = sense(pL, fL); let R = sense(pR, fR);
+    let rnd = f32(h >> 8u) * (1.0 / 16777216.0);
+    var turn = (rnd - 0.5) * P.jitter;
+    if (F > L && F > R) {
+    } else if (F < L && F < R) {
+      turn += select(-P.ra, P.ra, rnd > 0.5);
+    } else if (L > R) {
+      turn += P.ra;
+    } else if (R > L) {
+      turn -= P.ra;
+    }
+    // the alert: near a live anomaly some hunters leave their vein and climb its field
+    if (u01(h ^ 0x9E3779B1u) < P.alert * clamp(fF / P.kf - 0.05, 0.0, 1.0)) {
+      turn = select(-P.ra, P.ra, fL > fR);
+      if (fF > fL && fF > fR) { turn = 0.0; }
+    }
+    var ang = a.z + turn;
+    var p = a.xy + P.stepLen * vec2f(cos(ang), sin(ang));
+    let mx = vec2f(f32(P.tw), f32(P.th)) - 0.01;
+    if (p.x < 0.0 || p.y < 0.0 || p.x > mx.x || p.y > mx.y) {
+      p = clamp(p, vec2f(0.0), mx);
+      ang = u01(h ^ 0xA511E9B3u) * TAU;
+    }
+    // hosts keep dispatching fresh hunters, so every host stays plumbed into the web
+    if (P.nHosts > 0u && u01(h ^ 0x5BD1E995u) < P.respawn) {
+      let hk = P.hosts[pcg(h ^ 0x27D4EB2Du) % P.nHosts];
+      let th = u01(h ^ 0x165667B1u) * TAU;
+      p = (hk.xy + vec2f(cos(th), sin(th)) * 6.0) / P.cellPx;
+      ang = th;
+    }
+    ang = ang - TAU * floor(ang / TAU);
+    agents[i] = vec4f(p, ang, a.w);
+    let c = vec2u(p);
+    atomicAdd(&dep[c.y * P.tw + c.x], u32(P.depFixed));
+    let pp = p * P.cellPx;
+    for (var k = 0u; k < P.nAnoms; k++) {
+      let s = state[${MAXA}u + k];
+      if (s.w > 0.5) {
+        let d = pp - s.xy;
+        if (dot(d, d) < s.z * s.z) { atomicAdd(&${wg ? 'wgCount' : 'counts'}[k], 1u); }
+      }
+    }
+  }
+  ${wg ? `workgroupBarrier();
+  if (li < P.nAnoms) {
+    let v = atomicLoad(&wgCount[li]);
+    if (v > 0u) { atomicAdd(&counts[li], v); }
+  }` : ''}
+}
+
+// ---- trail: 3x3 diffuse, decay, add this step's fixed-point deposits
+@compute @workgroup_size(16, 16)
+fn diffuse(@builtin(global_invocation_id) gid: vec3u) {
+  if (gid.x >= P.tw || gid.y >= P.th) { return; }
+  let x = i32(gid.x); let y = i32(gid.y);
+  let mx = i32(P.tw) - 1; let my = i32(P.th) - 1;
+  var s = 0.0;
+  for (var dy = -1; dy <= 1; dy++) {
+    let row = u32(clamp(y + dy, 0, my)) * P.tw;
+    for (var dx = -1; dx <= 1; dx++) {
+      s += trailIn[row + u32(clamp(x + dx, 0, mx))];
+    }
+  }
+  let idx = gid.y * P.tw + gid.x;
+  let d = f32(atomicExchange(&dep[idx], 0u)) * (1.0 / 1024.0);
+  trailOut[idx] = min(mix(trailIn[idx], s / 9.0, P.diffuse) * P.decay + d, 4096.0);
+}
+
+// ---- anomalies: containment progress from hunter density, positions, emission
+fn anomPos(k: u32, t: f32) -> vec2f {
+  let a = sched[k * 3u]; let b = sched[k * 3u + 1u]; let c = sched[k * 3u + 2u];
+  var u = 0.0;
+  if (b.z > 0.0) { u = clamp((t - b.x - b.y) / b.z, 0.0, 1.0); }
+  let e = u * u * (3.0 - 2.0 * u);
+  var p = mix(a.xy, a.zw, e);
+  let dv = a.zw - a.xy;
+  let len = length(dv);
+  if (len > 0.0 && c.w != 0.0) {
+    p += vec2f(-dv.y, dv.x) / len * c.w * sin(3.14159265 * u) * sin(9.42477796 * u);
+  }
+  return p;
+}
+
+@compute @workgroup_size(${MAXA})
+fn updateAnoms(@builtin(local_invocation_index) k: u32) {
+  let stepI = u32(state[STEP_IDX].x);
+  let tNow = f32(stepI) * P.dt;
+  let tNext = f32(stepI + 1u) * P.dt;
+  if (k < P.nAnoms) {
+    var s = state[k];
+    let b = sched[k * 3u + 1u]; let c = sched[k * 3u + 2u];
+    let cnt = f32(atomicExchange(&counts[k], 0u));
+    let t0 = b.x; let r = c.x;
+    if (state[${MAXA}u + k].w > 0.5) {
+      let area = f32(P.tw * P.th) * P.cellPx * P.cellPx;
+      let expected = f32(P.n) * 3.14159265 * r * r / area;
+      s.z = mix(s.z, cnt / max(expected, 1e-4), 0.06);
+      let rate = clamp((s.z / P.thr - 1.0) * 1.5, 0.0, 3.0) / max(b.w, 0.05);
+      s.x = s.x + P.dt * rate;
+      if (tNow - t0 < c.y) { s.x = min(s.x, 0.985); }
+      if (s.x >= 1.0) { s.x = 1.0; s.y = tNow; }
+    }
+    let contained = s.y >= 0.0;
+    let pos = anomPos(k, select(tNext, min(tNext, s.y), contained));
+    var emit = 0.0;
+    if (tNext >= t0) {
+      emit = smoothstep(0.0, 0.5, tNext - t0) * c.z;
+      if (contained) { emit = emit * exp(-(tNext - s.y) / 0.45); }
+    }
+    s.w = emit;
+    state[k] = s;
+    state[${MAXA}u + k] = vec4f(pos, r, select(0.0, 1.0, tNext >= t0 && !contained));
+  }
+  storageBarrier();
+  if (k == 0u) { state[STEP_IDX] = vec4f(f32(stepI + 1u), 0.0, 0.0, 0.0); }
+}
+
+// ---- glow: 4x4 box down-sample, then a separable 9-tap gaussian
+@compute @workgroup_size(16, 16)
+fn glowDown(@builtin(global_invocation_id) gid: vec3u) {
+  let gw = u32(P.gw); let gh = u32(P.gh);
+  if (gid.x >= gw || gid.y >= gh) { return; }
+  var s = 0.0;
+  for (var y = 0u; y < 4u; y++) {
+    let row = min(gid.y * 4u + y, P.th - 1u) * P.tw;
+    for (var x = 0u; x < 4u; x++) { s += trailIn[row + min(gid.x * 4u + x, P.tw - 1u)]; }
+  }
+  glowDst[gid.y * gw + gid.x] = s * (1.0 / 16.0);
+}
+fn glowBlur(gid: vec3u, dir: vec2i) {
+  let gw = i32(P.gw); let gh = i32(P.gh);
+  if (i32(gid.x) >= gw || i32(gid.y) >= gh) { return; }
+  var s = 0.0;
+  for (var k = -6; k <= 6; k++) {
+    let q = clamp(vec2i(gid.xy) + dir * k, vec2i(0), vec2i(gw - 1, gh - 1));
+    s += exp(-f32(k * k) / 18.0) * (1.0 / 7.5094) * glowSrc[q.y * gw + q.x];
+  }
+  glowDst[gid.y * u32(gw) + gid.x] = s;
+}
+@compute @workgroup_size(16, 16)
+fn glowBlurH(@builtin(global_invocation_id) gid: vec3u) { glowBlur(gid, vec2i(1, 0)); }
+@compute @workgroup_size(16, 16)
+fn glowBlurV(@builtin(global_invocation_id) gid: vec3u) { glowBlur(gid, vec2i(0, 1)); }
+`;
+
+
+// Palette + shading, written once in GLSL syntax and converted to WGSL by toWGSL().
+// Rules for this block: float literals always have a decimal point, never assign to params.
+const SHADE_SRC = `
+vec3 coldbow(float x) {
+  float s = clamp(x, 0.0, 1.0) * 4.0;
+  if (s < 1.0) { return mix(vec3(0.106, 0.090, 0.278), vec3(0.184, 0.310, 0.659), s); }
+  if (s < 2.0) { return mix(vec3(0.184, 0.310, 0.659), vec3(0.310, 0.639, 0.878), s - 1.0); }
+  if (s < 3.0) { return mix(vec3(0.310, 0.639, 0.878), vec3(0.608, 0.910, 1.000), s - 2.0); }
+  return mix(vec3(0.608, 0.910, 1.000), vec3(0.910, 0.969, 1.000), s - 3.0);
+}
+vec3 ironbow(float x) {
+  float s = clamp(x, 0.0, 1.0) * 5.0;
+  if (s < 1.0) { return mix(vec3(0.227, 0.059, 0.420), vec3(0.608, 0.114, 0.561), s); }
+  if (s < 2.0) { return mix(vec3(0.608, 0.114, 0.561), vec3(0.941, 0.188, 0.416), s - 1.0); }
+  if (s < 3.0) { return mix(vec3(0.941, 0.188, 0.416), vec3(1.000, 0.478, 0.184), s - 2.0); }
+  if (s < 4.0) { return mix(vec3(1.000, 0.478, 0.184), vec3(1.000, 0.827, 0.420), s - 3.0); }
+  return mix(vec3(1.000, 0.827, 0.420), vec3(1.000, 0.965, 0.878), s - 4.0);
+}
+float hash12(vec2 p) {
+  vec2 q = fract(p * 0.1031);
+  q = q + dot(q, q.yx + 33.33);
+  return fract((q.x + q.y) * q.x);
+}
+float ring(float d, float r, float w) {
+  return 1.0 - smoothstep(0.0, w, abs(d - r));
+}
+vec3 shadeBase(vec2 css, float v, float g) {
+  vec3 col = vec3(0.063, 0.047, 0.165);
+  float gs = 44.0;
+  vec2 gq = abs(fract((css - U.css * 0.5) / gs + 0.5) - 0.5) * gs;
+  float line = 1.0 - smoothstep(0.0, 1.1, min(gq.x, gq.y));
+  float crs = line * (1.0 - smoothstep(2.5, 4.5, max(gq.x, gq.y)));
+  col = col + vec3(0.306, 0.353, 0.549) * (line * 0.045 + crs * 0.10);
+  float x = pow(1.0 - exp(-v * U.vScale), U.vGamma);
+  vec3 tc = coldbow(0.10 + 0.90 * x);
+  col = mix(col, tc, smoothstep(0.0, 0.30, x));
+  float gx = 1.0 - exp(-g * U.gScale);
+  col = col + vec3(0.20, 0.42, 0.80) * gx * 0.30;
+  return col;
+}
+vec3 shadeAnomaly(vec3 colIn, vec2 css, vec2 ap, float r, float age, float prog, float since, float k) {
+  vec3 col = colIn;
+  vec2 dv = css - ap;
+  float d = length(dv);
+  if (d > r * 9.0 + 60.0) { return col; }
+  bool contained = since >= 0.0;
+  float heat = 1.0;
+  if (contained) { heat = 1.0 - smoothstep(0.0, 2.4, since); }
+  float land = smoothstep(0.0, 0.3, age);
+  float ang = ATAN2(dv.x, -dv.y);
+  float a01 = (ang + 3.14159265) / 6.28318531;
+  // thermal blob: concentric ironbow with a flickering, flaring edge
+  float wob = 1.0 + 0.16 * sin(ang * 5.0 + U.t * 3.1 + k) * sin(ang * 3.0 - U.t * 2.3 + k * 2.0);
+  float flick = 0.93 + 0.07 * sin(U.t * 21.0 + k * 7.1) * sin(U.t * 6.7 + k);
+  float pop = 1.0 + 0.8 * exp(-age * 5.0);
+  float size = r * (0.55 + 0.6 * heat) * land * pop;
+  float q = d / max(size * wob, 0.001);
+  float hf = heat * flick * exp(-q * q * 1.7);
+  vec3 hc = ironbow(clamp(hf * 1.08, 0.0, 1.0));
+  float vis = 1.0;
+  if (contained) {
+    hc = mix(hc, vec3(0.608, 0.910, 1.000), 1.0 - smoothstep(0.05, 0.4, heat));
+    vis = smoothstep(0.0, 0.3, heat);
+  }
+  col = mix(col, hc, smoothstep(0.0, 0.10, hf) * vis);
+  // heat haze around it
+  col = col + vec3(0.608, 0.114, 0.561) * exp(-d / max(size * 2.2, 0.001)) * 0.30 * heat * land;
+  // landing flash and shockwave
+  col = col + vec3(1.000, 0.965, 0.878) * exp(-age * 7.0) * exp(-d / (r * 1.5)) * land;
+  if (age < 1.3) {
+    float rr0 = mix(r * 0.6, r * 8.0, 1.0 - pow(1.0 - age / 1.3, 3.0));
+    col = col + ironbow(0.62) * ring(d, rr0, 2.4) * (1.0 - age / 1.3) * 0.85;
+  }
+  if (!contained) {
+    // containment progress: an ice arc closing around the threat
+    float rr = r + 11.0;
+    float rg = ring(d, rr, 1.9);
+    float on = step(fract(a01 + 0.5), prog);
+    col = col + vec3(0.306, 0.353, 0.549) * rg * 0.30 * land;
+    col = mix(col, vec3(0.608, 0.910, 1.000), rg * on * land);
+    // threat radius: rotating dashed hot ring
+    float dash = step(0.5, fract(a01 * 20.0 + U.t * 0.5));
+    col = col + vec3(0.941, 0.188, 0.416) * ring(d, r + 20.0, 1.1) * dash * 0.55 * land;
+  } else {
+    // freeze: an ice ring snaps shut, a cold flash, then a faint frozen scar
+    float snap = 1.0 - smoothstep(0.0, 0.9, since);
+    float rr1 = mix(r + 11.0, r * 0.9, smoothstep(0.0, 0.45, since));
+    col = col + vec3(0.608, 0.910, 1.000) * ring(d, rr1, 1.7) * (0.32 + 0.68 * snap);
+    col = col + vec3(0.910, 0.969, 1.000) * ring(d, mix(r, r * 4.5, smoothstep(0.0, 0.9, since)), 2.0) * snap * 0.7;
+    float tick = step(0.8, fract(a01 * 28.0));
+    col = col + vec3(0.608, 0.910, 1.000) * ring(d, r * 0.9 + 6.0, 2.6) * tick * 0.26;
+  }
+  return col;
+}
+vec3 shadeHosts(vec3 colIn, vec2 css) {
+  vec3 col = colIn;
+  HOST_LOOP {
+    vec4 h = P.hosts[k];
+    vec2 q = abs(css - h.xy);
+    float dm = q.x + q.y;
+    float body = 1.0 - smoothstep(3.2, 4.4, dm);
+    float edge = ring(dm, 6.5, 0.9);
+    col = mix(col, vec3(0.910, 0.969, 1.000), body * 0.95);
+    col = col + vec3(0.608, 0.910, 1.000) * edge * 0.35;
+    float d = length(css - h.xy);
+    col = col + vec3(0.608, 0.910, 1.000) * ring(d, 11.0 + 60.0 * U.hostPulse, 1.5) * (1.0 - U.hostPulse) * 0.7;
+  }
+  return col;
+}
+vec3 finish(vec3 colIn, vec2 css, vec2 fc) {
+  vec3 col = colIn;
+  vec2 uv = css / U.css - 0.5;
+  col = col * (1.0 - 0.42 * dot(uv, uv));
+  col = mix(vec3(0.063, 0.047, 0.165), col, U.fade);
+  col = col + (hash12(fc) - 0.5) / 255.0;
+  return clamp(col, vec3(0.0), vec3(1.0));
+}
+`;
+const TYPES = { float: 'f32', vec2: 'vec2f', vec3: 'vec3f', vec4: 'vec4f', int: 'i32', bool: 'bool' };
+function toWGSL(src) {
+  return src
+    .replace(/^(float|vec2|vec3|vec4) (\w+)\(([^)]*)\) \{/gm, (m, rt, name, args) => {
+      const a = args.trim() ? args.split(',').map(x => { const [ty, nm] = x.trim().split(/\s+/); return `${nm}: ${TYPES[ty]}`; }).join(', ') : '';
+      return `fn ${name}(${a}) -> ${TYPES[rt]} {`;
+    })
+    .replace(/\b(float|vec2|vec3|vec4|bool|int) (\w+) =/g, 'var $2 =')
+    .replace(/\bvec([234])\(/g, 'vec$1f(')
+    .replace(/\bATAN2\(/g, 'atan2(')
+    .replace(/HOST_LOOP/g, 'for (var k = 0u; k < P.nHosts; k++)');
+}
+function toGLSL(src) {
+  return src.replace(/\bATAN2\(/g, 'atan(').replace(/HOST_LOOP/g, 'for (int k = 0; k < P.nHosts; k++)');
+}
+
+const RENDER_WGSL = PARAMS_WGSL + /* wgsl */`
+struct RU {
+  res: vec2f, css: vec2f,
+  dpr: f32, t: f32, fade: f32, vScale: f32,
+  gScale: f32, nA: f32, hostPulse: f32, vGamma: f32,
+};
+@group(0) @binding(1) var<uniform> U: RU;
+@group(0) @binding(2) var<storage, read> trail: array<f32>;
+@group(0) @binding(3) var<storage, read> glow: array<f32>;
+@group(0) @binding(4) var<storage, read> sched: array<vec4f>;
+@group(0) @binding(5) var<storage, read> state: array<vec4f>;
+
+@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+  let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
+  return vec4f(p * 2.0 - 1.0, 0.0, 1.0);
+}
+fn tr(x: i32, y: i32) -> f32 {
+  return trail[u32(clamp(y, 0, i32(P.th) - 1)) * P.tw + u32(clamp(x, 0, i32(P.tw) - 1))];
+}
+fn trailBil(c: vec2f) -> f32 {
+  let p = c - 0.5; let fl = floor(p); let f = p - fl; let i = vec2i(fl);
+  return mix(mix(tr(i.x, i.y), tr(i.x + 1, i.y), f.x), mix(tr(i.x, i.y + 1), tr(i.x + 1, i.y + 1), f.x), f.y);
+}
+fn gsamp(x: i32, y: i32) -> f32 {
+  let gw = i32(P.gw); let gh = i32(P.gh);
+  return glow[clamp(y, 0, gh - 1) * gw + clamp(x, 0, gw - 1)];
+}
+fn glowBil(c: vec2f) -> f32 {
+  let p = c - 0.5; let fl = floor(p); let f = p - fl; let i = vec2i(fl);
+  return mix(mix(gsamp(i.x, i.y), gsamp(i.x + 1, i.y), f.x), mix(gsamp(i.x, i.y + 1), gsamp(i.x + 1, i.y + 1), f.x), f.y);
+}
+${toWGSL(SHADE_SRC)}
+
+@fragment fn fs(@builtin(position) fc: vec4f) -> @location(0) vec4f {
+  let css = fc.xy / U.dpr;
+  let cell = css / P.cellPx;
+  let v = trailBil(cell);
+  let g = glowBil(cell / 4.0);
+  var col = shadeBase(css, v, g);
+  let nA = u32(U.nA);
+  for (var k = 0u; k < nA; k++) {
+    let b = sched[k * 3u + 1u];
+    if (U.t < b.x) { continue; }
+    let s = state[k]; let ps = state[${MAXA}u + k];
+    col = shadeAnomaly(col, css, ps.xy, sched[k * 3u + 2u].x, U.t - b.x, s.x, select(-1.0, U.t - s.y, s.y >= 0.0), f32(k));
+  }
+  col = shadeHosts(col, css);
+  col = finish(col, css, fc.xy);
+  return vec4f(col, 1.0);
+}
+`;
+
+/* ================================================================
+   WebGPU backend
+   ================================================================ */
+async function createWebGPU() {
+  if (!navigator.gpu) return null;
+  const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+  if (!adapter) return null;
+  const lim = adapter.limits;
+  const device = await adapter.requestDevice({
+    requiredLimits: {
+      maxStorageBufferBindingSize: Math.min(lim.maxStorageBufferBindingSize, 256 * 1024 * 1024),
+      maxBufferSize: Math.min(lim.maxBufferSize, 256 * 1024 * 1024),
+    }
+  });
+  if (DEBUG) device.addEventListener('uncapturederror', e => console.error('webgpu', e.error.message));
+  const ctx = canvas.getContext('webgpu');
+  if (!ctx) return null;
+  const format = navigator.gpu.getPreferredCanvasFormat();
+  ctx.configure({ device, format, alphaMode: 'opaque' });
+
+  const info = adapter.info || {};
+  const soft = !!info.isFallbackAdapter || /swiftshader/i.test(`${info.vendor} ${info.architecture} ${info.device} ${info.description}`);
+  const simMod = device.createShaderModule({ code: SIM_WGSL(!soft) });
+  const renMod = device.createShaderModule({ code: RENDER_WGSL });
+  if (DEBUG) for (const m of [simMod, renMod]) {
+    const info = await m.getCompilationInfo();
+    for (const x of info.messages) console.log('wgsl', x.type, x.lineNum, x.message);
+  }
+  const cp = entry => device.createComputePipelineAsync({ layout: 'auto', compute: { module: simMod, entryPoint: entry } });
+  const [pInit, pField, pAgents, pDiffuse, pAnoms, pDown, pBlurH, pBlurV, pRender] = await Promise.all([
+    cp('initAgents'), cp('computeField'), cp('stepAgents'), cp('diffuse'), cp('updateAnoms'),
+    cp('glowDown'), cp('glowBlurH'), cp('glowBlurV'),
+    device.createRenderPipelineAsync({
+      layout: 'auto',
+      vertex: { module: renMod, entryPoint: 'vs' },
+      fragment: { module: renMod, entryPoint: 'fs', targets: [{ format }] },
+      primitive: { topology: 'triangle-list' },
+    }),
+  ]);
+
+  const SU = GPUBufferUsage;
+  const paramsBuf = device.createBuffer({ size: PARAMS_FLOATS * 4, usage: SU.UNIFORM | SU.COPY_DST });
+  const ruBuf = device.createBuffer({ size: 48, usage: SU.UNIFORM | SU.COPY_DST });
+  const schedBuf = device.createBuffer({ size: MAXA * 3 * 16, usage: SU.STORAGE | SU.COPY_DST });
+  const stateBuf = device.createBuffer({ size: (2 * MAXA + 1) * 16, usage: SU.STORAGE | SU.COPY_DST | SU.COPY_SRC });
+  const countBuf = device.createBuffer({ size: MAXA * 4, usage: SU.STORAGE | SU.COPY_DST });
+  const readBufs = [0, 1].map(() => device.createBuffer({ size: (2 * MAXA + 1) * 16, usage: SU.MAP_READ | SU.COPY_DST }));
+  let readFree = [true, true];
+  const readJobs = [Promise.resolve(), Promise.resolve()];
+  let B = null;   // size-dependent resources
+  let parity = 0;
+
+  const be = {
+    kind: 'webgpu',
+    maxAgents: Math.floor(Math.min(lim.maxStorageBufferBindingSize, 256 * 1024 * 1024) / 16),
+    label: 'WebGPU compute',
+    configure(c) {
+      if (B) for (const k of ['agents', 'trailA', 'trailB', 'dep', 'field', 'glowA', 'glowB']) B[k].destroy();
+      const fw = Math.ceil(c.tw / 4), fh = Math.ceil(c.th / 4);
+      const gw = Math.ceil(c.tw / 4), gh = Math.ceil(c.th / 4);
+      const cells = c.tw * c.th;
+      B = {
+        fw, fh, gw, gh,
+        agents: device.createBuffer({ size: c.N * 16, usage: SU.STORAGE }),
+        trailA: device.createBuffer({ size: cells * 4, usage: SU.STORAGE | SU.COPY_DST | SU.COPY_SRC }),
+        trailB: device.createBuffer({ size: cells * 4, usage: SU.STORAGE | SU.COPY_DST | SU.COPY_SRC }),
+        dep: device.createBuffer({ size: cells * 4, usage: SU.STORAGE | SU.COPY_DST }),
+        field: device.createBuffer({ size: fw * fh * 4, usage: SU.STORAGE | SU.COPY_DST }),
+        glowA: device.createBuffer({ size: gw * gh * 4, usage: SU.STORAGE | SU.COPY_DST }),
+        glowB: device.createBuffer({ size: gw * gh * 4, usage: SU.STORAGE | SU.COPY_DST }),
+      };
+      const bg = (p, ents) => device.createBindGroup({
+        layout: p.getBindGroupLayout(0),
+        entries: ents.map(([binding, buffer]) => ({ binding, resource: { buffer } })),
+      });
+      const tr = [B.trailA, B.trailB];
+      B.bgInit = bg(pInit, [[0, paramsBuf], [1, B.agents]]);
+      B.bgField = bg(pField, [[0, paramsBuf], [5, B.field], [7, stateBuf]]);
+      B.bgAgents = [0, 1].map(i => bg(pAgents, [[0, paramsBuf], [1, B.agents], [2, tr[i]], [4, B.dep], [5, B.field], [7, stateBuf], [8, countBuf]]));
+      B.bgDiffuse = [0, 1].map(i => bg(pDiffuse, [[0, paramsBuf], [2, tr[i]], [3, tr[1 - i]], [4, B.dep]]));
+      B.bgAnoms = bg(pAnoms, [[0, paramsBuf], [6, schedBuf], [7, stateBuf], [8, countBuf]]);
+      B.bgDown = [0, 1].map(i => bg(pDown, [[0, paramsBuf], [2, tr[i]], [10, B.glowA]]));
+      B.bgBlurH = bg(pBlurH, [[0, paramsBuf], [9, B.glowA], [10, B.glowB]]);
+      B.bgBlurV = bg(pBlurV, [[0, paramsBuf], [9, B.glowB], [10, B.glowA]]);
+      B.bgRender = [0, 1].map(i => bg(pRender, [[0, paramsBuf], [1, ruBuf], [2, tr[i]], [3, B.glowA], [4, schedBuf], [5, stateBuf]]));
+      B.cfg = c;
+      writeParams(c);
+    },
+    reset(list) {
+      writeSched(list);
+      const st = new Float32Array((2 * MAXA + 1) * 4);
+      for (let k = 0; k < MAXA; k++) st[k * 4 + 1] = -1;
+      device.queue.writeBuffer(stateBuf, 0, st);
+      const enc = device.createCommandEncoder();
+      for (const b of [B.trailA, B.trailB, B.dep, B.field, B.glowA, B.glowB, countBuf]) enc.clearBuffer(b);
+      const p = enc.beginComputePass();
+      p.setPipeline(pInit); p.setBindGroup(0, B.bgInit); p.dispatchWorkgroups(Math.ceil(B.cfg.N / 256));
+      p.end();
+      device.queue.submit([enc.finish()]);
+      parity = 0;
+    },
+    setAnomaly(k, a, list) {
+      writeSched(list);
+      device.queue.writeBuffer(stateBuf, k * 16, new Float32Array([0, -1, 0, 0]));
+      device.queue.writeBuffer(stateBuf, (MAXA + k) * 16, new Float32Array([a.x0, a.y0, a.r, 0]));
+    },
+    encodeSteps(n) {
+      if (n <= 0) return;
+      const c = B.cfg;
+      const enc = device.createCommandEncoder();
+      const p = enc.beginComputePass();
+      const ag = Math.ceil(c.N / 256);
+      const fx = Math.ceil(B.fw / 16), fy = Math.ceil(B.fh / 16);
+      const dx = Math.ceil(c.tw / 16), dy = Math.ceil(c.th / 16);
+      for (let s = 0; s < n; s++) {
+        p.setPipeline(pField); p.setBindGroup(0, B.bgField); p.dispatchWorkgroups(fx, fy);
+        p.setPipeline(pAgents); p.setBindGroup(0, B.bgAgents[parity]); p.dispatchWorkgroups(ag);
+        p.setPipeline(pDiffuse); p.setBindGroup(0, B.bgDiffuse[parity]); p.dispatchWorkgroups(dx, dy);
+        p.setPipeline(pAnoms); p.setBindGroup(0, B.bgAnoms); p.dispatchWorkgroups(1);
+        parity ^= 1;
+      }
+      p.end();
+      device.queue.submit([enc.finish()]);
+    },
+    async steps(n, token) {
+      const BATCH = 60;
+      for (let done = 0; done < n; done += BATCH) {
+        be.encodeSteps(Math.min(BATCH, n - done));
+        if ((done / BATCH) % 4 === 3) {
+          await device.queue.onSubmittedWorkDone();
+          if (token !== seekToken) return false;
+        }
+      }
+      await device.queue.onSubmittedWorkDone();
+      return token === seekToken;
+    },
+    render(ru) {
+      device.queue.writeBuffer(ruBuf, 0, ru);
+      const enc = device.createCommandEncoder();
+      const p = enc.beginComputePass();
+      const gx = Math.ceil(B.gw / 16), gy = Math.ceil(B.gh / 16);
+      p.setPipeline(pDown); p.setBindGroup(0, B.bgDown[parity]); p.dispatchWorkgroups(gx, gy);
+      p.setPipeline(pBlurH); p.setBindGroup(0, B.bgBlurH); p.dispatchWorkgroups(gx, gy);
+      p.setPipeline(pBlurV); p.setBindGroup(0, B.bgBlurV); p.dispatchWorkgroups(gx, gy);
+      p.end();
+      const rp = enc.beginRenderPass({
+        colorAttachments: [{ view: ctx.getCurrentTexture().createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0.063, g: 0.047, b: 0.165, a: 1 } }]
+      });
+      rp.setPipeline(pRender); rp.setBindGroup(0, B.bgRender[parity]); rp.draw(3); rp.end();
+      device.queue.submit([enc.finish()]);
+    },
+    // copy the tiny anomaly state buffer back for the labels; force waits for a free slot
+    async readState(force) {
+      let rb = readFree[0] ? 0 : readFree[1] ? 1 : -1;
+      if (rb < 0) {
+        if (!force) return null;
+        await Promise.all(readJobs);
+        rb = 0;
+      }
+      readFree[rb] = false;
+      const enc = device.createCommandEncoder();
+      enc.copyBufferToBuffer(stateBuf, 0, readBufs[rb], 0, (2 * MAXA + 1) * 16);
+      device.queue.submit([enc.finish()]);
+      const buf = readBufs[rb];
+      const job = buf.mapAsync(GPUMapMode.READ).then(() => {
+        const out = new Float32Array(buf.getMappedRange().slice(0));
+        buf.unmap(); readFree[rb] = true;
+        return out;
+      }, () => { readFree[rb] = true; return null; });
+      readJobs[rb] = job;
+      return job;
+    },
+    async bench() {
+      be.encodeSteps(4);
+      await device.queue.onSubmittedWorkDone();
+      const t0 = performance.now();
+      be.encodeSteps(24);
+      await device.queue.onSubmittedWorkDone();
+      return (performance.now() - t0) / 24;
+    },
+  };
+  function writeParams(c) {
+    const ab = new ArrayBuffer(PARAMS_FLOATS * 4);
+    const u = new Uint32Array(ab), f = new Float32Array(ab);
+    const rho = c.N / (c.tw * c.th);
+    u[0] = c.tw; u[1] = c.th; u[2] = c.N; u[3] = SEED;
+    u[4] = Math.ceil(c.tw / 4); u[5] = Math.ceil(c.th / 4); u[6] = c.hosts.length; u[7] = c.nAnoms;
+    f[8] = c.cellPx; f[9] = DT; f[10] = TUNE.decay; f[11] = diffuseFor(c);
+    f[12] = Math.max(1, Math.round(1024 * (1 - TUNE.decay) / rho)); f[13] = TUNE.sd / c.cellPx; f[14] = TUNE.sa; f[15] = TUNE.ra;
+    f[16] = TUNE.step / c.cellPx; f[17] = TUNE.gain; f[18] = TUNE.thr; f[19] = TUNE.hostFrac;
+    f[20] = 4; f[21] = TUNE.kn; f[22] = TUNE.sn; f[23] = TUNE.kf;
+    f[24] = TUNE.lf; f[25] = TUNE.jitter; f[26] = Math.ceil(c.tw / 4); f[27] = Math.ceil(c.th / 4);
+    f[28] = TUNE.ringR; f[29] = TUNE.ringW; f[30] = TUNE.ringJ; f[31] = TUNE.respawn * DT;
+    f[32] = TUNE.hostT0; f[33] = TUNE.hostT1; f[34] = TUNE.hostKF; f[35] = TUNE.hostL;
+    f[36] = TUNE.alert;
+    c.hosts.forEach((h, i) => { f[40 + i * 4] = h[0]; f[41 + i * 4] = h[1]; f[42 + i * 4] = TUNE.hostK; f[43 + i * 4] = TUNE.hostS; });
+    device.queue.writeBuffer(paramsBuf, 0, ab);
+  }
+  function writeSched(list) {
+    const f = new Float32Array(MAXA * 12);
+    list.forEach((a, k) => {
+      f.set([a.x0, a.y0, a.x1, a.y1, a.t0, a.ms, a.md, a.tough, a.r, a.minAge, a.emit, a.wob], k * 12);
+    });
+    device.queue.writeBuffer(schedBuf, 0, f);
+    if (B) { B.cfg.nAnoms = list.length; writeParams(B.cfg); }
+  }
+  return be;
+}
+
+/* ================================================================
+   WebGL2 fallback: same model, agents in an RGBA32F texture.
+   Agent step in a fragment shader, deposits splatted as additive
+   points, diffuse/decay and anomaly state in fragment passes.
+   ================================================================ */
+function createWebGL() {
+  const fresh = canvas.cloneNode(false);
+  canvas.replaceWith(fresh); canvas = fresh;
+  const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+  if (!gl || !gl.getExtension('EXT_color_buffer_float')) return null;
+  const floatBlend = !!gl.getExtension('EXT_float_blend');
+  const AW = 256;
+  const HEAD = '#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\n';
+  const LIB = `
+const float TAU = 6.28318531;
+uint pcg(uint v) { uint s = v * 747796405u + 2891336453u; uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u; return (w >> 22u) ^ w; }
+float u01(uint v) { return float(pcg(v) >> 8u) * (1.0 / 16777216.0); }
+`;
+  const VS_QUAD = HEAD + 'void main(){ vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }';
+  const FS_INIT = HEAD + LIB + `
+uniform int uAW; uniform uint uSeed; uniform int uN; uniform int uNHosts; uniform vec4 uHosts[${MAXH}];
+uniform float uHostFrac, uCellPx, uRingR, uRingW, uRingJ; uniform vec2 uTS;
+out vec4 o;
+void main() {
+  ivec2 ij = ivec2(gl_FragCoord.xy);
+  uint i = uint(ij.y * uAW + ij.x);
+  uint b = pcg(i * 5u + uSeed * 0x9E3779B9u);
+  float r0 = u01(b); float r1 = u01(b ^ 0x68E31DA4u); float r2 = u01(b + 0xB5297A4Du);
+  float r3 = u01(b ^ 0x1B56C4E9u); float r4 = u01(b + 0x3C6EF372u);
+  vec2 W = uTS * uCellPx;
+  vec2 p; float ang;
+  if (r0 < uHostFrac && uNHosts > 0) {
+    uint nh = uint(uNHosts);
+    vec4 h = uHosts[int(i % nh)];
+    float th = (float(i / nh) + r3) * TAU / max(1.0, float(uN) * uHostFrac / float(uNHosts));
+    p = h.xy + vec2(cos(th), sin(th)) * (uRingR + r2 * uRingW);
+    ang = th + (r4 - 0.5) * uRingJ;
+  } else { p = vec2(r1, r2) * W; ang = r3 * TAU; }
+  p = clamp(p, vec2(1.0), W - 1.0);
+  o = vec4(p / uCellPx, ang, 0.0);
+}`;
+  const FS_FIELD = HEAD + `
+uniform float uFieldCell, uCellPx, uT, uHostT0, uHostT1, uHostKF, uHostL, uKN, uSN, uKF, uLF;
+uniform int uNHosts, uNA; uniform vec4 uHosts[${MAXH}]; uniform sampler2D uState;
+out vec4 o;
+void main() {
+  vec2 px = (floor(gl_FragCoord.xy) + 0.5) * uFieldCell * uCellPx;
+  float hostAmp = smoothstep(uHostT0, uHostT1, uT);
+  float f = 0.0;
+  for (int k = 0; k < uNHosts; k++) {
+    vec4 h = uHosts[k]; vec2 d = px - h.xy;
+    f += hostAmp * (h.z * exp(-dot(d, d) / (2.0 * h.w * h.w)) + uHostKF * exp(-length(d) / uHostL));
+  }
+  for (int k = 0; k < uNA; k++) {
+    vec4 s = texelFetch(uState, ivec2(k, 0), 0);
+    if (s.w > 0.001) {
+      float dd = distance(px, texelFetch(uState, ivec2(k, 1), 0).xy);
+      f += s.w * (uKN * exp(-dd * dd / (2.0 * uSN * uSN)) + uKF * exp(-dd / uLF));
+    }
+  }
+  o = vec4(f, 0.0, 0.0, 1.0);
+}`;
+  const FS_AGENTS = HEAD + LIB + `
+uniform sampler2D uAgents, uTrail, uField; uniform int uAW; uniform uint uStep, uSeed;
+uniform vec2 uTS, uFS; uniform float uFieldCell, uSD, uSA, uRA, uStepLen, uGain, uJit, uRespawn, uCellPx, uAlert, uKF;
+uniform int uNHosts; uniform vec4 uHosts[${MAXH}];
+out vec4 o;
+float trailAt(vec2 p) {
+  if (p.x < 0.0 || p.y < 0.0 || p.x >= uTS.x || p.y >= uTS.y) { return -8.0; }
+  return texelFetch(uTrail, ivec2(p), 0).r;
+}
+float fieldAt(vec2 p) { return texture(uField, p / uFieldCell / uFS).r; }
+void main() {
+  ivec2 ij = ivec2(gl_FragCoord.xy);
+  uint i = uint(ij.y * uAW + ij.x);
+  vec4 a = texelFetch(uAgents, ij, 0);
+  uint h = pcg(i ^ pcg(uStep * 0x2545F491u + uSeed));
+  vec2 pF = a.xy + uSD * vec2(cos(a.z), sin(a.z));
+  vec2 pL = a.xy + uSD * vec2(cos(a.z + uSA), sin(a.z + uSA));
+  vec2 pR = a.xy + uSD * vec2(cos(a.z - uSA), sin(a.z - uSA));
+  float fF = fieldAt(pF), fL = fieldAt(pL), fR = fieldAt(pR);
+  float F = trailAt(pF) + uGain * fF, L = trailAt(pL) + uGain * fL, R = trailAt(pR) + uGain * fR;
+  float rnd = float(h >> 8u) * (1.0 / 16777216.0);
+  float turn = (rnd - 0.5) * uJit;
+  if (F > L && F > R) {
+  } else if (F < L && F < R) { turn += rnd > 0.5 ? uRA : -uRA; }
+  else if (L > R) { turn += uRA; }
+  else if (R > L) { turn -= uRA; }
+  if (u01(h ^ 0x9E3779B1u) < uAlert * clamp(fF / uKF - 0.05, 0.0, 1.0)) {
+    turn = fL > fR ? uRA : -uRA;
+    if (fF > fL && fF > fR) { turn = 0.0; }
+  }
+  float ang = a.z + turn;
+  vec2 p = a.xy + uStepLen * vec2(cos(ang), sin(ang));
+  vec2 mx = uTS - 0.01;
+  if (p.x < 0.0 || p.y < 0.0 || p.x > mx.x || p.y > mx.y) { p = clamp(p, vec2(0.0), mx); ang = u01(h ^ 0xA511E9B3u) * TAU; }
+  if (uNHosts > 0 && u01(h ^ 0x5BD1E995u) < uRespawn) {
+    vec4 hk = uHosts[int(pcg(h ^ 0x27D4EB2Du) % uint(uNHosts))];
+    float th = u01(h ^ 0x165667B1u) * TAU;
+    p = (hk.xy + vec2(cos(th), sin(th)) * 6.0) / uCellPx;
+    ang = th;
+  }
+  ang = ang - TAU * floor(ang / TAU);
+  o = vec4(p, ang, a.w);
+}`;
+  const VS_DEP = HEAD + `
+uniform sampler2D uAgents; uniform int uAW; uniform vec2 uTS;
+void main() {
+  vec2 p = texelFetch(uAgents, ivec2(gl_VertexID % uAW, gl_VertexID / uAW), 0).xy;
+  gl_Position = vec4((floor(p) + 0.5) / uTS * 2.0 - 1.0, 0.0, 1.0);
+  gl_PointSize = 1.0;
+}`;
+  const FS_DEP = HEAD + 'uniform float uDep; out vec4 o; void main(){ o = vec4(uDep, 0.0, 0.0, 1.0); }';
+  const FS_DIFFUSE = HEAD + `
+uniform sampler2D uTrail, uDepT; uniform vec2 uTS; uniform float uDecay, uDiffuse;
+out vec4 o;
+void main() {
+  ivec2 c = ivec2(gl_FragCoord.xy); ivec2 mx = ivec2(uTS) - 1;
+  float s = 0.0;
+  for (int dy = -1; dy <= 1; dy++) { for (int dx = -1; dx <= 1; dx++) { s += texelFetch(uTrail, clamp(c + ivec2(dx, dy), ivec2(0), mx), 0).r; } }
+  float v = texelFetch(uTrail, c, 0).r;
+  o = vec4(min(mix(v, s / 9.0, uDiffuse) * uDecay + texelFetch(uDepT, c, 0).r, 4096.0), 0.0, 0.0, 1.0);
+}`;
+  // containment from the trail itself: trail is normalised so a uniform spread of hunters reads 1.0
+  const FS_ANOMS = HEAD + `
+uniform sampler2D uState, uTrail; uniform vec4 uSched[${MAXA * 3}];
+uniform float uTNow, uTNext, uDT, uThr, uCellPx; uniform vec2 uTS; uniform int uNA;
+out vec4 o;
+vec2 anomPos(int k, float t) {
+  vec4 a = uSched[k * 3]; vec4 b = uSched[k * 3 + 1]; vec4 c = uSched[k * 3 + 2];
+  float u = 0.0;
+  if (b.z > 0.0) { u = clamp((t - b.x - b.y) / b.z, 0.0, 1.0); }
+  float e = u * u * (3.0 - 2.0 * u);
+  vec2 p = mix(a.xy, a.zw, e);
+  vec2 dv = a.zw - a.xy; float len = length(dv);
+  if (len > 0.0 && c.w != 0.0) { p += vec2(-dv.y, dv.x) / len * c.w * sin(3.14159265 * u) * sin(9.42477796 * u); }
+  return p;
+}
+void main() {
+  int k = int(gl_FragCoord.x); int row = int(gl_FragCoord.y);
+  vec4 s = texelFetch(uState, ivec2(k, 0), 0);
+  vec4 ps = texelFetch(uState, ivec2(k, 1), 0);
+  if (k >= uNA) { o = row == 0 ? s : ps; return; }
+  vec4 b = uSched[k * 3 + 1]; vec4 c = uSched[k * 3 + 2];
+  float t0 = b.x; float r = c.x;
+  if (ps.w > 0.5) {
+    float acc = 0.0;
+    for (int j = 0; j < 24; j++) {
+      float fj = float(j);
+      float rad = r * sqrt((fj + 0.5) / 24.0);
+      float an = fj * 2.39996323;
+      acc += texture(uTrail, (ps.xy + vec2(cos(an), sin(an)) * rad) / uCellPx / uTS).r;
+    }
+    s.z = mix(s.z, acc / 24.0, 0.06);
+    float rate = clamp((s.z / uThr - 1.0) * 1.5, 0.0, 3.0) / max(b.w, 0.05);
+    s.x = s.x + uDT * rate;
+    if (uTNow - t0 < c.y) { s.x = min(s.x, 0.985); }
+    if (s.x >= 1.0) { s.x = 1.0; s.y = uTNow; }
+  }
+  bool contained = s.y >= 0.0;
+  vec2 pos = anomPos(k, contained ? min(uTNext, s.y) : uTNext);
+  float emit = 0.0;
+  if (uTNext >= t0) {
+    emit = smoothstep(0.0, 0.5, uTNext - t0) * c.z;
+    if (contained) { emit = emit * exp(-(uTNext - s.y) / 0.45); }
+  }
+  s.w = emit;
+  o = row == 0 ? s : vec4(pos, r, (uTNext >= t0 && !contained) ? 1.0 : 0.0);
+}`;
+  const FS_DOWN = HEAD + `
+uniform sampler2D uTrail; uniform vec2 uTS; out vec4 o;
+void main() {
+  ivec2 g = ivec2(gl_FragCoord.xy) * 4; ivec2 mx = ivec2(uTS) - 1; float s = 0.0;
+  for (int y = 0; y < 4; y++) { for (int x = 0; x < 4; x++) { s += texelFetch(uTrail, min(g + ivec2(x, y), mx), 0).r; } }
+  o = vec4(s / 16.0, 0.0, 0.0, 1.0);
+}`;
+  const FS_BLUR = HEAD + `
+uniform sampler2D uSrc; uniform vec2 uGS; uniform ivec2 uDir; out vec4 o;
+void main() {
+  ivec2 g = ivec2(gl_FragCoord.xy); ivec2 mx = ivec2(uGS) - 1; float s = 0.0;
+  for (int k = -6; k <= 6; k++) { s += exp(-float(k * k) / 18.0) * (1.0 / 7.5094) * texelFetch(uSrc, clamp(g + uDir * k, ivec2(0), mx), 0).r; }
+  o = vec4(s, 0.0, 0.0, 1.0);
+}`;
+  const FS_RENDER = HEAD + `
+struct RUs { vec2 res; vec2 css; float dpr; float t; float fade; float vScale; float gScale; float nA; float hostPulse; float vGamma; };
+uniform RUs U;
+struct PPs { int nHosts; vec4 hosts[${MAXH}]; float cellPx; vec2 tsize; vec2 gsize; };
+uniform PPs P;
+uniform sampler2D uTrail, uGlow, uState; uniform vec4 uSched[${MAXA * 3}];
+out vec4 o;
+${toGLSL(SHADE_SRC)}
+void main() {
+  vec2 fc = vec2(gl_FragCoord.x, U.res.y - gl_FragCoord.y);
+  vec2 css = fc / U.dpr;
+  vec2 cell = css / P.cellPx;
+  float v = texture(uTrail, cell / P.tsize).r;
+  float g = texture(uGlow, cell / 4.0 / P.gsize).r;
+  vec3 col = shadeBase(css, v, g);
+  int nA = int(U.nA);
+  for (int k = 0; k < nA; k++) {
+    vec4 b = uSched[k * 3 + 1];
+    if (U.t < b.x) { continue; }
+    vec4 s = texelFetch(uState, ivec2(k, 0), 0);
+    vec4 ps = texelFetch(uState, ivec2(k, 1), 0);
+    float since = s.y >= 0.0 ? U.t - s.y : -1.0;
+    col = shadeAnomaly(col, css, ps.xy, uSched[k * 3 + 2].x, U.t - b.x, s.x, since, float(k));
+  }
+  col = shadeHosts(col, css);
+  col = finish(col, css, fc);
+  o = vec4(col, 1.0);
+}`;
+
+  function compile(type, src) {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src); gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh) + '\n' + src.split('\n').map((l, i) => (i + 1) + ': ' + l).join('\n').slice(0, 4000));
+    return sh;
+  }
+  function program(vs, fs) {
+    const p = gl.createProgram();
+    gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));
+    gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const u = {}; let unit = 0;
+    const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (let k = 0; k < n; k++) {
+      const info = gl.getActiveUniform(p, k);
+      const name = info.name.replace(/\[0\]$/, '');
+      u[name] = { loc: gl.getUniformLocation(p, info.name), type: info.type, unit: info.type === gl.SAMPLER_2D ? unit++ : -1 };
+    }
+    return { p, u };
+  }
+  let P_INIT, P_FIELD, P_AGENTS, P_DEP, P_DIFF, P_ANOMS, P_DOWN, P_BLUR, P_REN;
+  try {
+    P_INIT = program(VS_QUAD, FS_INIT); P_FIELD = program(VS_QUAD, FS_FIELD); P_AGENTS = program(VS_QUAD, FS_AGENTS);
+    P_DEP = program(VS_DEP, FS_DEP); P_DIFF = program(VS_QUAD, FS_DIFFUSE); P_ANOMS = program(VS_QUAD, FS_ANOMS);
+    P_DOWN = program(VS_QUAD, FS_DOWN); P_BLUR = program(VS_QUAD, FS_BLUR); P_REN = program(VS_QUAD, FS_RENDER);
+  } catch (e) { if (DEBUG) console.log(e.message); return null; }
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+
+  function use(pr, vals) {
+    gl.useProgram(pr.p);
+    for (const name in vals) {
+      const u = pr.u[name]; if (!u) continue;
+      const v = vals[name];
+      switch (u.type) {
+        case gl.FLOAT: gl.uniform1f(u.loc, v); break;
+        case gl.FLOAT_VEC2: gl.uniform2fv(u.loc, v); break;
+        case gl.FLOAT_VEC4: gl.uniform4fv(u.loc, v); break;
+        case gl.INT: gl.uniform1i(u.loc, v); break;
+        case gl.INT_VEC2: gl.uniform2iv(u.loc, v); break;
+        case gl.UNSIGNED_INT: gl.uniform1ui(u.loc, v); break;
+        case gl.SAMPLER_2D:
+          gl.activeTexture(gl.TEXTURE0 + u.unit); gl.bindTexture(gl.TEXTURE_2D, v); gl.uniform1i(u.loc, u.unit); break;
+      }
+    }
+  }
+  function tex(w, h, ifmt, fmt, type, linear) {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, ifmt, w, h, 0, fmt, type, null);
+    const f = linear ? gl.LINEAR : gl.NEAREST;
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, f);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, f);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+    return { t, fb, w, h };
+  }
+  function target(tg) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, tg ? tg.fb : null);
+    if (tg) gl.viewport(0, 0, tg.w, tg.h); else gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+  const quad = () => gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  let T = null, c = null, step = 0, cur = 0, schedArr = new Float32Array(MAXA * 12), nA = 0;
+  const hostsArr = new Float32Array(MAXH * 4);
+  const pbo = gl.createBuffer();
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+  gl.bufferData(gl.PIXEL_PACK_BUFFER, MAXA * 2 * 16, gl.STREAM_READ);
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  let readPending = null;
+  const R16 = [gl.R16F, gl.RED, gl.HALF_FLOAT];
+  const R32 = [gl.R32F, gl.RED, gl.FLOAT];
+  const S32 = [gl.RGBA32F, gl.RGBA, gl.FLOAT];
+
+  const be = {
+    kind: 'gl', label: 'WebGL2', maxAgents: AW * 4096,
+    configure(cf) {
+      if (T) for (const k in T) if (T[k] && T[k].t) { gl.deleteTexture(T[k].t); gl.deleteFramebuffer(T[k].fb); }
+      c = cf;
+      const AH = Math.ceil(c.N / AW);
+      c.N = AW * AH;
+      const fw = Math.ceil(c.tw / 4), fh = Math.ceil(c.th / 4);
+      T = {
+        a0: tex(AW, AH, ...S32, false), a1: tex(AW, AH, ...S32, false),
+        tr0: tex(c.tw, c.th, ...R16, true), tr1: tex(c.tw, c.th, ...R16, true),
+        dep: tex(c.tw, c.th, ...(floatBlend ? R32 : R16), false),
+        field: tex(fw, fh, ...R16, true),
+        st0: tex(MAXA, 2, ...S32, false), st1: tex(MAXA, 2, ...S32, false),
+        g0: tex(fw, fh, ...R16, true), g1: tex(fw, fh, ...R16, true),
+      };
+      T.AH = AH; T.fw = fw; T.fh = fh;
+      hostsArr.fill(0);
+      c.hosts.forEach((h, i) => hostsArr.set([h[0], h[1], TUNE.hostK, TUNE.hostS], i * 4));
+    },
+    reset(list) {
+      writeSched(list);
+      step = 0; cur = 0;
+      const st = new Float32Array(MAXA * 2 * 4);
+      for (let k = 0; k < MAXA; k++) st[k * 4 + 1] = -1;
+      for (const s of [T.st0, T.st1]) { gl.bindTexture(gl.TEXTURE_2D, s.t); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAXA, 2, gl.RGBA, gl.FLOAT, st); }
+      gl.disable(gl.BLEND);
+      for (const k of ['tr0', 'tr1', 'dep', 'field', 'g0', 'g1']) { target(T[k]); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); }
+      target(T.a0);
+      use(P_INIT, { uAW: AW, uSeed: SEED, uN: c.N, uNHosts: c.hosts.length, uHosts: hostsArr, uHostFrac: TUNE.hostFrac,
+        uCellPx: c.cellPx, uRingR: TUNE.ringR, uRingW: TUNE.ringW, uRingJ: TUNE.ringJ, uTS: [c.tw, c.th] });
+      quad();
+    },
+    setAnomaly(k, a, list) {
+      writeSched(list);
+      const st = cur ? T.st1 : T.st0;
+      gl.bindTexture(gl.TEXTURE_2D, st.t);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, k, 0, 1, 1, gl.RGBA, gl.FLOAT, new Float32Array([0, -1, 0, 0]));
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, k, 1, 1, 1, gl.RGBA, gl.FLOAT, new Float32Array([a.x0, a.y0, a.r, 0]));
+    },
+    encodeSteps(n) {
+      const rho = c.N / (c.tw * c.th);
+      const dep = (1 - TUNE.decay) / rho;
+      const ts = [c.tw, c.th], fs = [T.fw, T.fh];
+      for (let s = 0; s < n; s++) {
+        const A = cur ? T.a1 : T.a0, A2 = cur ? T.a0 : T.a1;
+        const TR = cur ? T.tr1 : T.tr0, TR2 = cur ? T.tr0 : T.tr1;
+        const ST = cur ? T.st1 : T.st0, ST2 = cur ? T.st0 : T.st1;
+        const tNow = step * DT, tNext = (step + 1) * DT;
+        gl.disable(gl.BLEND);
+        target(T.field);
+        use(P_FIELD, { uFieldCell: 4, uCellPx: c.cellPx, uT: tNow, uHostT0: TUNE.hostT0, uHostT1: TUNE.hostT1, uHostKF: TUNE.hostKF, uHostL: TUNE.hostL,
+          uKN: TUNE.kn, uSN: TUNE.sn, uKF: TUNE.kf, uLF: TUNE.lf, uNHosts: c.hosts.length, uNA: nA, uHosts: hostsArr, uState: ST.t });
+        quad();
+        target(A2);
+        use(P_AGENTS, { uAgents: A.t, uTrail: TR.t, uField: T.field.t, uAW: AW, uStep: step, uSeed: SEED, uTS: ts, uFS: fs, uFieldCell: 4,
+          uSD: TUNE.sd / c.cellPx, uSA: TUNE.sa, uRA: TUNE.ra, uStepLen: TUNE.step / c.cellPx, uGain: TUNE.gain, uJit: TUNE.jitter,
+          uRespawn: TUNE.respawn * DT, uCellPx: c.cellPx, uNHosts: c.hosts.length, uHosts: hostsArr, uAlert: TUNE.alert, uKF: TUNE.kf });
+        quad();
+        target(T.dep);
+        gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+        use(P_DEP, { uAgents: A2.t, uAW: AW, uTS: ts, uDep: dep });
+        gl.drawArrays(gl.POINTS, 0, c.N);
+        gl.disable(gl.BLEND);
+        target(TR2);
+        use(P_DIFF, { uTrail: TR.t, uDepT: T.dep.t, uTS: ts, uDecay: TUNE.decay, uDiffuse: diffuseFor(c) });
+        quad();
+        target(ST2);
+        use(P_ANOMS, { uState: ST.t, uTrail: TR2.t, uSched: schedArr, uTNow: tNow, uTNext: tNext, uDT: DT, uThr: TUNE.thrGL, uCellPx: c.cellPx, uTS: ts, uNA: nA });
+        quad();
+        cur ^= 1; step++;
+      }
+    },
+    async steps(n, token) {
+      for (let done = 0; done < n; done += 120) {
+        be.encodeSteps(Math.min(120, n - done));
+        if ((done / 120) % 4 === 3) {
+          await new Promise(r => setTimeout(r, 0));
+          if (token !== seekToken) return false;
+        }
+      }
+      return token === seekToken;
+    },
+    render(ru) {
+      const TR = cur ? T.tr1 : T.tr0, ST = cur ? T.st1 : T.st0;
+      gl.disable(gl.BLEND);
+      target(T.g0); use(P_DOWN, { uTrail: TR.t, uTS: [c.tw, c.th] }); quad();
+      target(T.g1); use(P_BLUR, { uSrc: T.g0.t, uGS: [T.fw, T.fh], uDir: [1, 0] }); quad();
+      target(T.g0); use(P_BLUR, { uSrc: T.g1.t, uGS: [T.fw, T.fh], uDir: [0, 1] }); quad();
+      target(null);
+      use(P_REN, { 'U.res': [ru[0], ru[1]], 'U.css': [ru[2], ru[3]], 'U.dpr': ru[4], 'U.t': ru[5], 'U.fade': ru[6], 'U.vScale': ru[7],
+        'U.gScale': ru[8], 'U.nA': ru[9], 'U.hostPulse': ru[10], 'U.vGamma': ru[11], 'P.nHosts': c.hosts.length, 'P.hosts': hostsArr, 'P.cellPx': c.cellPx,
+        'P.tsize': [c.tw, c.th], 'P.gsize': [T.fw, T.fh], uTrail: TR.t, uGlow: T.g0.t, uState: ST.t, uSched: schedArr });
+      quad();
+    },
+    async readState(force) {
+      if (readPending) { if (!force) return null; await readPending; }
+      const ST = cur ? T.st1 : T.st0;
+      // async read-back: pack into a buffer, wait on a fence, then copy out
+      gl.bindFramebuffer(gl.FRAMEBUFFER, ST.fb);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+      gl.readPixels(0, 0, MAXA, 2, gl.RGBA, gl.FLOAT, 0);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+      gl.flush();
+      const atStep = step;
+      readPending = new Promise(resolve => {
+        const poll = () => {
+          const r = gl.clientWaitSync(fence, 0, 0);
+          if (r === gl.TIMEOUT_EXPIRED) { setTimeout(poll, 4); return; }
+          gl.deleteSync(fence);
+          const px = new Float32Array(MAXA * 2 * 4);
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+          gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, px);
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+          readPending = null;
+          const out = new Float32Array((2 * MAXA + 1) * 4);
+          out.set(px); out[2 * MAXA * 4] = atStep;
+          resolve(out);
+        };
+        poll();
+      });
+      return readPending;
+    },
+    async bench() { return 0; },
+  };
+  function writeSched(list) {
+    schedArr.fill(0);
+    list.forEach((a, k) => schedArr.set([a.x0, a.y0, a.x1, a.y1, a.t0, a.ms, a.md, a.tough, a.r, a.minAge, a.emit, a.wob], k * 12));
+    nA = list.length;
+  }
+  return be;
+}
+
+/* ================================================================
+   Driver: seeking, live stepping, rendering, labels
+   ================================================================ */
+function renderUniforms(time) {
+  const tm = time;
+  const fade = Math.min(1, tm / 0.35) * (1 - smooth(38.8, 40, tm));
+  const hostPulse = Math.min(1, tm / 1.1);
+  return new Float32Array([canvas.width, canvas.height, W, H, dpr, tm, fade, TUNE.vScale, TUNE.gScale, sched.length, hostPulse, TUNE.vGamma]);
+}
+function smooth(a, b, x) { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); }
+
+function sizeCanvas() {
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+}
+
+async function setup() {
+  cfg = buildConfig();
+  sizeCanvas();
+  sched = cfg.story.map(a => ({ ...a }));
+  cfg.nAnoms = sched.length;
+  backend.configure(cfg);
+  setTechCount();
+}
+
+function setTechCount() {
+  const n = cfg.N.toLocaleString('en-US');
+  const items = backend.kind === 'webgpu' ? [
+    `${n} physarum agents (Jones 2010) stepped by hand-written WGSL compute shaders`,
+    'Each hunter senses its trail at three forward sensors; deposits land with fixed-point atomicAdd, then a 3×3 diffuse and decay pass',
+    'Anomalies emit attractant into a field buffer; hunters near each one are tallied with workgroup atomics, so containment is decided on the GPU',
+    'Fixed 60 Hz timestep: seeking re-simulates from the seed in batched command buffers',
+    'Click or tap to drop a honeypot',
+  ] : [
+    `${n} physarum agents (Jones 2010) in an RGBA32F texture, stepped by a WebGL2 fragment shader`,
+    'Deposits are splatted as additive points, then a 3×3 diffuse and decay pass',
+    'Anomalies emit attractant into a field texture; containment is read from trail density in a tiny state texture',
+    'Fixed 60 Hz timestep: seeking re-simulates from the seed',
+    'Click or tap to drop a honeypot',
+  ];
+  const ul = document.getElementById('tech');
+  ul.textContent = '';
+  for (const s of items) { const li = document.createElement('li'); li.textContent = s; ul.appendChild(li); }
+}
+
+function resetSim() {
+  sched = cfg.story.map(a => ({ ...a }));
+  cfg.nAnoms = sched.length;
+  backend.reset(sched);
+  simStep = 0;
+  stateCache = null;
+  clearLabels();
+}
+
+let frameNo = 0;
+function draw(force) {
+  backend.render(renderUniforms(simStep * DT));
+  // labels only need the state a few times a second during live play
+  if (!force && (frameNo++ % 4)) return null;
+  const pr = backend.readState(force);
+  if (pr) pr.then(s => { if (s && s[2 * MAXA * 4] <= simStep) { stateCache = s; updateLabels(); } });
+  return pr;
+}
+
+async function seek(time) {
+  const token = ++seekToken;
+  busy = true;
+  const tm = ((time % PERIOD) + PERIOD) % PERIOD;
+  const target = Math.min(PERIOD_STEPS - 1, Math.floor(tm / DT + 1e-6));
+  loops = Math.floor(time / PERIOD);
+  resetSim();
+  const ok = await backend.steps(target, token);
+  if (!ok) return;
+  simStep = target;
+  t = time;
+  const s = await draw(true);
+  if (s) { stateCache = s; updateLabels(); }
+  if (DEBUG && s) console.log('t', time, sched.map((a, k) => `${k}: p ${s[k * 4].toFixed(2)} at ${s[k * 4 + 1].toFixed(1)} d ${s[k * 4 + 2].toFixed(1)}`).join(' | '));
+  if (token === seekToken) busy = false;
+}
+
+const MAX_STEPS_PER_FRAME = 4;
+function frame(now) {
+  raf = requestAnimationFrame(frame);
+  if (!playing || busy || !backend) { last = now; return; }
+  const dtReal = last === null ? 0 : Math.min(0.1, (now - last) / 1000);
+  last = now;
+  acc = Math.min(acc + dtReal, 0.2);
+  let n = Math.min(MAX_STEPS_PER_FRAME, Math.floor(acc / DT + 1e-6));
+  acc -= n * DT;
+  while (n > 0) {
+    if (simStep >= PERIOD_STEPS) { loops++; resetSim(); }
+    const m = Math.min(n, PERIOD_STEPS - simStep);
+    backend.encodeSteps(m);
+    simStep += m; n -= m;
+  }
+  t = loops * PERIOD + simStep * DT;
+  draw(false);
+}
+
+/* ---------------- labels ---------------- */
+const tagEls = [];
+function updateLabels() {
+  const s = stateCache;
+  if (!s || !cfg) return;
+  const time = simStep * DT;
+  let contained = 0, live = 0;
+  for (let k = 0; k < MAXA; k++) {
+    let el = tagEls[k];
+    const a = sched[k];
+    const show = a && time >= a.t0;
+    if (!show) { if (el) el.style.opacity = '0'; continue; }
+    if (!el) {
+      el = tagEls[k] = document.createElement('div');
+      el.className = 'tag';
+      el.innerHTML = '<b></b><span></span>';
+      tagsEl.appendChild(el);
+    }
+    const prog = s[k * 4], cAt = s[k * 4 + 1];
+    const px = s[(MAXA + k) * 4], py = s[(MAXA + k) * 4 + 1];
+    const isC = cAt >= 0;
+    if (isC) contained++; else live++;
+    const since = isC ? time - cAt : 0;
+    const age = time - a.t0;
+    el.querySelector('b').textContent = a.name;
+    el.querySelector('span').textContent = isC
+      ? `contained in ${(cAt - a.t0).toFixed(1)} s`
+      : (prog > 0.02 ? `hunters converging, ${Math.round(prog * 100)}%` : 'hunters re-routing');
+    el.classList.toggle('cold', isC);
+    // right of the threat if there is room, otherwise above it (veins tend to arrive from below)
+    const lw = el.offsetWidth || 200;
+    const right = px + a.r + 30 + lw < W - 12;
+    el.classList.toggle('above', !right);
+    let x, y;
+    if (right) { x = px + a.r + 30; y = py - 16; }
+    else { x = Math.min(W - 12 - lw, Math.max(12, px - lw / 2)); y = py > a.r + 80 ? py - a.r - 66 : py + a.r + 30; }
+    el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+    const op = Math.min(1, age / 0.5) * (isC ? 1 - smooth(4.5, 6.5, since) : 1);
+    el.style.opacity = op.toFixed(2);
+  }
+  const n = cfg.N.toLocaleString('en-US');
+  hudEl.innerHTML = `<b>${n}</b> hunters<br>${live ? `<span class="hot">${live} live</span>, ` : ''}${contained} contained`;
+}
+function clearLabels() { for (const el of tagEls) if (el) el.style.opacity = '0'; }
+
+/* ---------------- honeypots ---------------- */
+function dropHoneypot(x, y) {
+  if (!playing || busy || !cfg) return;
+  const time = simStep * DT;
+  let k = sched.length;
+  if (k >= MAXA) {
+    // recycle the oldest finished honeypot
+    k = -1;
+    for (let i = cfg.story.length; i < MAXA; i++) {
+      const cAt = stateCache ? stateCache[i * 4 + 1] : -1;
+      if (cAt >= 0 && time - cAt > 3) { k = i; break; }
+    }
+    if (k < 0) return;
+  }
+  const a = { name: 'Honeypot tripped', child: false, x0: x, y0: y, x1: x, y1: y, t0: time + DT, ms: 0, md: 0,
+    tough: 0.8, r: cfg.portrait ? 21 : 24, minAge: 1.5, emit: 1, wob: 0 };
+  sched[k] = a;
+  backend.setAnomaly(k, a, sched);
+}
+
+/* ---------------- play / pause ---------------- */
+function setPlaying(v) {
+  playing = v;
+  playBtn.textContent = v ? 'Pause' : 'Play';
+  playBtn.setAttribute('aria-pressed', String(!v));
+  canvas.classList.toggle('live', v);
+  last = null;
+}
+
+window.__seek = (time) => {
+  setPlaying(false);
+  const tt = +time || 0;
+  return ready.then(() => backend && seek(tt));
+};
+window.__play = () => { setPlaying(true); };
+
+playBtn.addEventListener('click', () => setPlaying(!playing));
+function setNotes(show) {
+  notes.hidden = !show; showNotes.hidden = show;
+  (show ? hideNotes : showNotes).focus({ preventScroll: true });
+}
+hideNotes.addEventListener('click', () => setNotes(false));
+showNotes.addEventListener('click', () => setNotes(true));
+window.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'h' || e.key === 'H') { setNotes(notes.hidden); e.preventDefault(); }
+  else if (e.key === ' ' || e.code === 'Space') {
+    const a = document.activeElement;
+    if (a && (a.tagName === 'BUTTON' || a.tagName === 'A')) return;
+    e.preventDefault(); setPlaying(!playing);
+  }
+});
+function bindPointer() {
+  canvas.addEventListener('pointerdown', e => dropHoneypot(e.clientX, e.clientY));
+}
+
+let resizeTimer = 0;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(async () => {
+    if (!backend) return;
+    await ready;
+    busy = true;
+    await setup();
+    clearLabels();
+    await seek(t);
+  }, 200);
+});
+
+/* ---------------- boot ---------------- */
+setPlaying(playing);
+const ready = (async () => {
+  try {
+    if (!FORCE_GL) backend = await createWebGPU();
+  } catch (e) { backend = null; if (DEBUG) console.log('webgpu init failed', e); }
+  if (!backend) {
+    backend = typeof createWebGL === 'function' ? createWebGL() : null;
+    if (backend) {
+      const p = document.createElement('p');
+      p.className = 'missing';
+      p.textContent = 'Your browser has no WebGPU, so this is a WebGL2 version with fewer agents. The full piece runs over a million hunters in compute shaders.';
+      notes.querySelector('.tech').before(p);
+    }
+  }
+  if (!backend) {
+    const d = document.createElement('div');
+    d.className = 'fallback';
+    d.textContent = 'This piece needs WebGPU or WebGL2, and this browser provides neither.';
+    document.body.appendChild(d);
+    return;
+  }
+  await setup();
+  if (backend.kind === 'webgpu' && !LOW && !FULL) {
+    // scale the hunter count to the GPU: halve until a step fits the frame budget
+    resetSim();
+    for (let i = 0; i < 3; i++) {
+      const ms = await backend.bench();
+      if (DEBUG) console.log('bench', cfg.N, ms.toFixed(2), 'ms/step');
+      if (ms < 4.5 || cfg.N < 300000) break;
+      agentScale /= 2;
+      await setup();
+      resetSim();
+    }
+  }
+  bindPointer();
+  await seek(startT);
+  raf = requestAnimationFrame(frame);
+})();
+})();
+</script>
+</body>
+</html>

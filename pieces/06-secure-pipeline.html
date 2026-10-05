@@ -1,0 +1,1415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Secure pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--void)}
+body{color:var(--frost);font-family:"Schibsted Grotesk",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.glow{position:fixed;inset:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 62% 58% at 50% 42%, rgba(47,79,168,.20), rgba(47,79,168,0) 72%),
+    radial-gradient(ellipse 30% 26% at 50% 38%, rgba(79,163,224,.07), rgba(79,163,224,0) 70%)}
+#scene{position:fixed;inset:0;width:100vw;height:100vh;display:block;overflow:hidden}
+#scene text{font-family:"Martian Mono",ui-monospace,monospace;white-space:pre}
+#scene .code{font-stretch:75%;font-weight:400}
+#scene .sign{font-stretch:100%;font-weight:400}
+#scene .lbl{font-stretch:100%;font-weight:400}
+.hit{fill:transparent;stroke:none;cursor:pointer;outline:none}
+.hit:focus{outline:none}
+.hit:focus-visible{stroke:var(--ice);stroke-width:1.5px;stroke-dasharray:5 4;stroke-opacity:.85;outline:none}
+.tip{position:fixed;left:0;top:0;z-index:5;max-width:260px;padding:10px 12px 11px;pointer-events:none;
+  background:rgba(16,12,42,.82);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid rgba(155,232,255,.28);border-radius:10px;color:var(--frost);
+  font:400 13px/1.45 "Schibsted Grotesk",system-ui,sans-serif;box-shadow:0 8px 28px rgba(5,3,20,.55)}
+.tip strong{font-weight:600}
+.tip[hidden]{display:none}
+
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+</style>
+</head>
+<body>
+<div class="glow" aria-hidden="true"></div>
+<svg id="scene" xmlns="http://www.w3.org/2000/svg" aria-labelledby="scene-title">
+  <title id="scene-title">An isometric pipeline: a prompt becomes code, passes a policy gate, a sandbox and a signed release; flagged changes fall into quarantine</title>
+</svg>
+<div class="tip" id="tip" role="tooltip" hidden></div>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Secure pipeline</h1>
+  <p>An AI agent's changes ride a conveyor through a policy gate: clean ones cool to ice and ship signed, hot ones are diverted into quarantine.</p>
+  <ul class="tech">
+    <li>Hand-rolled isometric engine: true 2:1 dimetric projection, extruded prisms, cylinders and an arch</li>
+    <li>Painter's algorithm with a topological depth sort that re-runs only when moving parts change</li>
+    <li>Retained SVG: every element is created once, then its attributes are set per frame from t alone</li>
+    <li>Code, labels and emblems skewed onto iso faces with SVG matrix transforms</li>
+    <li>Seeded token schedule: about one change in five heats up at the gate and diverts</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<script>
+(() => {
+'use strict';
+const NS = 'http://www.w3.org/2000/svg';
+const $ = id => document.getElementById(id);
+
+/* ------------------------------------------------------------------ palette */
+const C = { void:'#100C2A', deep:'#1B1747', steel:'#4E5A8C', mist:'#8C93C4', ice:'#9BE8FF', frost:'#E8F7FF',
+  h0:'#3A0F6B', h1:'#9B1D8F', h2:'#F0306A', h3:'#FF7A2F', h4:'#FFD36B', h5:'#FFF6E0' };
+const HEAT = [C.h0, C.h1, C.h2, C.h3, C.h4, C.h5];
+const COLD = ['#1B1747', '#2F4FA8', '#4FA3E0', '#9BE8FF', '#E8F7FF'];
+const rgbCache = new Map();
+function rgb(h){ let v = rgbCache.get(h); if (!v){ v = [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; rgbCache.set(h, v); } return v; }
+function mix(a, b, t){
+  t = clamp01(t); const A_ = rgb(a), B_ = rgb(b); let s = '#';
+  for (let k = 0; k < 3; k++){ const v = Math.round(A_[k] + (B_[k] - A_[k]) * t); s += (v < 16 ? '0' : '') + v.toString(16); }
+  return s;
+}
+function ramp(stops, x){ x = clamp01(x) * (stops.length - 1); const i = Math.min(stops.length - 2, Math.floor(x)); return mix(stops[i], stops[i + 1], x - i); }
+const ironbow = x => ramp(HEAT, x);
+const coldbow = x => ramp(COLD, x);
+function tones(base, k){ k = k == null ? 1 : k; return { top: mix(base, '#FFFFFF', .30 * k), left: base, right: mix(base, '#0A0820', .38 * k) }; }
+
+const TONE = {
+  block:  { top:'#3A3D88', left:'#2A2A6A', right:'#1D1B4E' },
+  vault:  { top:'#383E86', left:'#282C68', right:'#1B1A4A' },
+  pillar: { top:'#3E4392', left:'#2C2F72', right:'#1E1D52' },
+  lintel: { top:'#444A9A', left:'#30337A', right:'#212058' },
+  bin:    { top:'#3B3478', left:'#2B2662', right:'#1D1948' },
+  binIn:  { top:'#3B3478', left:'#1A163F', right:'#141134' },
+  track:  { top:'#26245E', left:'#1C1A4B', right:'#141239' },
+  plat:   { top:'#1B1848', left:'#18153F', right:'#100D2F' },
+  platLo: { left:'#120F33', right:'#0C0A25' },
+  pad:    { top:'#2E3170', left:'#3A3D82', right:'#1B1A48' },
+  post:   { top:'#4A4F9C', left:'#343884', right:'#22215A' },
+  head:   { top:'#5A62B0', left:'#4A4F9C', right:'#25255E' },
+  plinth: { top:'#33367E', left:'#25265F', right:'#1A1946' }
+};
+
+/* ------------------------------------------------------------------ math */
+function clamp01(x){ return x < 0 ? 0 : x > 1 ? 1 : x; }
+const lerp = (a, b, t) => a + (b - a) * t;
+const easeInOut = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+const easeIn = t => t * t * t;
+const backOut = (t, s) => { s = s == null ? 1.9 : s; const u = t - 1; return 1 + (s + 1) * u * u * u + s * u * u; };
+const smooth = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const mod = (a, n) => ((a % n) + n) % n;
+function mulberry32(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rnd = (i, salt) => mulberry32(Math.imul(i | 0, 2654435761) ^ Math.imul((salt | 0) + 7, 974711) ^ 0x5EC0DE)();
+
+/* ------------------------------------------------------------------ iso projection
+   True 2:1 dimetric: camera azimuth 45 deg, elevation 30 deg. One world unit along x
+   moves (1, 0.5) on screen; one unit up moves sqrt(1.5) = 1.2247 up. */
+const S = 40, ZK = Math.sqrt(1.5), K = S / 100;
+const P = (x, y, z) => [(x - y) * S, ((x + y) * .5 - ZK * z) * S];
+const VIEW = [0.6124, 0.6124, 0.5];
+const LIGHT = (() => { const v = [-.25, .5, .83], l = Math.hypot(...v); return v.map(c => c / l); })();
+const f1 = v => Math.round(v * 10) / 10;
+const f2 = v => Math.round(v * 100) / 100;
+function ps(arr){ let s = ''; for (let k = 0; k < arr.length; k++){ const p = arr[k]; s += f1(p[0]) + ',' + f1(p[1]) + (k < arr.length - 1 ? ' ' : ''); } return s; }
+
+/* ------------------------------------------------------------------ retained-mode pen
+   Draw calls look immediate, but each call reuses the element created the first time
+   at that position in the sequence; attributes are only written when they change. */
+function mk(tag, parent, attrs){ const e = document.createElementNS(NS, tag); e._a = {}; if (attrs) for (const k in attrs) A(e, k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function A(e, k, v){ if (e._a[k] === v) return; e._a[k] = v; if (v == null) e.removeAttribute(k); else e.setAttribute(k, v); }
+function TX(e, s){ if (e._t !== s){ e._t = s; e.textContent = s; } }
+class Pen {
+  constructor(g){ this.g = g; this.els = []; this.n = 0; }
+  begin(){ this.n = 0; return this; }
+  el(tag){
+    let e = this.els[this.n];
+    if (!e || e.localName !== tag){ const ne = mk(tag); if (e) this.g.replaceChild(ne, e); else this.g.appendChild(ne); this.els[this.n] = e = ne; }
+    else if (e._off){ e._off = false; e.removeAttribute('display'); }
+    this.n++; return e;
+  }
+  end(){ for (let k = this.n; k < this.els.length; k++){ const e = this.els[k]; if (!e._off){ e._off = true; e.setAttribute('display', 'none'); } } }
+}
+
+/* primitives */
+function face(pen, p, fill, op){
+  const e = pen.el('polygon'); A(e, 'points', ps(p)); A(e, 'fill', fill); A(e, 'stroke', fill);
+  A(e, 'stroke-width', '0.7'); A(e, 'stroke-linejoin', 'round'); A(e, 'opacity', op == null || op >= 1 ? null : String(f2(op))); return e;
+}
+function glass(pen, p, fill, fop, stroke, sop){
+  const e = pen.el('polygon'); A(e, 'points', ps(p)); A(e, 'fill', fill); A(e, 'fill-opacity', String(f2(fop)));
+  A(e, 'stroke', stroke); A(e, 'stroke-opacity', String(f2(sop))); A(e, 'stroke-width', '1');
+  A(e, 'vector-effect', 'non-scaling-stroke'); A(e, 'stroke-linejoin', 'round'); return e;
+}
+function line(pen, p, stroke, w, op){
+  const e = pen.el('polyline'); A(e, 'points', ps(p)); A(e, 'fill', 'none'); A(e, 'stroke', stroke);
+  A(e, 'stroke-width', String(w)); A(e, 'stroke-opacity', String(f2(op))); A(e, 'vector-effect', 'non-scaling-stroke');
+  A(e, 'stroke-linecap', 'round'); A(e, 'stroke-linejoin', 'round'); return e;
+}
+function circ(pen, cx, cy, r, fill, op){ const e = pen.el('circle'); A(e, 'cx', String(f1(cx))); A(e, 'cy', String(f1(cy))); A(e, 'r', String(f1(Math.max(0, r)))); A(e, 'fill', fill); A(e, 'opacity', String(f2(op))); return e; }
+
+/* extruded box: three visible faces, toned top > left > right, 1px hairline on the near top edges */
+/* a gradient whose isolines follow the face's horizontal edges, so walls darken toward the floor */
+function shadeGrad(pen, id, p0, dir, len, c){
+  const e = pen.el('linearGradient');
+  if (!e._init){ e._init = true; A(e, 'id', id); A(e, 'gradientUnits', 'userSpaceOnUse'); e._s0 = mk('stop', e, { offset:'0' }); e._s1 = mk('stop', e, { offset:'1' }); }
+  const k = len / 1.25;
+  A(e, 'x1', String(f1(p0[0]))); A(e, 'y1', String(f1(p0[1]))); A(e, 'x2', String(f1(p0[0] + dir * .5 * k))); A(e, 'y2', String(f1(p0[1] + k)));
+  A(e._s0, 'stop-color', mix(c, '#FFFFFF', .05)); A(e._s1, 'stop-color', mix(c, '#05031A', .30));
+  return 'url(#' + id + ')';
+}
+function prism(pen, x, y, z, w, d, h, t, o){
+  o = o || {};
+  const x1 = x + w, y1 = y + d, z1 = z + h;
+  const a = P(x, y, z1), b = P(x1, y, z1), c = P(x1, y1, z1), dd = P(x, y1, z1);
+  const bb = P(x1, y, z), cb = P(x1, y1, z), db = P(x, y1, z);
+  let fl = t.left, fr = t.right;
+  if (o.gid){ const len = ZK * h * S; fl = shadeGrad(pen, o.gid + 'L', dd, -1, len, t.left); fr = shadeGrad(pen, o.gid + 'R', c, 1, len, t.right); }
+  const eL = face(pen, [dd, c, cb, db], t.left, o.op); if (o.gid) A(eL, 'fill', fl);
+  const eR = face(pen, [c, b, bb, cb], t.right, o.op); if (o.gid) A(eR, 'fill', fr);
+  face(pen, [a, b, c, dd], t.top, o.op);
+  line(pen, [dd, c, b], o.hc || C.frost, 1, (o.hop == null ? .24 : o.hop) * (o.op == null ? 1 : o.op));
+  if (o.edge) line(pen, [c, cb], C.frost, 1, o.edge * (o.op == null ? 1 : o.op));
+}
+function boxPrism(pen, b, t, o){ prism(pen, b[0], b[1], b[2], b[3] - b[0], b[4] - b[1], b[5] - b[2], t, o); }
+
+/* vertical cylinder: side band with a horizontal gradient, elliptical top (r*sqrt2 by r*sqrt2/2 on screen) */
+const gradCache = new Map();
+let defs;
+function cylGrad(t){
+  const key = t.left + t.right;
+  let id = gradCache.get(key);
+  if (!id){
+    id = 'cg' + gradCache.size;
+    const g = mk('linearGradient', defs, { id, x1:'0', x2:'1', y1:'0', y2:'0' });
+    mk('stop', g, { offset:'0', 'stop-color': t.left });
+    mk('stop', g, { offset:'.45', 'stop-color': mix(t.left, t.right, .35) });
+    mk('stop', g, { offset:'1', 'stop-color': t.right });
+    gradCache.set(key, id);
+  }
+  return 'url(#' + id + ')';
+}
+function cyl(pen, cx, cy, z, r, h, t, o){
+  o = o || {};
+  const [tx, ty] = P(cx, cy, z + h), [bx, by] = P(cx, cy, z), rx = r * Math.SQRT2 * S, ry = rx / 2;
+  const e = pen.el('path');
+  A(e, 'd', `M${f1(tx - rx)},${f1(ty)}L${f1(bx - rx)},${f1(by)}A${f1(rx)},${f1(ry)} 0 0 0 ${f1(bx + rx)},${f1(by)}L${f1(tx + rx)},${f1(ty)}A${f1(rx)},${f1(ry)} 0 0 1 ${f1(tx - rx)},${f1(ty)}Z`);
+  A(e, 'fill', cylGrad(t)); A(e, 'opacity', o.op == null ? null : String(f2(o.op)));
+  const top = pen.el('ellipse'); A(top, 'cx', String(f1(tx))); A(top, 'cy', String(f1(ty))); A(top, 'rx', String(f1(rx))); A(top, 'ry', String(f1(ry)));
+  A(top, 'fill', o.topFill || t.top); A(top, 'opacity', o.op == null ? null : String(f2(o.op)));
+  const hl = pen.el('path'); A(hl, 'd', `M${f1(tx - rx)},${f1(ty)}A${f1(rx)},${f1(ry)} 0 0 0 ${f1(tx + rx)},${f1(ty)}`);
+  A(hl, 'fill', 'none'); A(hl, 'stroke', C.frost); A(hl, 'stroke-opacity', String(f2(o.hop == null ? .28 : o.hop)));
+  A(hl, 'stroke-width', '1'); A(hl, 'vector-effect', 'non-scaling-stroke');
+}
+
+/* face-local coordinates (1/100 world unit). u runs left-to-right on screen along the face, v runs down. */
+function faceMat(fc, b, ztop){
+  if (fc === 'left'){ const [ex, ey] = P(b[0], b[3], ztop); return `matrix(${K} ${K / 2} 0 ${f2(K * ZK)} ${f1(ex)} ${f1(ey)})`; }
+  const [ex, ey] = P(b[2], b[3], ztop); return `matrix(${K} ${-K / 2} 0 ${f2(K * ZK)} ${f1(ex)} ${f1(ey)})`;
+}
+const b4 = b => [b[0], b[1], b[3], b[4]];
+function fp(fc, b, ztop, u, v){ return fc === 'left' ? P(b[0] + u, b[3], ztop - v) : P(b[2], b[3] - u, ztop - v); }
+function floorMat(dir, x, y, z){ const [ex, ey] = P(x, y, z); return dir === 'x' ? `matrix(${K} ${K / 2} ${-K} ${K / 2} ${f1(ex)} ${f1(ey)})` : `matrix(${K} ${-K / 2} ${K} ${K / 2} ${f1(ex)} ${f1(ey)})`; }
+function panelQuad(pen, fc, b, ztop, u0, v0, u1, v1, fill, stroke, sop){
+  const q = [fp(fc, b, ztop, u0, v0), fp(fc, b, ztop, u1, v0), fp(fc, b, ztop, u1, v1), fp(fc, b, ztop, u0, v1)];
+  const e = glass(pen, q, fill, 1, stroke, sop); return e;
+}
+function txt(pen, s, x, y, o){
+  const e = pen.el('text'); A(e, 'x', String(f1(x))); A(e, 'y', String(f1(y))); A(e, 'class', o.cls || 'code');
+  A(e, 'transform', o.m); A(e, 'font-size', String(f1(o.fs))); A(e, 'fill', o.fill); A(e, 'opacity', String(f2(o.op == null ? 1 : o.op)));
+  A(e, 'text-anchor', o.anchor || null); A(e, 'filter', o.filter || null); TX(e, s); return e;
+}
+function spanTxt(pen, spans, nChars, x, y, o){
+  const e = pen.el('text'); A(e, 'x', String(f1(x))); A(e, 'y', String(f1(y))); A(e, 'class', 'code');
+  A(e, 'transform', o.m); A(e, 'font-size', String(f1(o.fs))); A(e, 'opacity', String(f2(o.op == null ? 1 : o.op))); A(e, 'filter', o.filter || null);
+  const kids = e._kids || (e._kids = []);
+  let left = nChars, idx = 0;
+  for (const sp of spans){
+    if (left <= 0) break;
+    const part = sp[0].length <= left ? sp[0] : sp[0].slice(0, left); left -= part.length;
+    let ts = kids[idx];
+    if (!ts){ ts = mk('tspan', e); kids[idx] = ts; }
+    if (ts._off){ ts._off = false; ts.removeAttribute('display'); }
+    TX(ts, part); A(ts, 'fill', sp[1]); idx++;
+  }
+  for (let k = idx; k < kids.length; k++) if (!kids[k]._off){ kids[k]._off = true; kids[k].setAttribute('display', 'none'); }
+  return e;
+}
+
+/* ------------------------------------------------------------------ content */
+const COL = { cmt:'#6A73A8', kw:'#9AA3DA', id:'#DDE6FA', str:'#B9C3F2', num:'#B9C3F2', dec:'#9AA3DA', pun:'#8F98C8' };
+const CLEAN = [
+  { p:'add password reset', f:'auth/reset.py', code:['def reset(user):', '  t = token_urlsafe()', '  store(t, user.id)', '  send_link(user, t)'] },
+  { p:'paginate orders', f:'api/orders.py', code:['@app.get("/orders")', 'def orders(page=1):', '  q = Order.query', '  return q.page(page)'] },
+  { p:'rate limit login', f:'api/login.py', code:['@app.post("/login")', '@limit("5/minute")', 'def login(form):', '  return check(form)'] },
+  { p:'log audit events', f:'audit.ts', code:['export const log =', '  (e: AuditEvent) =>', '    db.insert(audit)', '      .values(e);'] }
+];
+const HOSTILE = [
+  { p:'search users', f:'users.py', code:['def search(name):', '  q = ("SELECT * FROM "', '    "users WHERE "', '    f"name=\'{name}\'")', '  return db.run(q)'], fail:0, find:'SQL injection' },
+  { p:'add checkout', f:'billing.py', code:['import stripe', 'stripe.api_key = (', '  "sk_live_51NcX9Q2")', 'def checkout(cart):'], fail:1, find:'Hardcoded key' },
+  { p:'add pdf export', f:'requirements.txt', code:['reportlab==4.2.2', 'pypdf==4.3.1', 'acme-pdf-utils', 'jinja2==3.1.4'], fail:2, find:'Unpinned dep' }
+];
+const KW = /^(def|return|import|from|export|const|await|async|class|if|for|in|with|as|None|True|False)\b/;
+function tokenize(line){
+  if (/^\s*#/.test(line)) return [[line, COL.cmt]];
+  const out = []; let i = 0;
+  const push = (s, c) => { if (out.length && out[out.length - 1][1] === c) out[out.length - 1][0] += s; else out.push([s, c]); };
+  while (i < line.length){
+    const r = line.slice(i); let m, c;
+    if ((m = r.match(/^\s+/))) c = COL.pun;
+    else if ((m = r.match(/^f?"[^"]*"?/))) c = COL.str;
+    else if ((m = r.match(/^'[^']*'?/))) c = COL.str;
+    else if ((m = r.match(/^@[\w.]+/))) c = COL.dec;
+    else if ((m = r.match(KW))) c = COL.kw;
+    else if ((m = r.match(/^\d[\d.]*/))) c = COL.num;
+    else if ((m = r.match(/^[A-Za-z_][\w]*/))) c = COL.id;
+    else { m = [r[0]]; c = COL.pun; }
+    push(m[0], c); i += m[0].length;
+  }
+  return out;
+}
+for (const T_ of CLEAN.concat(HOSTILE)){
+  T_.lines = ['# ' + T_.f].concat(T_.code).map(s => ({ s, spans: tokenize(s), n: s.length }));
+  T_.chars = T_.lines.reduce((a, l) => a + l.n + 4, 0);
+}
+const CHECKS = ['SAST', 'Secrets', 'Deps'];
+const INFO = {
+  prompt:  ['Prompt', 'a developer describes the change in plain words, like adding a password reset.'],
+  agent:   ['Agent', 'the AI coding agent writes the diff. Nothing it produces is trusted yet.'],
+  gate:    ['Policy gate', 'blocks hardcoded secrets, unpinned dependencies and injection patterns.'],
+  sandbox: ['Sandbox', 'tests run in an isolated container with no network and no production keys.'],
+  release: ['Signed release', 'the build is signed and its provenance recorded before it can ship.'],
+  bin:     ['Quarantine', 'flagged changes are held with the finding attached and sent back for a fix.']
+};
+
+/* ------------------------------------------------------------------ layouts */
+/* Desktop: one straight conveyor along +x. Mobile portrait: a two-column zig-zag with the
+   stations at the corners, so no station hides another and the face text stays large. */
+const LD = {
+  name:'d',
+  rects:[[0, 0, 26, 5.2], [12.4, 5.2, 17.0, 9.4]],
+  main:[[2.4, 2.6], [14.6, 2.6], [25.0, 2.6]],
+  branch:[[14.6, 2.6], [14.6, 5.85]],
+  prompt: { b:[0.5, 1.1, 4.3, 4.1], h:1.9, tp:[2.4, 2.6], exit:'x', tface:'left' },
+  agent:  { b:[5.6, 1.1, 9.8, 4.1], h:4.2, tp:[7.7, 2.6], exit:'x', tface:'left' },
+  gate:   { type:'arch', c:[12.6, 2.6], T:1.8, W:2.4, P:0.8, H:3.6, Lh:0.8 },
+  sandbox:{ b:[16.0, 1.1, 19.2, 4.1], h:2.5, tp:[17.6, 2.6], back:'y0', front:'y1' },
+  release:{ b:[20.6, 1.1, 23.8, 4.1], h:2.2, tp:[22.2, 2.6], exit:'x', tface:'left' },
+  bin:    { b:[13.4, 6.2, 15.8, 8.6], h:1.1 },
+  pad:[25.0, 2.6],
+  labels:[['Prompt', 0.5, 4.36, 'x'], ['Agent', 5.6, 4.36, 'x'], ['Sandbox', 16.0, 4.76, 'x'], ['Signed release', 20.6, 4.36, 'x']]
+};
+const LM = {
+  name:'m',
+  rects:[[-2.6, -1.5, 3.8, 1.9], [3.3, -2.7, 6.7, 3.0], [4.4, 2.4, 5.6, 5.3], [3.35, 4.95, 6.65, 8.25], [6.4, 6.0, 12.0, 7.2],
+         [8.4, 3.2, 9.6, 6.6], [7.55, 0.55, 10.45, 3.45], [10.7, 4.95, 15.0, 8.6], [12.4, 8.0, 13.6, 12.4], [11.35, 11.95, 14.65, 15.6], [14.4, 13.0, 16.55, 14.2]],
+  main:[[0, 0], [5.0, 0], [5.0, 6.6], [9.0, 6.6], [13.0, 6.6], [13.0, 13.6], [15.8, 13.6]],
+  branch:[[9.0, 6.6], [9.0, 3.5]],
+  prompt: { b:[-2.3, -1.2, 2.3, 1.2], h:1.9, tp:[0, 0], exit:'x', tface:'left' },
+  agent:  { b:[3.6, -2.4, 6.4, 2.4], h:3.8, tp:[5.0, 0], exit:'y', tface:'right', roofLabel:true },
+  gate:   { type:'canopy', b:[3.6, 5.2, 6.4, 8.0], c:[5.0, 6.6], P:0.5, H:3.0, Lh:0.7 },
+  sandbox:{ b:[11.6, 5.2, 14.4, 8.0], h:1.8, tp:[13.0, 6.6], back:'y0', front:'x1' },
+  release:{ b:[11.6, 12.2, 14.4, 15.0], h:2.0, tp:[13.0, 13.6], exit:'x', tface:'left' },
+  bin:    { b:[7.8, 0.8, 10.2, 3.2], h:1.1 },
+  pad:[15.8, 13.6],
+  labels:[['Prompt', -2.3, 1.38, 'x'], ['Sandbox', 10.9, 8.18, 'x'], ['Signed release', 11.6, 15.18, 'x']]
+};
+
+/* ------------------------------------------------------------------ schedule (pure functions of t) */
+const DT = 2.0, TRZ = 0.09, TS = 0.62, HOP = 0.7, BIN_LIFE = 30;
+const DW = { prompt:.6, agent:1.35, gate:1.15, sandbox:1.3, release:.95 };
+const mdur = d => .45 + Math.abs(d) * .16;
+const OVR = { '0':1, '6':1, '-3':1, '-9':1, '1':0, '2':0, '3':0, '4':0, '5':0, '7':0, '8':0, '9':0, '-1':0, '-2':0, '-4':0, '-5':0 };
+const HTASK = { '0':1, '6':0, '-3':2, '-9':1 };
+function isHostile(i){ const k = String(i); if (k in OVR) return !!OVR[k]; return rnd(i, 1) < .2; }
+function taskOf(i){
+  if (isHostile(i)){ const k = String(i); return HOSTILE[k in HTASK ? HTASK[k] : Math.floor(rnd(i, 2) * 3) % 3]; }
+  return CLEAN[mod(i, 4)];
+}
+
+let LY = null, PA = null, PL = null, T0 = 0, OPAQUE = [], GG = null;
+function mkPath(pts){ const segs = []; let acc = 0; for (let k = 0; k < pts.length - 1; k++){ const a = pts[k], b = pts[k + 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]); segs.push({ a, b, len, acc }); acc += len; } return { pts, segs, len: acc }; }
+function at(pa, s){
+  s = Math.max(0, Math.min(pa.len, s)); let sg = pa.segs[pa.segs.length - 1];
+  for (const g of pa.segs) if (s <= g.acc + g.len + 1e-9){ sg = g; break; }
+  const u = sg.len ? (s - sg.acc) / sg.len : 0; return [lerp(sg.a[0], sg.b[0], u), lerp(sg.a[1], sg.b[1], u), Math.abs(sg.b[0] - sg.a[0]) > 1e-9 ? 'x' : 'y'];
+}
+function proj(pa, p){
+  let best = 0, bd = Infinity;
+  for (const g of pa.segs){
+    const dx = g.b[0] - g.a[0], dy = g.b[1] - g.a[1]; const u = clamp01(((p[0] - g.a[0]) * dx + (p[1] - g.a[1]) * dy) / (g.len * g.len));
+    const d = Math.hypot(p[0] - (g.a[0] + dx * u), p[1] - (g.a[1] + dy * u)); if (d < bd - 1e-9){ bd = d; best = g.acc + u * g.len; }
+  }
+  return best;
+}
+const ctr = st => [(st.b[0] + st.b[2]) / 2, (st.b[1] + st.b[3]) / 2];
+
+function buildPlans(){
+  const main = LY.main, J = LY.branch[0];
+  const jIdx = main.findIndex(p => p[0] === J[0] && p[1] === J[1]);
+  PA = { c: mkPath(main), h: mkPath(main.slice(0, jIdx + 1).concat(LY.branch.slice(1))) };
+  const sP = 0, sA = proj(PA.c, LY.agent.tp), sG = proj(PA.c, LY.gate.c), sS = proj(PA.c, LY.sandbox.tp), sR = proj(PA.c, LY.release.tp);
+  const sE = PA.c.len, sB = PA.h.len;
+  function plan(hostile){
+    const segs = []; let t = 0; const m = {};
+    const dwell = (s, d, tag) => { m[tag] = t; segs.push({ t0:t, t1:t + d, s0:s, s1:s, k:'dwell', tag }); t += d; };
+    const move = (s0, s1, f) => { const d = mdur(s1 - s0) * (f || 1); segs.push({ t0:t, t1:t + d, s0, s1, k:'move' }); t += d; };
+    dwell(sP, DW.prompt, 'prompt'); move(sP, sA); dwell(sA, DW.agent, 'agent'); move(sA, sG); dwell(sG, DW.gate, 'gate');
+    if (!hostile){
+      move(sG, sS); dwell(sS, DW.sandbox, 'sandbox'); move(sS, sR); dwell(sR, DW.release, 'release'); move(sR, sE, .9);
+      m.rise = t; segs.push({ t0:t, t1:t + 1.5, s0:sE, s1:sE, k:'rise' }); t += 1.5;
+    } else {
+      move(sG, sB, 1.05); m.hop = t; segs.push({ t0:t, t1:t + HOP, s0:sB, s1:sB, k:'hop' }); t += HOP;
+      m.land = t; segs.push({ t0:t, t1:t + BIN_LIFE, s0:sB, s1:sB, k:'rest' }); t += BIN_LIFE;
+    }
+    return { segs, end:t, m };
+  }
+  PL = { c: plan(false), h: plan(true) };
+  T0 = 1.0 - PL.c.m.gate - .72 * DW.gate;
+  slotMemo = new Map(); slotNext = -80;
+}
+
+/* quarantine slots: smallest free cell at landing time, memoised from a fixed origin so it stays a pure function */
+let slotMemo = new Map(), slotNext = -80;
+const SLOT_ORDER = [4, 2, 6, 1, 3, 5, 7, 0, 8];
+function slotOf(i){
+  if (slotMemo.has(i)) return slotMemo.get(i);
+  for (let j = slotNext; j <= i; j++){
+    if (!isHostile(j)) continue;
+    const land = j * DT + PL.h.m.land, used = new Set();
+    for (let q = j - 1; q >= j - 24; q--) if (slotMemo.has(q) && q * DT + PL.h.m.land + BIN_LIFE > land) used.add(slotMemo.get(q));
+    let s = 0; while (used.has(s)) s++;
+    slotMemo.set(j, s);
+  }
+  slotNext = Math.max(slotNext, i + 1);
+  return slotMemo.get(i);
+}
+function slotPos(s){
+  const b = LY.bin.b, wt = .16, cell = SLOT_ORDER[s % 9], layer = Math.floor(s / 9);
+  const col = cell % 3, row = Math.floor(cell / 3);
+  return [b[0] + wt + .05 + .34 + col * .68, b[1] + wt + .05 + .34 + row * .68, .045 + layer * TS];
+}
+
+const NEUTRAL = '#7C84B8';
+function tokenState(i, t){
+  const born = T0 + i * DT, tau = t - born;
+  if (tau < 0) return null;
+  const H = isHostile(i), pl = H ? PL.h : PL.c, m = pl.m;
+  if (tau >= pl.end) return null;
+  let sg = pl.segs[pl.segs.length - 1];
+  for (const g of pl.segs) if (tau < g.t1){ sg = g; break; }
+  const u = clamp01((tau - sg.t0) / (sg.t1 - sg.t0));
+  const pa = H ? PA.h : PA.c;
+  let x, y, z = TRZ, yaw = 0, op = 1, ax = 'x';
+  if (sg.k === 'move'){ [x, y, ax] = at(pa, lerp(sg.s0, sg.s1, easeInOut(u))); }
+  else if (sg.k === 'dwell'){
+    [x, y, ax] = at(pa, sg.s0);
+    if (sg.tag === 'sandbox'){ z += .32 * Math.sin(Math.PI * smooth(0, 1, u)); yaw = easeInOut(clamp01((u - .1) / .8)) * Math.PI / 2; }
+  }
+  else if (sg.k === 'rise'){ [x, y] = at(pa, sg.s0); z += .12 + 2.2 * easeIn(u) + .35 * easeOut(Math.min(1, u * 3)); op = 1 - smooth(.35, 1, u); }
+  else {
+    const sp = slotPos(slotOf(i)); const [bx, by] = at(pa, sg.s0);
+    if (sg.k === 'hop'){
+      const lf = easeInOut(clamp01((u - .22) / .6)), zTop = LY.bin.h + .42;
+      x = lerp(bx, sp[0], lf); y = lerp(by, sp[1], lf);
+      z = u < .5 ? lerp(TRZ, zTop, easeOut(u / .5)) : lerp(zTop, sp[2], easeIn((u - .5) / .5));
+    } else {
+      x = sp[0]; y = sp[1]; const a = tau - m.land;
+      z = sp[2] + Math.max(0, .14 * Math.sin(Math.min(1, a / .28) * Math.PI)) * (a < .28 ? 1 : 0);
+      op = 1 - smooth(BIN_LIFE - 8, BIN_LIFE, a);
+    }
+  }
+  /* colour: neutral until scanned; then ice (clean) or the ironbow ramp (hostile) */
+  const q = (tau - m.gate) / DW.gate;
+  let col = NEUTRAL, glow = C.mist, gop = 0, heat = 0, signed = false;
+  if (!H){
+    const k = smooth(.45, .95, q);
+    col = mix(NEUTRAL, coldbow(.76), k); glow = C.ice; gop = .34 * k;
+    if (m.release != null && tau >= m.release + .36 * DW.release){
+      const f = Math.exp(-(tau - m.release - .36 * DW.release) * 3);
+      col = mix(coldbow(.78), C.frost, .75 * f); signed = true; gop = .38 + .3 * f;
+    }
+  } else {
+    const k = clamp01((q - .38) / .5);
+    if (k > 0){
+      heat = q < 1.05 ? (k < .82 ? .96 * (k / .82) : .96 - .24 * ((k - .82) / .18)) : .72;
+      if (tau >= m.land) heat = .72 * Math.exp(-(tau - m.land) / 6.5);
+      heat += .025 * Math.sin(t * 11 + i * 1.7) * clamp01(heat * 1.5);
+      col = mix(NEUTRAL, ironbow(heat), smooth(0, .25, k)); glow = ironbow(Math.max(.4, heat)); gop = .95 * clamp01(heat / .55) * smooth(0, .25, k);
+    }
+  }
+  return { i, x, y, z, yaw, op, col, glow, gop, H, heat, signed, ax };
+}
+
+/* ------------------------------------------------------------------ station states at time t */
+function stateAt(t){
+  const s = {};
+  /* prompt typing */
+  {
+    const i = Math.floor((t - T0 + 1.15) / DT), born = T0 + i * DT, task = taskOf(i);
+    const typ = clamp01((t - (born - 1.15)) / .95);
+    s.prompt = { text: task.p.slice(0, Math.floor(typ * task.p.length + 1e-6)), typing: typ < 1, sent: smooth(born - .05, born + .25, t), prev: taskOf(i - 1).p, blink: (t * 1.6) % 1 < .6 };
+  }
+  /* agent writing code */
+  {
+    const st0 = PL.c.m.agent - .15, dur = DW.agent + .25;
+    const i = Math.floor((t - T0 - st0) / DT), start = T0 + i * DT + st0;
+    const tasks = [taskOf(i - 2), taskOf(i - 1), taskOf(i)];
+    const lines = []; for (const tk of tasks) for (const l of tk.lines) lines.push(l);
+    const cur = tasks[2], base = lines.length - cur.lines.length;
+    const typed = clamp01((t - start) / dur) * cur.chars;
+    let acc = 0, li = 0, chars = 0, lineStart = start;
+    for (let k = 0; k < cur.lines.length; k++){
+      const w = cur.lines[k].n + 4;
+      if (typed < acc + w || k === cur.lines.length - 1){ li = k; chars = Math.min(cur.lines[k].n, Math.max(0, Math.floor(typed - acc))); lineStart = start + (acc / cur.chars) * dur; break; }
+      acc += w;
+    }
+    s.agent = { lines, cur: base + li, chars, lineStart, active: t >= start && t < start + dur + .1, blink: (t * 1.6) % 1 < .6 };
+  }
+  /* gate */
+  {
+    const g0r = PL.c.m.gate, i = Math.round((t - T0 - g0r - DW.gate / 2) / DT), g0 = T0 + i * DT + g0r;
+    const p = (t - g0) / DW.gate, H = isHostile(i), fail = H ? taskOf(i).fail : -1;
+    const leds = [];
+    for (let k = 0; k < 3; k++){
+      const tk = .3 + .18 * k;
+      let state = 'idle', a = 1;
+      if (p >= tk - .14 && p < tk) state = 'check';
+      else if (p >= tk){ state = k === fail ? 'fail' : 'pass'; a = 1 - smooth(1 + .55 / DW.gate, 1 + .95 / DW.gate, p); if (a <= 0) state = 'idle'; }
+      leds.push({ state, a });
+    }
+    const active = p >= 0 && p <= 1;
+    let zs = GG.zTop, lc = C.mist, lop = .07;
+    if (active){
+      zs = GG.zTop - (GG.zTop - .14) * Math.sin(Math.PI * p);
+      lop = .2 + .08 * Math.sin(Math.PI * p);
+      if (H && p > .3 + .18 * fail) lc = mix(C.mist, C.h2, smooth(.3 + .18 * fail, .3 + .18 * fail + .08, p));
+      else if (!H && p > .72) lc = mix(C.mist, C.ice, smooth(.72, .86, p));
+    }
+    s.gate = { leds, zs, lc, lop, active, H, p, fail };
+  }
+  /* sandbox ticks */
+  {
+    const s0 = PL.c.m.sandbox, i = Math.round((t - T0 - s0 - DW.sandbox / 2) / DT), p = (t - T0 - i * DT - s0) / DW.sandbox;
+    let lit = 0, a = 0;
+    if (!isHostile(i) && p >= 0){ lit = Math.min(6, Math.max(0, Math.floor((p - .1) / .13) + 1)); a = 1 - smooth(1.12, 1.45, p); if (p < .1) lit = 0; }
+    s.sandbox = { lit: a > 0 ? lit : 0, a, p, busy: !isHostile(i) && p >= 0 && p <= 1 };
+  }
+  /* release press and seal */
+  {
+    const r0 = PL.c.m.release, so = r0 + .36 * DW.release;
+    const iNow = Math.round((t - T0 - r0 - DW.release / 2) / DT), p = (t - T0 - iNow * DT - r0) / DW.release, here = !isHostile(iNow);
+    let head = 0, open = 0;
+    if (here && p >= 0 && p <= 1.2){
+      if (p < .05) head = 0;
+      else if (p < .25) head = .12 * easeOut((p - .05) / .2);
+      else if (p < .36) head = lerp(.12, -.85, easeIn((p - .25) / .11));
+      else if (p < .44) head = -.85;
+      else head = lerp(-.85, 0, backOut(clamp01((p - .44) / .46), 2.2));
+      open = p < .36 ? smooth(-.1, .05, p) : 1 - backOut(clamp01((p - .36) / .3), 2.6);
+    }
+    const iLastMax = Math.floor((t - T0 - so) / DT);
+    let iLast = iLastMax; while (iLast > iLastMax - 30 && isHostile(iLast)) iLast--;
+    const tStamp = T0 + iLast * DT + so, age = t - tStamp;
+    let count = 0; for (let j = -20; j <= iLastMax; j++) if (!isHostile(j)) count++;
+    s.release = { head, open, age, ver: 'v1.4.' + (12 + count) };
+  }
+  /* latest quarantine finding */
+  {
+    const gq = PL.c.m.gate + .62 * DW.gate; let i = Math.floor((t - T0 - gq) / DT), n = 0;
+    while (!isHostile(i) && n++ < 60) i--;
+    s.bin = { find: taskOf(i).find, age: t - (T0 + i * DT + gq) };
+  }
+  return s;
+}
+
+/* ------------------------------------------------------------------ scene */
+let svg, L_bg, L_shadow, L_ground, L_gdyn, L_world, L_hit;
+let scene = null, view = null, ST = null;
+const lift = { prompt:0, agent:0, gate:0, sandbox:0, release:0, bin:0 };
+const liftT = { prompt:0, agent:0, gate:0, sandbox:0, release:0, bin:0 };
+const hoverK = {}, focusK = {};
+let pinned = null;
+
+function addItem(id, draw, o){
+  const g = mk('g', L_world);
+  const it = { id, g, pen: new Pen(g), b:[0, 0, 0, 0, 0, 0], draw, dyn: !!(o && o.dyn), st: o && o.st, last: null };
+  scene.items.push(it); return it;
+}
+
+function rasterize(rects, res){
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const r of rects){ x0 = Math.min(x0, r[0]); y0 = Math.min(y0, r[1]); x1 = Math.max(x1, r[2]); y1 = Math.max(y1, r[3]); }
+  const nx = Math.round((x1 - x0) / res), ny = Math.round((y1 - y0) / res), g = new Uint8Array(nx * ny);
+  for (const r of rects){
+    const i0 = Math.round((r[0] - x0) / res), i1 = Math.round((r[2] - x0) / res), j0 = Math.round((r[1] - y0) / res), j1 = Math.round((r[3] - y0) / res);
+    for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) g[j * nx + i] = 1;
+  }
+  return { g, nx, ny, x0, y0, res };
+}
+function erode(R, m){
+  let g = R.g; const { nx, ny } = R;
+  for (let k = 0; k < m; k++){
+    const n = new Uint8Array(g.length);
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++){
+      if (!g[j * nx + i]) continue; let ok = 1;
+      for (let dj = -1; dj <= 1 && ok; dj++) for (let di = -1; di <= 1; di++){ const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= nx || b >= ny || !g[b * nx + a]){ ok = 0; break; } }
+      n[j * nx + i] = ok;
+    }
+    g = n;
+  }
+  return Object.assign({}, R, { g });
+}
+function boundary(R){
+  const { g, nx, ny, x0, y0, res } = R, F = [];
+  const on = (i, j) => i >= 0 && j >= 0 && i < nx && j < ny && g[j * nx + i] === 1;
+  const scan = (outer, inner, test, emit) => { for (let a = 0; a < outer; a++){ let st = -1; for (let b = 0; b <= inner; b++){ const v = b < inner && test(a, b); if (v && st < 0) st = b; if (!v && st >= 0){ emit(a, st, b); st = -1; } } } };
+  scan(nx, ny, (i, j) => on(i, j) && !on(i + 1, j), (i, a, b) => F.push({ t:'x', s:1, c: x0 + (i + 1) * res, a: y0 + a * res, b: y0 + b * res }));
+  scan(ny, nx, (j, i) => on(i, j) && !on(i, j + 1), (j, a, b) => F.push({ t:'y', s:1, c: y0 + (j + 1) * res, a: x0 + a * res, b: x0 + b * res }));
+  scan(nx, ny, (i, j) => on(i, j) && !on(i - 1, j), (i, a, b) => F.push({ t:'x', s:-1, c: x0 + i * res, a: y0 + a * res, b: y0 + b * res }));
+  scan(ny, nx, (j, i) => on(i, j) && !on(i, j - 1), (j, a, b) => F.push({ t:'y', s:-1, c: y0 + j * res, a: x0 + a * res, b: x0 + b * res }));
+  return F;
+}
+
+/* painter's algorithm: topological order over pairs whose screen hexagons overlap */
+function cmpBox(a, b, ka, kb){
+  const E = 1e-3;
+  if (a[3] <= b[0] + E) return -1; if (b[3] <= a[0] + E) return 1;
+  if (a[4] <= b[1] + E) return -1; if (b[4] <= a[1] + E) return 1;
+  if (a[5] <= b[2] + E) return -1; if (b[5] <= a[2] + E) return 1;
+  return ka <= kb ? -1 : 1;
+}
+function topo(list){
+  const n = list.length, adj = [], indeg = new Int16Array(n), key = new Float64Array(n), R = [];
+  for (let i = 0; i < n; i++){
+    const b = list[i].b; adj.push([]); key[i] = b[0] + b[1] + b[2] + b[3] + b[4] + b[5];
+    R.push([b[0] - b[4], b[3] - b[1], b[1] - ZK * b[5], b[4] - ZK * b[2], b[0] - ZK * b[5], b[3] - ZK * b[2]]);
+  }
+  const E = 1e-3;
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++){
+    const a = R[i], c = R[j];
+    if (a[0] >= c[1] - E || c[0] >= a[1] - E || a[2] >= c[3] - E || c[2] >= a[3] - E || a[4] >= c[5] - E || c[4] >= a[5] - E) continue;
+    if (cmpBox(list[i].b, list[j].b, key[i], key[j]) < 0){ adj[i].push(j); indeg[j]++; } else { adj[j].push(i); indeg[i]++; }
+  }
+  const done = new Uint8Array(n), out = [];
+  for (let step = 0; step < n; step++){
+    let best = -1;
+    for (let i = 0; i < n; i++) if (!done[i] && indeg[i] <= 0 && (best < 0 || key[i] < key[best])) best = i;
+    if (best < 0) for (let i = 0; i < n; i++) if (!done[i] && (best < 0 || key[i] < key[best])) best = i;
+    done[best] = 1; out.push(list[best]); for (const j of adj[best]) indeg[j]--;
+  }
+  return out;
+}
+
+function offsetPoly(pts, d){
+  const out = [];
+  for (let k = 0; k < pts.length; k++){
+    const nrm = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy); return [-dy / l, dx / l]; };
+    const n1 = k > 0 ? nrm(pts[k - 1], pts[k]) : null, n2 = k < pts.length - 1 ? nrm(pts[k], pts[k + 1]) : null;
+    let ox, oy;
+    if (n1 && n2){ if (Math.abs(n1[0] - n2[0]) < 1e-6 && Math.abs(n1[1] - n2[1]) < 1e-6){ ox = n1[0]; oy = n1[1]; } else { ox = n1[0] + n2[0]; oy = n1[1] + n2[1]; } }
+    else { const n_ = n1 || n2; ox = n_[0]; oy = n_[1]; }
+    out.push([pts[k][0] + ox * d, pts[k][1] + oy * d]);
+  }
+  return out;
+}
+
+function gateGeo(){
+  const g = LY.gate, zp = g.H - g.Lh;
+  if (g.type === 'arch'){
+    const [cx, cy] = g.c, xa = cx - g.T / 2, xb = cx + g.T / 2, ya = cy - g.W / 2, yb = cy + g.W / 2;
+    return { type:'arch', zp, parts:[
+        { id:'gBack', kind:'pillar', box:[xa, ya - g.P, 0, xb, ya, zp] },
+        { id:'gFront', kind:'checks', box:[xa, yb, 0, xb, yb + g.P, zp] },
+        { id:'gLintel', kind:'roof', box:[xa, ya - g.P, zp, xb, yb + g.P, g.H] } ],
+      laser:[xa + .1, ya, xb - .1, yb], zTop: zp - .14, signFace:'right', checkFace:'left', fw: g.T,
+      emit:[[[xb, ya, zp], [xb, yb, zp]]], bounds:[xa, ya - g.P, 0, xb, yb + g.P, g.H] };
+  }
+  const b = g.b, q = g.P;
+  return { type:'canopy', zp, parts:[
+      { id:'gP00', kind:'post', box:[b[0], b[1], 0, b[0] + q, b[1] + q, zp] },
+      { id:'gP01', kind:'post', box:[b[0], b[3] - q, 0, b[0] + q, b[3], zp] },
+      { id:'gP10', kind:'post', box:[b[2] - q, b[1], 0, b[2], b[1] + q, zp] },
+      { id:'gP11', kind:'post', box:[b[2] - q, b[3] - q, 0, b[2], b[3], zp] },
+      { id:'gRoof', kind:'roof', box:[b[0], b[1], zp, b[2], b[3], g.H], checksTop:true } ],
+    laser:[b[0] + q, b[1] + q, b[2] - q, b[3] - q], zTop: zp - .14, signFace:'right', fw: b[3] - b[1],
+    emit:[[[b[2], b[1] + q, zp], [b[2], b[3] - q, zp]], [[b[0] + q, b[3], zp], [b[2] - q, b[3], zp]]], bounds:[b[0], b[1], 0, b[2], b[3], g.H] };
+}
+const up = (b, L) => [b[0], b[1], b[2] + L, b[3], b[4], b[5] + L];
+const textFace = st => st.tface;
+const exitFace = st => st.exit === 'x' ? 'right' : 'left';
+const faceW = (st, fc) => fc === 'left' ? st.b[2] - st.b[0] : st.b[3] - st.b[1];
+const boxFaceW = (b, fc) => fc === 'left' ? b[3] - b[0] : b[4] - b[1];
+
+function hole(pen, st, z0){
+  const fc = exitFace(st), b = st.b, h = st.h, ztop = z0 + h;
+  const uc = fc === 'right' ? b[3] - st.tp[1] : st.tp[0] - b[0];
+  const u0 = uc - .42, u1 = uc + .42, v0 = h - .84, v1 = h;
+  face(pen, [fp(fc, b, ztop, u0, v0), fp(fc, b, ztop, u1, v0), fp(fc, b, ztop, u1, v1), fp(fc, b, ztop, u0, v1)], '#07051A');
+  face(pen, [fp(fc, b, ztop, u0, v0), fp(fc, b, ztop, u1, v0), fp(fc, b, ztop, u1, v0 + .12), fp(fc, b, ztop, u0, v0 + .12)], '#030210');
+  line(pen, [fp(fc, b, ztop, u0 - .04, v1), fp(fc, b, ztop, u0 - .04, v0 - .04), fp(fc, b, ztop, u1 + .04, v0 - .04), fp(fc, b, ztop, u1 + .04, v1)], C.mist, 1, .35);
+}
+
+/* ---------------- station drawings ---------------- */
+function drawPrompt(it, pen, t, s){
+  const st = LY.prompt, L = lift.prompt, b = st.b, h = st.h, z1 = L + h;
+  it.b = [b[0], b[1], L, b[2], b[3], z1];
+  prism(pen, b[0], b[1], L, b[2] - b[0], b[3] - b[1], h, TONE.block, { edge:.1, gid:'promptg' });
+  const m = .3;
+  face(pen, [P(b[0] + m, b[1] + m, z1), P(b[2] - m, b[1] + m, z1), P(b[2] - m, b[3] - m, z1), P(b[0] + m, b[3] - m, z1)], '#2B2D6E');
+  /* a small keyboard on the deck: rows of key caps, the space bar on the front row */
+  const kx0 = b[0] + m + .16, kx1 = b[2] - m - .16, ky0 = b[1] + m + .16, ky1 = b[3] - m - .16;
+  const cols = Math.max(6, Math.round((kx1 - kx0) / .3)), rows = 4, kw = (kx1 - kx0) / cols, kd = (ky1 - ky0) / rows, g = .05;
+  for (let r = 0; r < rows; r++){
+    const yy = ky0 + r * kd;
+    if (r === rows - 1){
+      const xa = kx0 + kw * 2, xb = kx1 - kw * 2;
+      face(pen, [P(xa + g, yy + g, z1 + .03), P(xb - g, yy + g, z1 + .03), P(xb - g, yy + kd - g, z1 + .03), P(xa + g, yy + kd - g, z1 + .03)], '#3A3E86');
+      continue;
+    }
+    for (let c = 0; c < cols; c++){
+      const xx = kx0 + c * kw;
+      face(pen, [P(xx + g, yy + g, z1 + .03), P(xx + kw - g, yy + g, z1 + .03), P(xx + kw - g, yy + kd - g, z1 + .03), P(xx + g, yy + kd - g, z1 + .03)], (r + c) % 7 === 3 ? '#454A98' : '#363A80');
+    }
+  }
+  hole(pen, st, L);
+  const fc = textFace(st), fw = faceW(st, fc), M = faceMat(fc, b, z1);
+  panelQuad(pen, fc, b, z1, .16, .2, fw - .16, h - .2, '#0B0922', C.steel, .7);
+  const f = scene.fPrompt, lh = f * 1.45, u0 = .32, v0 = .26 + f;
+  const sp = s.prompt, pr = scene.G.promptPrefix;
+  txt(pen, pr, u0 * 100, v0 * 100, { m:M, fs:f * 100, fill:C.steel });
+  spanTxt(pen, [['> ', C.mist], [sp.text, C.frost]], 2 + sp.text.length, u0 * 100, (v0 + lh) * 100, { m:M, fs:f * 100, filter:'url(#textGlow)' });
+  const cx = (u0 + (2 + sp.text.length) * .6 * f) * 100;
+  const cur = pen.el('rect'); A(cur, 'x', String(f1(cx))); A(cur, 'y', String(f1((v0 + lh - f * .78) * 100))); A(cur, 'width', String(f1(f * 55))); A(cur, 'height', String(f1(f * 92)));
+  A(cur, 'transform', M); A(cur, 'fill', C.frost); A(cur, 'opacity', String(sp.typing || sp.blink ? .85 : 0));
+  txt(pen, 'sent to agent', (u0 + 2 * .6 * f) * 100, (v0 + 2 * lh) * 100, { m:M, fs:f * 100, fill:C.mist, op: sp.sent * .9, filter:'url(#textGlow)' });
+}
+
+function octa(pen, cx, cy, cz, r, yaw, bright){
+  const V = [[0, 0, 1.45 * r], [0, 0, -1.25 * r]];
+  for (let k = 0; k < 4; k++){ const a = yaw + k * Math.PI / 2; V.push([r * Math.cos(a), r * Math.sin(a), 0]); }
+  const F = [];
+  for (let k = 0; k < 4; k++){ const a = 2 + k, b = 2 + (k + 1) % 4; F.push([0, a, b]); F.push([1, b, a]); }
+  const vis = [];
+  for (const f of F){
+    const p0 = V[f[0]], p1 = V[f[1]], p2 = V[f[2]];
+    const u = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]], v = [p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]];
+    let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]; const l = Math.hypot(...n); n = n.map(c => c / l);
+    const dv = n[0] * VIEW[0] + n[1] * VIEW[1] + n[2] * VIEW[2];
+    const depth = (p0[0] + p1[0] + p2[0]) * VIEW[0] + (p0[1] + p1[1] + p2[1]) * VIEW[1] + (p0[2] + p1[2] + p2[2]) * VIEW[2];
+    vis.push({ f, n, dv, depth });
+  }
+  vis.sort((a, b) => b.dv - a.dv);
+  const shown = vis.slice(0, 4).sort((a, b) => a.depth - b.depth);
+  for (const v of shown){
+    const sh = clamp01(.25 + .75 * Math.max(0, v.n[0] * LIGHT[0] + v.n[1] * LIGHT[1] + v.n[2] * LIGHT[2]));
+    const col = mix(mix('#3B4090', '#C9D2F6', sh), C.frost, bright * .35);
+    face(pen, v.f.map(k => P(cx + V[k][0], cy + V[k][1], cz + V[k][2])), col);
+  }
+}
+
+function drawAgent(it, pen, t, s){
+  const st = LY.agent, L = lift.agent, b = st.b, h = st.h, z1 = L + h;
+  it.b = [b[0], b[1], L, b[2], b[3], z1 + 1.6];
+  prism(pen, b[0], b[1], L, b[2] - b[0], b[3] - b[1], h, TONE.block, { edge:.1, gid:'agentg' });
+  // cap groove
+  const gz = z1 - .34;
+  line(pen, [P(b[0], b[3], gz), P(b[2], b[3], gz), P(b[2], b[1], gz)], '#14123A', 1.2, .9);
+  line(pen, [P(b[0], b[3], gz - .03), P(b[2], b[3], gz - .03), P(b[2], b[1], gz - .03)], C.mist, 1, .12);
+  hole(pen, st, L);
+  const ef = exitFace(st), efw = faceW(st, ef);
+  for (let k = 0; k < 4; k++){ const v = .62 + k * .16; line(pen, [fp(ef, b, z1, efw * .5 - .7, v), fp(ef, b, z1, efw * .5 + .7, v)], '#100E30', 1.4, .9); }
+  // code panel
+  const fc = textFace(st), fw = faceW(st, fc), M = faceMat(fc, b, z1);
+  const pv0 = .52, pv1 = h - .42;
+  panelQuad(pen, fc, b, z1, .16, pv0, fw - .16, pv1, '#0A0820', C.steel, .75);
+  // panel title bar
+  const f = scene.fCode, lh = f * 1.6, u0 = .3;
+  line(pen, [fp(fc, b, z1, .16, pv0 + .3), fp(fc, b, z1, fw - .16, pv0 + .3)], C.steel, 1, .45);
+  for (let k = 0; k < 3; k++) circ(pen, 0, 0, 0, 'none', 0);
+  const dots = pen.els.slice(pen.n - 3, pen.n);
+  dots.forEach((e, k) => { A(e, 'cx', String(f1((u0 + k * .2) * 100))); A(e, 'cy', String(f1((pv0 + .15) * 100))); A(e, 'r', '5.5'); A(e, 'transform', M); A(e, 'fill', k === 0 && s.agent.active ? C.frost : C.steel); A(e, 'opacity', '0.9'); });
+  txt(pen, s.agent.active ? 'agent writing' : 'agent idle', (fw - .3) * 100, (pv0 + .2) * 100, { m:M, fs:f * 70, fill:C.mist, anchor:'end', op:.85 });
+  const N = scene.codeRows, ag = s.agent;
+  const scroll = ag.cur - 1 + smooth(ag.lineStart, ag.lineStart + .14, t);
+  const top = scroll - (N - 1), vb = pv0 + .42 + f;
+  for (let k = 0; k <= N; k++){
+    const idx = Math.floor(top) + k, rel = idx - top;
+    const line_ = ag.lines[idx];
+    const n = !line_ ? 0 : idx < ag.cur ? line_.n : idx === ag.cur ? ag.chars : 0;
+    const op = rel < 0 ? 0 : rel < 1 ? rel * rel : 1;
+    spanTxt(pen, line_ ? line_.spans : [], n, u0 * 100, (vb + rel * lh) * 100, { m:M, fs:f * 100, op: line_ ? op : 0 });
+  }
+  const rl = ag.cur - top, cl = ag.lines[ag.cur];
+  const cur = pen.el('rect');
+  A(cur, 'x', String(f1((u0 + ag.chars * .6 * f) * 100))); A(cur, 'y', String(f1((vb + rl * lh - f * .78) * 100)));
+  A(cur, 'width', String(f1(f * 55))); A(cur, 'height', String(f1(f * 92))); A(cur, 'transform', M); A(cur, 'fill', C.frost);
+  A(cur, 'opacity', String(cl && (ag.active || ag.blink) ? .8 : 0));
+  if (st.roofLabel){ txt(pen, 'Agent', 0, 26, { m: floorMat('x', b[0] + .3, b[3] - .78, z1), fs:30, fill:C.mist, cls:'lbl', op:.95 }); }
+  // pedestal and core
+  const [cx, cy] = ctr(st);
+  cyl(pen, cx, cy, z1, .62, .2, TONE.pad, { topFill:'#30336F' });
+  const pulse = .5 + .5 * Math.sin(t * (ag.active ? 7.5 : 2.6));
+  const cz = z1 + .2 + .62 + .07 * Math.sin(t * 1.7), [gx, gy] = P(cx, cy, cz);
+  const gl = pen.el('circle'); A(gl, 'cx', String(f1(gx))); A(gl, 'cy', String(f1(gy))); A(gl, 'r', String(f1(S * (1.05 + .12 * pulse))));
+  A(gl, 'fill', 'url(#coreGlow)'); A(gl, 'opacity', String(f2(.45 + .35 * pulse * (ag.active ? 1 : .55))));
+  octa(pen, cx, cy, cz, .3 + .025 * pulse, t * (ag.active ? 1.6 : .55), ag.active ? .5 + .5 * pulse : .25 * pulse);
+}
+
+function ledLook(led, t){
+  if (led.state === 'check') return [mix(C.steel, C.frost, .5 + .5 * Math.sin(t * 40)), .15];
+  if (led.state === 'pass') return [mix('#2A2F63', C.ice, led.a), .5 * led.a];
+  if (led.state === 'fail') return [mix('#2A2F63', C.h2, led.a), .75 * led.a];
+  return ['#363C78', 0];
+}
+function ledText(led){ return led.state === 'fail' ? mix(C.mist, C.h3, led.a) : led.state === 'pass' ? mix(C.mist, C.frost, led.a) : C.mist; }
+function drawGatePart(part){ return (it, pen, t, s) => {
+  const L = lift.gate, b = up(part.box, L); it.b = b;
+  if (part.kind === 'pillar' || part.kind === 'post'){ boxPrism(pen, b, TONE.pillar, { edge:.08, gid: it.id + 'g' }); return; }
+  if (part.kind === 'checks'){
+    boxPrism(pen, b, TONE.pillar, { edge:.1, gid: it.id + 'g' });
+    const fc = GG.checkFace, fw = GG.fw, z1 = b[5], M = faceMat(fc, b4(b), z1);
+    const pv0 = .3, pv1 = pv0 + 1.55, f = scene.fCheck, rh = (pv1 - pv0 - .2) / 3;
+    panelQuad(pen, fc, b4(b), z1, .14, pv0, fw - .14, pv1, '#0A0820', C.steel, .7);
+    for (let k = 0; k < 3; k++){
+      const led = s.gate.leds[k], v = pv0 + .1 + rh * (k + .5), [col, gop] = ledLook(led, t);
+      const g = pen.el('circle'); A(g, 'cx', '34'); A(g, 'cy', String(f1(v * 100))); A(g, 'r', '15'); A(g, 'transform', M); A(g, 'fill', 'none'); A(g, 'stroke', col); A(g, 'stroke-width', '3'); A(g, 'opacity', String(f2(gop)));
+      const c = pen.el('circle'); A(c, 'cx', '34'); A(c, 'cy', String(f1(v * 100))); A(c, 'r', '9'); A(c, 'transform', M); A(c, 'fill', col); A(c, 'opacity', '1');
+      txt(pen, CHECKS[k], 54, (v + f * .36) * 100, { m:M, fs:f * 100, fill: ledText(led) });
+    }
+    return;
+  }
+  /* roof / lintel: sign, laser emitter, and on the canopy a status deck on top */
+  boxPrism(pen, b, TONE.lintel, { edge:.12, hop:.32 });
+  const fc = GG.signFace, M = faceMat(fc, b4(b), b[5]), lh = b[5] - b[2], sw = boxFaceW(b, fc), f = Math.min(.36, lh * .48, (sw - .3) / (11 * .7));
+  txt(pen, 'Policy gate', sw * 50, (lh * .5 + f * .36) * 100, { m:M, fs:f * 100, fill:C.frost, anchor:'middle', cls:'sign', op:.94 });
+  const ge = s.gate;
+  for (const [e0, e1] of GG.emit){
+    line(pen, [P(e0[0], e0[1], e0[2] + L), P(e1[0], e1[1], e1[2] + L)], ge.lc, 3, .25 + ge.lop * 2.2);
+    line(pen, [P(e0[0], e0[1], e0[2] + L), P(e1[0], e1[1], e1[2] + L)], mix(ge.lc, C.frost, .5), 1, .5 + ge.lop * 2);
+  }
+  if (part.checksTop){
+    const Mt = floorMat('x', b[0] + .3, b[1] + .25, b[5]), ft = scene.fCheck;
+    for (let k = 0; k < 3; k++){
+      const led = ge.leds[k], v = .34 + k * .76, [col, gop] = ledLook(led, t);
+      const g = pen.el('circle'); A(g, 'cx', '20'); A(g, 'cy', String(f1(v * 100))); A(g, 'r', '19'); A(g, 'transform', Mt); A(g, 'fill', 'none'); A(g, 'stroke', col); A(g, 'stroke-width', '3.5'); A(g, 'opacity', String(f2(gop)));
+      const c = pen.el('circle'); A(c, 'cx', '20'); A(c, 'cy', String(f1(v * 100))); A(c, 'r', '12'); A(c, 'transform', Mt); A(c, 'fill', col); A(c, 'opacity', '1');
+      txt(pen, CHECKS[k], 46, (v + ft * .36) * 100, { m:Mt, fs:ft * 100, fill: led.state === 'idle' ? '#B3B9E4' : ledText(led) });
+    }
+  }
+}; }
+function drawGateLaser(it, pen, t, s){
+  const L = lift.gate, l = GG.laser, ge = s.gate, z = ge.zs + L;
+  it.b = [l[0], l[1], z, l[2], l[3], z];
+  const q = [P(l[0], l[1], z), P(l[2], l[1], z), P(l[2], l[3], z), P(l[0], l[3], z)];
+  glass(pen, q, ge.lc, ge.lop, ge.lc, Math.min(1, ge.lop * 3.2));
+  line(pen, [P(l[0], l[3], z), P(l[2], l[3], z), P(l[2], l[1], z)], mix(ge.lc, C.frost, .4), 1, Math.min(1, ge.lop * 3.6));
+}
+
+function wallQ(id, b, h, L){
+  if (id === 'y0') return [P(b[0], b[1], L), P(b[2], b[1], L), P(b[2], b[1], h + L), P(b[0], b[1], h + L)];
+  if (id === 'y1') return [P(b[0], b[3], L), P(b[2], b[3], L), P(b[2], b[3], h + L), P(b[0], b[3], h + L)];
+  if (id === 'x0') return [P(b[0], b[3], L), P(b[0], b[1], L), P(b[0], b[1], h + L), P(b[0], b[3], h + L)];
+  return [P(b[2], b[3], L), P(b[2], b[1], L), P(b[2], b[1], h + L), P(b[2], b[3], h + L)];
+}
+function wallBox(id, b, h){
+  if (id === 'y0') return [b[0], b[1], 0, b[2], b[1] + .02, h];
+  if (id === 'y1') return [b[0], b[3] - .02, 0, b[2], b[3], h];
+  if (id === 'x0') return [b[0], b[1], 0, b[0] + .02, b[3], h];
+  return [b[2] - .02, b[1], 0, b[2], b[3], h];
+}
+function sandGeo(){
+  const st = LY.sandbox, b = st.b, h = st.h, fr = st.front;
+  const onWall = (c, id) => id === 'y0' ? c[1] === b[1] : id === 'y1' ? c[1] === b[3] : id === 'x0' ? c[0] === b[0] : c[0] === b[2];
+  const corners = [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]];
+  return { back: wallBox(st.back, b, h), front: wallBox(fr, b, h), top:[b[0], b[1], h, b[2], b[3], h + .02],
+    plinth: fr === 'y1' ? [b[0], b[3], 0, b[2], b[3] + .36, .62] : [b[2], b[1], 0, b[2] + .36, b[3], .62],
+    pface: fr === 'y1' ? 'left' : 'right', plen: fr === 'y1' ? b[2] - b[0] : b[3] - b[1], ffc: fr === 'y1' ? 'left' : 'right',
+    bare: corners.filter(c => !onWall(c, st.back) && !onWall(c, fr)) };
+}
+function drawSandBack(it, pen){
+  const L = lift.sandbox, sg = scene.SG, st = LY.sandbox, b = st.b, h = st.h; it.b = up(sg.back, L);
+  glass(pen, [P(b[0], b[1], L), P(b[2], b[1], L), P(b[2], b[3], L), P(b[0], b[3], L)], C.ice, .045, C.ice, .12);
+  for (let k = 1; k < 4; k++){
+    const xx = lerp(b[0], b[2], k / 4), yy = lerp(b[1], b[3], k / 4);
+    line(pen, [P(xx, b[1], L), P(xx, b[3], L)], C.ice, 1, .06);
+    line(pen, [P(b[0], yy, L), P(b[2], yy, L)], C.ice, 1, .06);
+  }
+  glass(pen, wallQ(st.back, b, h, L), C.ice, .05, C.ice, .32);
+  for (const c of sg.bare) line(pen, [P(c[0], c[1], L), P(c[0], c[1], h + L)], C.ice, 1, .45);
+}
+function drawSandTop(it, pen){
+  const L = lift.sandbox, sg = scene.SG, b = LY.sandbox.b, h = LY.sandbox.h; it.b = up(sg.top, L);
+  glass(pen, [P(b[0], b[1], h + L), P(b[2], b[1], h + L), P(b[2], b[3], h + L), P(b[0], b[3], h + L)], C.ice, .07, C.ice, .5);
+  line(pen, [P(b[0], b[3], h + L), P(b[2], b[3], h + L), P(b[2], b[1], h + L)], C.frost, 1, .6);
+}
+function drawSandFront(it, pen){
+  const L = lift.sandbox, sg = scene.SG, st = LY.sandbox, b = st.b, h = st.h; it.b = up(sg.front, L);
+  glass(pen, wallQ(st.front, b, h, L), C.ice, .085, C.ice, .55);
+  const fc = sg.ffc, zt = h + L;
+  glass(pen, [fp(fc, b, zt, .55, .05), fp(fc, b, zt, 1.0, .05), fp(fc, b, zt, .5, h - .05), fp(fc, b, zt, .05, h - .05)], C.frost, .06, C.frost, 0);
+  glass(pen, [fp(fc, b, zt, 1.15, .05), fp(fc, b, zt, 1.27, .05), fp(fc, b, zt, .72, h - .05), fp(fc, b, zt, .6, h - .05)], C.frost, .05, C.frost, 0);
+}
+function drawPlinth(it, pen, t, s){
+  const L = lift.sandbox, sg = scene.SG, b = up(sg.plinth, L); it.b = b;
+  boxPrism(pen, b, TONE.plinth, { hop:.2, gid:'plinthg' });
+  const fc = sg.pface, M = faceMat(fc, b4(b), b[5]), f = scene.fTick, lit = s.sandbox.lit, a = s.sandbox.a, vc = 31;
+  txt(pen, lit + '/6', 18, vc + f * 36, { m:M, fs:f * 100, fill: lit ? mix(C.mist, C.frost, a) : C.mist });
+  const ux0 = .18 + 3.2 * .6 * f + .12, du = (sg.plen - ux0 - .15) / 6;
+  for (let k = 0; k < 6; k++){
+    const on = k < lit, uc = (ux0 + du * (k + .5)) * 100;
+    const e = pen.el('polyline');
+    A(e, 'points', `${f1(uc - 10)},${vc} ${f1(uc - 2)},${vc + 9} ${f1(uc + 11)},${vc - 10}`);
+    A(e, 'transform', M); A(e, 'fill', 'none'); A(e, 'stroke', on ? C.ice : C.steel); A(e, 'stroke-width', '3.6'); A(e, 'stroke-linecap', 'round'); A(e, 'stroke-linejoin', 'round');
+    A(e, 'opacity', String(f2(on ? .35 + .65 * a : .75)));
+  }
+}
+
+function drawRelease(it, pen, t, s){
+  const st = LY.release, L = lift.release, b = st.b, h = st.h, z1 = L + h, r = s.release;
+  it.b = [b[0], b[1], L, b[2], b[3], z1 + 1.9];
+  prism(pen, b[0], b[1], L, b[2] - b[0], b[3] - b[1], h, TONE.vault, { edge:.1, gid:'vaultg' });
+  for (const dz of [.16, .23]) line(pen, [P(b[0], b[3], L + dz), P(b[2], b[3], L + dz), P(b[2], b[1], L + dz)], '#120F36', 1.2, .85);
+  hole(pen, st, L);
+  const [cx, cy] = ctr(st);
+  /* seal imprint on the top face: a rosette that stamps in with overshoot */
+  const sAge = r.age, sc = sAge >= 0 ? backOut(clamp01(sAge / .38), 2.4) : 0;
+  const sop = sAge < 0 ? 0 : clamp01(1 - (sAge - .25) / 2.4) * .65 + .35;
+  const Mt = floorMat('x', cx, cy, z1);
+  let rp = '';
+  for (let k = 0; k < 28; k++){ const a = k / 28 * Math.PI * 2, rr = (k % 2 ? 46 : 54) * sc; rp += f1(Math.cos(a) * rr) + ',' + f1(Math.sin(a) * rr) + ' '; }
+  const ro = pen.el('polygon'); A(ro, 'points', rp.trim()); A(ro, 'transform', Mt); A(ro, 'fill', C.ice); A(ro, 'fill-opacity', String(f2(.16 * sop)));
+  A(ro, 'stroke', C.ice); A(ro, 'stroke-width', '3'); A(ro, 'stroke-opacity', String(f2(sop))); A(ro, 'stroke-linejoin', 'round');
+  const ring2 = pen.el('circle'); A(ring2, 'cx', '0'); A(ring2, 'cy', '0'); A(ring2, 'r', String(f1(36 * sc))); A(ring2, 'transform', Mt);
+  A(ring2, 'fill', 'none'); A(ring2, 'stroke', C.ice); A(ring2, 'stroke-width', '2'); A(ring2, 'stroke-opacity', String(f2(sop * .8)));
+  const tick = pen.el('polyline'); A(tick, 'points', `${f1(-17 * sc)},${f1(1 * sc)} ${f1(-5 * sc)},${f1(14 * sc)} ${f1(19 * sc)},${f1(-15 * sc)}`); A(tick, 'transform', Mt);
+  A(tick, 'fill', 'none'); A(tick, 'stroke', C.frost); A(tick, 'stroke-width', '6'); A(tick, 'stroke-linecap', 'round'); A(tick, 'stroke-linejoin', 'round'); A(tick, 'opacity', String(f2(sop)));
+  const shock = sAge >= 0 && sAge < .7 ? sAge / .7 : 1;
+  const sh = pen.el('circle'); A(sh, 'cx', '0'); A(sh, 'cy', '0'); A(sh, 'r', String(f1(54 + 80 * easeOut(shock)))); A(sh, 'transform', Mt);
+  A(sh, 'fill', 'none'); A(sh, 'stroke', C.ice); A(sh, 'stroke-width', '3'); A(sh, 'stroke-opacity', String(f2((1 - shock) * .85)));
+  /* press: back post, rod, head, crossbar, front post (painter's order within the item) */
+  const ph = 1.75, hz = z1 + .85 + r.head;
+  prism(pen, cx - .11, b[1] + .22, z1, .22, .22, ph, TONE.post, { hop:.2 });
+  cyl(pen, cx, cy, hz + .3, .07, Math.max(.01, z1 + 1.5 - (hz + .3)), TONE.post, { hop:.15 });
+  cyl(pen, cx, cy, hz, .44, .3, TONE.head, { hop:.4 });
+  prism(pen, cx - .16, b[1] + .16, z1 + 1.5, .32, b[3] - b[1] - .32, .25, TONE.post, { hop:.3 });
+  prism(pen, cx - .11, b[3] - .44, z1, .22, .22, ph, TONE.post, { hop:.25 });
+  /* padlock emblem on the face */
+  const fc = textFace(st), fw = faceW(st, fc), M = faceMat(fc, b, z1);
+  const glowA = Math.exp(-Math.max(0, sAge) * 1.1), lockC = mix(mix(C.steel, C.ice, .55), C.ice, glowA), lu = fw / 2 * 100, lv = h * .36 * 100;
+  const op_ = r.open;
+  const lg = pen.el('circle'); A(lg, 'cx', String(f1(lu))); A(lg, 'cy', String(f1(lv - 10))); A(lg, 'r', '82'); A(lg, 'transform', M); A(lg, 'fill', 'url(#iceGlow)'); A(lg, 'opacity', String(f2(.2 + .65 * glowA)));
+  const sk = pen.el('path'); A(sk, 'd', `M${f1(lu - 24)},${f1(lv - 6 - op_ * 16)}v-22a24,24 0 0 1 48,0v22`); A(sk, 'transform', M);
+  A(sk, 'fill', 'none'); A(sk, 'stroke', lockC); A(sk, 'stroke-width', '10'); A(sk, 'stroke-linecap', 'round');
+  const bd = pen.el('rect'); A(bd, 'x', String(f1(lu - 40))); A(bd, 'y', String(f1(lv - 8))); A(bd, 'width', '80'); A(bd, 'height', '62'); A(bd, 'rx', '9'); A(bd, 'transform', M); A(bd, 'fill', lockC);
+  const kh = pen.el('path'); A(kh, 'd', `M${f1(lu)},${f1(lv + 10)}m-8,0a8,8 0 1 1 16,0l-3,8v12h-10v-12z`); A(kh, 'transform', M); A(kh, 'fill', '#0B0922');
+  const fr = scene.fRel;
+  txt(pen, 'signed ' + r.ver, lu, lv + 62 + 14 + fr * 100, { m:M, fs:fr * 100, fill:mix('#AEB5E2', C.frost, glowA * .7), anchor:'middle' });
+}
+
+function binGeo(){
+  const b = LY.bin.b, h = LY.bin.h, wt = .16;
+  return { floor:[b[0] + wt, b[1] + wt, 0, b[2] - wt, b[3] - wt, .04], y0:[b[0] + wt, b[1], 0, b[2] - wt, b[1] + wt, h], x0:[b[0], b[1], 0, b[0] + wt, b[3], h],
+    x1:[b[2] - wt, b[1], 0, b[2], b[3], h], y1:[b[0] + wt, b[3] - wt, 0, b[2] - wt, b[3], h] };
+}
+function drawBinFloor(it, pen){
+  const L = lift.bin, f = up(scene.BG.floor, L); it.b = f;
+  face(pen, [P(f[0], f[1], f[5]), P(f[3], f[1], f[5]), P(f[3], f[4], f[5]), P(f[0], f[4], f[5])], '#0D0A26');
+  for (let k = 1; k < 3; k++){
+    const xx = lerp(f[0], f[3], k / 3), yy = lerp(f[1], f[4], k / 3);
+    line(pen, [P(xx, f[1], f[5]), P(xx, f[4], f[5])], C.steel, 1, .22);
+    line(pen, [P(f[0], yy, f[5]), P(f[3], yy, f[5])], C.steel, 1, .22);
+  }
+}
+function drawBinWall(key, tone){ return (it, pen, t, s) => {
+  const L = lift.bin, b = up(scene.BG[key], L); it.b = b; boxPrism(pen, b, tone, { hop:.3, gid: (key === 'x1' || key === 'y1') ? 'bin' + key : null });
+  if (key === 'x1'){
+    const M = faceMat('right', b4(b), b[5]), fw = b[4] - b[1], f = scene.fBin;
+    txt(pen, 'Quarantine', fw * 50, (LY.bin.h * .5 + f * .36) * 100, { m:M, fs:f * 100, fill:C.mist, anchor:'middle', cls:'sign' });
+  }
+  if (key === 'y1'){
+    const M = faceMat('left', b4(b), b[5]), fw = b[3] - b[0], f = scene.fFind, a = smooth(0, .4, s.bin.age);
+    txt(pen, s.bin.find, fw * 50, (LY.bin.h * .5 + f * .36) * 100, { m:M, fs:f * 100, fill:mix(C.h2, C.h3, .6), anchor:'middle', op: .55 + .45 * a });
+  }
+}; }
+
+/* ---------------- tokens ---------------- */
+const POOL = 24;
+function makeToken(k){
+  const grad = mk('radialGradient', defs, { id:'tg' + k });
+  const s0 = mk('stop', grad, { offset:'0', 'stop-color': C.ice, 'stop-opacity':'.6' });
+  const s1 = mk('stop', grad, { offset:'.45', 'stop-color': C.ice, 'stop-opacity':'.18' });
+  mk('stop', grad, { offset:'1', 'stop-color': C.ice, 'stop-opacity':'0' });
+  const mkI = id => { const g = mk('g', L_world, { display:'none' }); return { id, g, pen: new Pen(g), b:[0, 0, 0, 0, 0, 0], on:false }; };
+  return { k, grad, s0, s1, A: mkI('ta' + k), B: mkI('tb' + k) };
+}
+function tokTones(col){ return { top: mix(col, '#FFFFFF', .32), left: col, right: mix(col, '#0A0820', .36) }; }
+function drawCube(pen, b, yaw, tn){
+  const cx = (b[0] + b[3]) / 2, cy = (b[1] + b[4]) / 2, hs = TS / 2, z0 = b[2], z1 = b[5];
+  if (!yaw){ prism(pen, b[0], b[1], z0, b[3] - b[0], b[4] - b[1], z1 - z0, tn, { hop:.4 }); return; }
+  const loc = [[-hs, -hs], [hs, -hs], [hs, hs], [-hs, hs]], nl = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+  const ca = Math.cos(yaw), sa = Math.sin(yaw);
+  const c = loc.map(p => [cx + p[0] * ca - p[1] * sa, cy + p[0] * sa + p[1] * ca]);
+  const fs = nl.map((n, k) => { const nx = n[0] * ca - n[1] * sa, ny = n[0] * sa + n[1] * ca; return { k, nx, ny, d: nx + ny }; }).sort((a, b2) => b2.d - a.d).slice(0, 2);
+  for (const f of fs){
+    const a = c[f.k], b2 = c[(f.k + 1) % 4], w = clamp01((f.ny - f.nx + 1) / 2);
+    face(pen, [P(a[0], a[1], z1), P(b2[0], b2[1], z1), P(b2[0], b2[1], z0), P(a[0], a[1], z0)], mix(tn.right, tn.left, w));
+  }
+  face(pen, c.map(p => P(p[0], p[1], z1)), tn.top);
+  const fr = c.slice().sort((p, q) => (q[0] + q[1]) - (p[0] + p[1]));
+  line(pen, [P(fr[1][0], fr[1][1], z1), P(fr[0][0], fr[0][1], z1), P(fr[2][0], fr[2][1], z1)], C.frost, 1, .4);
+}
+function drawTokPiece(pen, tok, ts, b, o){
+  const [gx, gy] = P(ts.x, ts.y, ts.z + TS / 2);
+  circ(pen, gx, gy, S * (1.05 + ts.heat * .9), 'url(#tg' + tok.k + ')', o.glow ? ts.gop : 0);
+  drawCube(pen, b, ts.yaw, tokTones(ts.col));
+  const top = [P(b[0], b[1], b[5]), P(b[3], b[1], b[5]), P(b[3], b[4], b[5]), P(b[0], b[4], b[5])];
+  const e = pen.el('polygon'); A(e, 'points', ps(top)); A(e, 'fill', 'none'); A(e, 'stroke', C.frost); A(e, 'stroke-width', '1.2'); A(e, 'vector-effect', 'non-scaling-stroke');
+  A(e, 'stroke-opacity', String(ts.signed && !ts.yaw ? .9 : 0));
+  const sl = o.scan ? [P(b[0], b[4], b[2]), P(b[3], b[4], b[2]), P(b[3], b[1], b[2])] : [[0, 0], [0, 0]];
+  line(pen, sl, o.scanC || C.frost, 1.6, o.scan ? .95 : 0);
+}
+
+/* lift-off beam over the release pad: a sorted item so the vault and tokens overlap it correctly */
+function drawBeam(it, pen, t){
+  const rise = PL.c.m.rise, i = Math.floor((t - T0 - rise) / DT);
+  let age = 9; for (let j = i; j >= i - 1; j--){ if (!isHostile(j)){ age = t - (T0 + j * DT + rise); break; } }
+  const k = clamp01(age / 1.5), a = age < 0 ? 0 : Math.sin(Math.PI * k) * (1 - k * .3);
+  const [px, py] = LY.pad, r = .34, hgt = 3.4;
+  it.b = [px - r, py - r, 0.1, px + r, py + r, hgt];
+  const [bx, by] = P(px, py, .1), [tx, ty] = P(px, py, hgt), w = r * Math.SQRT2 * S;
+  const e = pen.el('polygon'); A(e, 'points', ps([[bx - w, by], [bx + w, by], [tx + w * .55, ty], [tx - w * .55, ty]])); A(e, 'fill', 'url(#beamGrad)'); A(e, 'opacity', String(f2(a * .9)));
+  const c = pen.el('polygon'); A(c, 'points', ps([[bx - w * .25, by], [bx + w * .25, by], [tx + w * .12, ty], [tx - w * .12, ty]])); A(c, 'fill', 'url(#beamGrad)'); A(c, 'opacity', String(f2(a)));
+}
+
+/* ---------------- build ---------------- */
+function buildScene(LYT){
+  LY = LYT; buildPlans(); GG = gateGeo();
+  for (const L_ of [L_bg, L_shadow, L_ground, L_gdyn, L_world, L_hit]) while (L_.firstChild) L_.removeChild(L_.firstChild);
+  scene = { items: [], tokens: [], hits: {}, order: [], sig: '' };
+  scene.SG = sandGeo(); scene.BG = binGeo();
+  const mob = LY.name === 'm';
+  const cw = 22 * .6;
+  scene.fCode = Math.min(.32, (faceW(LY.agent, textFace(LY.agent)) - .6) / cw);
+  scene.codeRows = Math.max(5, Math.floor((LY.agent.h - .42 - .52 - .5) / (scene.fCode * 1.6)));
+  scene.G = { promptPrefix: '~/shop (main)' };
+  scene.fPrompt = Math.min(.32, (faceW(LY.prompt, textFace(LY.prompt)) - .56) / (21 * .6), (LY.prompt.h - .56) / 3.9);
+  scene.fCheck = GG.type === 'arch' ? Math.min(.28, (GG.fw - .78) / (7 * .6)) : .36;
+  scene.fTick = .27;
+  scene.fRel = Math.min(.27, (faceW(LY.release, textFace(LY.release)) - .4) / (14 * .6));
+  scene.fBin = .3; scene.fFind = Math.min(.25, (LY.bin.b[2] - LY.bin.b[0] - .5) / (13 * .6));
+  OPAQUE = [LY.prompt, LY.agent, LY.release];
+
+  /* platform */
+  const R = rasterize(LY.rects, .1), Fo = boundary(R), Rl = erode(R, 4), Fl = boundary(Rl);
+  const zA = -.55, zB = -1.25;
+  // shadow
+  const sh = mk('g', L_shadow, { filter:'url(#blurS)', opacity:'.75' });
+  const sh2 = mk('g', L_shadow, { filter:'url(#blurL)', opacity:'.5' });
+  for (const r of LY.rects){
+    const q = z => [P(r[0], r[1], z), P(r[2], r[1], z), P(r[2], r[3], z), P(r[0], r[3], z)];
+    mk('polygon', sh, { points: ps(q(-4.6)), fill:'#030209' });
+    mk('polygon', sh2, { points: ps(q(-3.2)), fill:'#2F4FA8' });
+  }
+  const gp = new Pen(mk('g', L_ground));
+  const sideFaces = (F, z0, z1, tn) => {
+    const list = F.filter(f => f.s > 0).map(f => ({ f, b: f.t === 'x' ? [f.c, f.a, z0, f.c, f.b, z1] : [f.a, f.c, z0, f.b, f.c, z1] }));
+    for (const it of topo(list)){
+      const f = it.f;
+      if (f.t === 'x') face(gp, [P(f.c, f.b, z1), P(f.c, f.a, z1), P(f.c, f.a, z0), P(f.c, f.b, z0)], tn.right);
+      else face(gp, [P(f.a, f.c, z1), P(f.b, f.c, z1), P(f.b, f.c, z0), P(f.a, f.c, z0)], tn.left);
+    }
+  };
+  sideFaces(Fl, zB, zA, TONE.platLo);
+  for (const f of Fl.filter(f => f.s > 0)){
+    const zz = zB + .02;
+    if (f.t === 'x') line(gp, [P(f.c, f.a, zz), P(f.c, f.b, zz)], C.ice, 1, .10); else line(gp, [P(f.a, f.c, zz), P(f.b, f.c, zz)], C.ice, 1, .10);
+  }
+  sideFaces(Fo, zA, 0, TONE.plat);
+  for (const f of Fo.filter(f => f.s > 0)){
+    const zz = -.3;
+    if (f.t === 'x') line(gp, [P(f.c, f.a, zz), P(f.c, f.b, zz)], C.steel, 1, .35); else line(gp, [P(f.a, f.c, zz), P(f.b, f.c, zz)], C.steel, 1, .35);
+  }
+  // top face (union of rects), clip path for the grid
+  const cp = mk('clipPath', defs, { id:'platClip' + LY.name });
+  for (const r of LY.rects){
+    const q = [P(r[0], r[1], 0), P(r[2], r[1], 0), P(r[2], r[3], 0), P(r[0], r[3], 0)];
+    const e = gp.el('polygon'); A(e, 'points', ps(q)); A(e, 'fill', TONE.plat.top);
+    mk('polygon', cp, { points: ps(q) });
+  }
+  let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+  for (const r of LY.rects){ minx = Math.min(minx, r[0]); miny = Math.min(miny, r[1]); maxx = Math.max(maxx, r[2]); maxy = Math.max(maxy, r[3]); }
+  let d = '';
+  for (let x = Math.ceil(minx); x <= maxx; x++){ const a = P(x, miny, 0), b = P(x, maxy, 0); d += `M${f1(a[0])},${f1(a[1])}L${f1(b[0])},${f1(b[1])}`; }
+  for (let y = Math.ceil(miny); y <= maxy; y++){ const a = P(minx, y, 0), b = P(maxx, y, 0); d += `M${f1(a[0])},${f1(a[1])}L${f1(b[0])},${f1(b[1])}`; }
+  mk('path', L_ground, { d, fill:'none', stroke: C.steel, 'stroke-width':'1', 'stroke-opacity':'.30', 'vector-effect':'non-scaling-stroke', 'clip-path':`url(#platClip${LY.name})` });
+  let d2 = '';
+  for (let x = Math.ceil(minx); x <= maxx; x += 4){ for (let y = Math.ceil(miny); y <= maxy; y += 4){ const p = P(x, y, 0); d2 += `M${f1(p[0] - 3)},${f1(p[1])}h6M${f1(p[0])},${f1(p[1] - 1.5)}v3`; } }
+  mk('path', L_ground, { d: d2, fill:'none', stroke: C.mist, 'stroke-width':'1', 'stroke-opacity':'.35', 'vector-effect':'non-scaling-stroke', 'clip-path':`url(#platClip${LY.name})` });
+  const gp2 = new Pen(mk('g', L_ground));
+  for (const f of Fo){
+    const front = f.s > 0, op = front ? .32 : .16, col = front ? C.frost : C.mist;
+    if (f.t === 'x') line(gp2, [P(f.c, f.a, 0), P(f.c, f.b, 0)], col, 1, op); else line(gp2, [P(f.a, f.c, 0), P(f.b, f.c, 0)], col, 1, op);
+  }
+  // floor labels
+  for (const [s_, x, y, dir] of LY.labels){
+    const M = floorMat(dir === 'x' ? 'x' : 'y', x, y, 0);
+    mk('text', L_ground, { x:'0', y:'26', class:'lbl', transform:M, 'font-size':'30', fill: C.mist, opacity:'.9' }).textContent = s_;
+  }
+  // track
+  const TW = .9, TH = TRZ - .01;
+  const segBoxes = (pts, branch) => {
+    const out = [];
+    for (let k = 0; k < pts.length - 1; k++){
+      const a = pts[k], b = pts[k + 1], e0 = k > 0 ? TW / 2 : 0, e1 = k < pts.length - 2 ? TW / 2 : 0;
+      if (Math.abs(a[1] - b[1]) < 1e-6){ const sgn = Math.sign(b[0] - a[0]); const xa = a[0] - sgn * e0, xb = b[0] + sgn * e1; out.push({ b:[Math.min(xa, xb), a[1] - TW / 2, 0, Math.max(xa, xb), a[1] + TW / 2, TH], branch }); }
+      else { const sgn = Math.sign(b[1] - a[1]); const ya = a[1] - sgn * e0, yb = b[1] + sgn * e1; out.push({ b:[a[0] - TW / 2, Math.min(ya, yb), 0, a[0] + TW / 2, Math.max(ya, yb), TH], branch }); }
+    }
+    return out;
+  };
+  const tp = new Pen(mk('g', L_ground));
+  const segs = segBoxes(LY.main, false).concat(segBoxes(LY.branch, true));
+  for (const it of topo(segs)) boxPrism(tp, it.b, TONE.track, { hop:.12 });
+  const railPen = new Pen(mk('g', L_ground));
+  for (const [pts, br] of [[LY.main, false], [LY.branch, true]]){
+    for (const sd of [-.34, .34]){
+      const op = offsetPoly(pts, sd).map(p => P(p[0], p[1], TH));
+      line(railPen, op, br ? C.h1 : '#5A66A0', 1, br ? .55 : .8);
+    }
+  }
+  scene.belt = [];
+  for (const pts of [LY.main, LY.branch]){
+    const pp = pts.map(p => P(p[0], p[1], TH));
+    scene.belt.push(mk('polyline', L_ground, { points: ps(pp), fill:'none', stroke: C.mist, 'stroke-width':'2.2', 'stroke-opacity':'.32', 'stroke-dasharray':'5 13', 'stroke-linecap':'round' }));
+  }
+  // pad
+  const pd = new Pen(mk('g', L_ground));
+  cyl(pd, LY.pad[0], LY.pad[1], 0, .5, .1, TONE.pad, { topFill:'#24265E' });
+  scene.padPen = new Pen(mk('g', L_gdyn));
+  scene.shadowPen = new Pen(mk('g', L_gdyn));
+  /* contact shadows: soft dark halos where solid things meet the floor */
+  const ao = mk('g', L_ground, { filter:'url(#blurAO)' });
+  const aoBox = (b, e, op) => mk('polygon', ao, { points: ps([P(b[0] - e, b[1] - e, 0), P(b[2] + e, b[1] - e, 0), P(b[2] + e, b[3] + e, 0), P(b[0] - e, b[3] + e, 0)]), fill:'#04021A', opacity: String(op) });
+  aoBox(LY.prompt.b, .22, .7); aoBox(LY.agent.b, .26, .75); aoBox(LY.release.b, .24, .75);
+  for (const pt of GG.parts) if (pt.box[2] === 0) aoBox([pt.box[0], pt.box[1], pt.box[3], pt.box[4]], .16, .7);
+  aoBox(LY.bin.b, .18, .65);
+  { const pl = scene.SG.plinth; aoBox([pl[0], pl[1], pl[3], pl[4]], .14, .55); }
+
+  /* items */
+  addItem('prompt', drawPrompt, { dyn:true, st:'prompt' });
+  addItem('agent', drawAgent, { dyn:true, st:'agent' });
+  for (const pt of GG.parts) addItem(pt.id, drawGatePart(pt), { dyn: pt.kind !== 'pillar' && pt.kind !== 'post', st:'gate' });
+  addItem('gLaser', drawGateLaser, { dyn:true, st:'gate' });
+  addItem('beam', drawBeam, { dyn:true });
+  addItem('sBack', drawSandBack, { st:'sandbox' });
+  addItem('sTop', drawSandTop, { st:'sandbox' });
+  addItem('sFront', drawSandFront, { st:'sandbox' });
+  addItem('sPlinth', drawPlinth, { dyn:true, st:'sandbox' });
+  addItem('release', drawRelease, { dyn:true, st:'release' });
+  addItem('bFloor', drawBinFloor, { st:'bin' });
+  addItem('bY0', drawBinWall('y0', TONE.binIn), { st:'bin' });
+  addItem('bX0', drawBinWall('x0', TONE.binIn), { st:'bin' });
+  addItem('bX1', drawBinWall('x1', TONE.bin), { st:'bin' });
+  addItem('bY1', drawBinWall('y1', TONE.bin), { dyn:true, st:'bin' });
+  for (let k = 0; k < POOL; k++) scene.tokens.push(makeToken(k));
+
+  /* station boxes for hit areas and tips */
+  const sb = {};
+  const st2 = (st, extra) => [st.b[0], st.b[1], 0, st.b[2], st.b[3], st.h + (extra || 0)];
+  sb.prompt = st2(LY.prompt); sb.agent = st2(LY.agent, 1.5);
+  sb.gate = GG.bounds.slice();
+  sb.sandbox = [scene.SG.top[0], scene.SG.top[1], 0, Math.max(scene.SG.top[3], scene.SG.plinth[3]), Math.max(scene.SG.top[4], scene.SG.plinth[4]), LY.sandbox.h];
+  sb.release = st2(LY.release, 1.9); sb.bin = [...LY.bin.b.slice(0, 2), 0, ...LY.bin.b.slice(2), LY.bin.h];
+  scene.sb = sb;
+  const order = ['prompt', 'agent', 'gate', 'bin', 'sandbox', 'release'];
+  for (const key of order){
+    const b = sb[key];
+    const hx = [P(b[0], b[1], b[5] + .3), P(b[3], b[1], b[5] + .3), P(b[3], b[1], b[2]), P(b[3], b[4], b[2]), P(b[0], b[4], b[2]), P(b[0], b[4], b[5] + .3)];
+    const e = mk('polygon', L_hit, { points: ps(hx), class:'hit', tabindex:'0', role:'button', 'aria-label': INFO[key][0] + ': ' + INFO[key][1], 'vector-effect':'non-scaling-stroke' });
+    e.addEventListener('pointerenter', () => { hoverK[key] = true; showTip(key); kick(); });
+    e.addEventListener('pointerleave', () => { hoverK[key] = false; if (pinned !== key) hideTipIf(key); kick(); });
+    e.addEventListener('focus', () => { focusK[key] = true; showTip(key); kick(); });
+    e.addEventListener('blur', () => { focusK[key] = false; if (pinned === key) pinned = null; hideTipIf(key); kick(); });
+    e.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); ev.stopPropagation(); pinned = pinned === key ? null : key; if (pinned) showTip(key); else hideTipIf(key, true); } });
+    e.addEventListener('click', () => { pinned = pinned === key ? null : key; showTip(key); });
+    scene.hits[key] = e;
+  }
+
+  /* bounds (svg units) */
+  let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity, px0 = Infinity, px1 = -Infinity;
+  const add = (x, y, z, plat) => { const [sx, sy] = P(x, y, z); bx0 = Math.min(bx0, sx); bx1 = Math.max(bx1, sx); by0 = Math.min(by0, sy); by1 = Math.max(by1, sy); if (plat){ px0 = Math.min(px0, sx); px1 = Math.max(px1, sx); } };
+  for (const r of LY.rects) for (const x of [r[0], r[2]]) for (const y of [r[1], r[3]]){ add(x, y, 0, true); add(x, y, zB, true); }
+  for (const key in sb){ const b = sb[key]; for (const x of [b[0], b[3]]) for (const y of [b[1], b[4]]) add(x, y, b[5] + .2); }
+  scene.B = { minx: bx0, maxx: bx1, miny: by0, maxy: by1, pminx: px0, pmaxx: px1 };
+
+  /* particles */
+  scene.parts = [];
+  for (let k = 0; k < 46; k++) scene.parts.push({ e: mk('circle', L_bg, { fill: k % 7 === 0 ? C.ice : C.mist }), fx: rnd(k, 11), fy: rnd(k, 12), sp: .006 + rnd(k, 13) * .014, r: .7 + rnd(k, 14) * 1.3, ph: rnd(k, 15) * 6.28 });
+  scene.lastLift = null;
+}
+
+/* ---------------- frame ---------------- */
+function clipOpaque(b, ax){
+  for (const st of OPAQUE){
+    const s = st.b;
+    if (b[3] <= s[0] || b[0] >= s[2] || b[4] <= s[1] || b[1] >= s[3]) continue;
+    if (ax === 'x'){
+      const l = [b[0], Math.min(b[3], s[0])], r = [Math.max(b[0], s[2]), b[3]];
+      if (l[1] - l[0] > .01) return [l[0], b[1], b[2], l[1], b[4], b[5]];
+      if (r[1] - r[0] > .01) return [r[0], b[1], b[2], r[1], b[4], b[5]];
+      return null;
+    } else {
+      const l = [b[1], Math.min(b[4], s[1])], r = [Math.max(b[1], s[3]), b[4]];
+      if (l[1] - l[0] > .01) return [b[0], l[0], b[2], b[3], l[1], b[5]];
+      if (r[1] - r[0] > .01) return [b[0], r[0], b[2], b[3], r[1], b[5]];
+      return null;
+    }
+  }
+  return b;
+}
+
+function render(t){
+  if (!scene) return;
+  ST = stateAt(t);
+  const liftSig = Object.values(lift).map(v => v.toFixed(3)).join(',');
+  const liftChanged = liftSig !== scene.lastLift; scene.lastLift = liftSig;
+  for (const it of scene.items){
+    if (it.dyn || liftChanged || it.last == null){ it.pen.begin(); it.draw(it, it.pen, t, ST); it.pen.end(); it.last = 1; }
+  }
+  /* tokens */
+  const list = scene.items.slice();
+  const used = new Set();
+  const iMax = Math.floor((t - T0) / DT), iMin = Math.floor((t - T0 - PL.h.end) / DT) - 1;
+  const lz = GG.laser, ge = ST.gate;
+  for (let i = iMin; i <= iMax; i++){
+    const ts = tokenState(i, t); if (!ts) continue;
+    const tok = scene.tokens[mod(i, POOL)]; used.add(tok.k);
+    const hs = ts.yaw ? TS / 2 * Math.SQRT2 * Math.max(Math.abs(Math.cos(ts.yaw - Math.PI / 4)), Math.abs(Math.sin(ts.yaw - Math.PI / 4))) : TS / 2;
+    let b = [ts.x - hs, ts.y - hs, ts.z, ts.x + hs, ts.y + hs, ts.z + TS];
+    b = clipOpaque(b, ts.ax);
+    if (!b || ts.op <= .01){ tok.A.g.setAttribute('display', 'none'); tok.B.g.setAttribute('display', 'none'); tok.A.on = tok.B.on = false; continue; }
+    A(tok.s0, 'stop-color', ts.glow); A(tok.s1, 'stop-color', ts.glow);
+    const zs = ge.zs + lift.gate;
+    const inLaser = ge.active && b[3] > lz[0] && b[0] < lz[2] && b[4] > lz[1] && b[1] < lz[3] && zs > b[2] + .02 && zs < b[5] - .02;
+    const show = (I, bb, o) => { I.b = bb; I.on = true; I.g.removeAttribute('display'); A(I.g, 'opacity', ts.op < 1 ? String(f2(ts.op)) : null); I.pen.begin(); drawTokPiece(I.pen, tok, ts, bb, o); I.pen.end(); list.push(I); };
+    if (inLaser){
+      show(tok.A, [b[0], b[1], b[2], b[3], b[4], zs], { glow:true });
+      show(tok.B, [b[0], b[1], zs, b[3], b[4], b[5]], { scan:true, scanC: mix(ge.lc, C.frost, .5) });
+    } else {
+      show(tok.A, b, { glow:true });
+      tok.B.on = false; tok.B.g.setAttribute('display', 'none');
+    }
+  }
+  for (const tok of scene.tokens) if (!used.has(tok.k)){ if (tok.A.on || tok.A.g.getAttribute('display') !== 'none'){ tok.A.g.setAttribute('display', 'none'); tok.A.on = false; } if (tok.B.on){ tok.B.g.setAttribute('display', 'none'); tok.B.on = false; } }
+  /* depth sort, only when the arrangement changed */
+  let sig = '';
+  for (const it of list){ sig += it.id; for (let k = 0; k < 6; k++) sig += ',' + Math.round(it.b[k] * 20); sig += '|'; }
+  if (sig !== scene.sig){
+    scene.sig = sig;
+    const order = topo(list);
+    let same = order.length === scene.order.length;
+    if (same) for (let k = 0; k < order.length; k++) if (order[k] !== scene.order[k]){ same = false; break; }
+    if (!same){ for (const it of order) L_world.appendChild(it.g); scene.order = order; }
+  }
+  /* conveyor belts and the release pad */
+  for (const e of scene.belt) A(e, 'stroke-dashoffset', String(f1(-t * 26)));
+  {
+    const pp = scene.padPen.begin(), rise = PL.c.m.rise, i = Math.floor((t - T0 - rise) / DT);
+    let a = 1; for (let j = i; j >= i - 1; j--){ if (!isHostile(j)){ a = (t - (T0 + j * DT + rise)); break; } }
+    const k = clamp01(a / 1.1), [px, py] = P(LY.pad[0], LY.pad[1], .1), rx = .5 * Math.SQRT2 * S;
+    const e = pp.el('ellipse'); A(e, 'cx', String(f1(px))); A(e, 'cy', String(f1(py))); A(e, 'rx', String(f1(rx * (1 + 1.4 * easeOut(k))))); A(e, 'ry', String(f1(rx / 2 * (1 + 1.4 * easeOut(k)))));
+    A(e, 'fill', 'none'); A(e, 'stroke', C.ice); A(e, 'stroke-width', '1.5'); A(e, 'vector-effect', 'non-scaling-stroke'); A(e, 'stroke-opacity', String(f2((1 - k) * .9)));
+    const e2 = pp.el('ellipse'); A(e2, 'cx', String(f1(px))); A(e2, 'cy', String(f1(py))); A(e2, 'rx', String(f1(rx * .62))); A(e2, 'ry', String(f1(rx * .31)));
+    A(e2, 'fill', C.ice); A(e2, 'opacity', String(f2(.08 + .4 * (1 - k))));
+    pp.end();
+  }
+  /* soft floor shadows under lifted stations */
+  {
+    const sp = scene.shadowPen.begin();
+    for (const key in scene.sb){
+      const b = scene.sb[key], L = lift[key];
+      const e = sp.el('polygon'); A(e, 'points', ps([P(b[0] - .1, b[1] - .1, 0), P(b[3] + .1, b[1] - .1, 0), P(b[3] + .1, b[4] + .1, 0), P(b[0] - .1, b[4] + .1, 0)]));
+      A(e, 'fill', '#05030F'); A(e, 'opacity', String(f2(Math.min(.55, L * 2.2)))); A(e, 'filter', 'url(#blurF)');
+    }
+    sp.end();
+  }
+  /* particles */
+  if (view){
+    const vw = view.W / view.s, vh = view.H / view.s;
+    for (const p of scene.parts){
+      const y = mod(p.fy - p.sp * t, 1), x = p.fx + .012 * Math.sin(t * .3 + p.ph);
+      A(p.e, 'cx', String(f1(view.vx + x * vw))); A(p.e, 'cy', String(f1(view.vy + y * vh))); A(p.e, 'r', String(f2(p.r / view.s)));
+      A(p.e, 'opacity', String(f2((.12 + .22 * (.5 + .5 * Math.sin(t * .8 + p.ph))) * smooth(0, .15, y) * (1 - smooth(.85, 1, y)))));
+    }
+  }
+  if (tipKey) placeTip(tipKey);
+}
+
+/* ---------------- tips ---------------- */
+const tip = $('tip');
+let tipKey = null;
+function showTip(key){
+  tipKey = key; tip.innerHTML = '';
+  const s = document.createElement('strong'); s.textContent = INFO[key][0] + ':';
+  tip.appendChild(s); tip.appendChild(document.createTextNode(' ' + INFO[key][1]));
+  tip.hidden = false; placeTip(key);
+}
+function hideTipIf(key, force){ if (tipKey === key && (force || (!hoverK[key] && !focusK[key] && pinned !== key))){ tip.hidden = true; tipKey = null; } }
+function placeTip(key){
+  if (!view || !scene) return;
+  const b = scene.sb[key], [sx, sy] = P((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, b[5] + lift[key] + .25);
+  const px = (sx - view.vx) * view.s, py = (sy - view.vy) * view.s;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = Math.max(12, Math.min(view.W - w - 12, px - w / 2)), y = py - h - 14;
+  if (y < 10){ const [, by] = P((b[0] + b[3]) / 2, b[4], b[2]); y = (by - view.vy) * view.s + 14; }
+  tip.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
+}
+
+/* ---------------- view ---------------- */
+const notes = $('notes'), showBtn = $('show-notes'), ppBtn = $('playpause');
+function fitView(){
+  const W = innerWidth, H = innerHeight, mob = H > W * 1.05;
+  const want = mob ? LM : LD;
+  if (!scene || LY !== want){ buildScene(want); }
+  const B = scene.B;
+  let s, vx, vy;
+  if (!mob){
+    /* ~77% of the width, nudged right and up; if the notes card would cover a station,
+       try small shifts first, then shrink until every station silhouette is clear of it */
+    const s0 = Math.min(.77 * W / (B.pmaxx - B.pminx), .8 * H / (B.maxy - B.miny));
+    const r = notes.hidden ? null : notes.getBoundingClientRect();
+    const pts = [];
+    for (const k in scene.sb){ const b = scene.sb[k]; pts.push(P(b[0], b[1], b[5]), P(b[3], b[1], b[5]), P(b[3], b[1], b[2]), P(b[3], b[4], b[2]), P(b[0], b[4], b[2]), P(b[0], b[4], b[5])); }
+    const offs = [[.02, 0], [.04, -.01], [.06, -.02], [.08, -.03], [.1, -.04]];
+    let found = false;
+    for (let k = 0; k < 40 && !found; k++){
+      const sc = s0 * (1 - k * .015);
+      for (const [dx, dy] of offs){
+        const vx_ = (B.pminx + B.pmaxx) / 2 - (.5 + dx) * W / sc, vy_ = (B.miny + B.maxy) / 2 - (.445 + dy) * H / sc;
+        const X = v => (v - vx_) * sc, Y = v => (v - vy_) * sc;
+        if (X(B.pminx) < 8 || X(B.pmaxx) > W - 8 || Y(B.miny) < 8 || Y(B.maxy) > H - 8) continue;
+        let hit = false;
+        if (r) for (const q of pts){ const x = X(q[0]), y = Y(q[1]); if (x > r.left - 14 && x < r.right + 14 && y > r.top - 14 && y < r.bottom + 14){ hit = true; break; } }
+        if (!hit){ s = sc; vx = vx_; vy = vy_; found = true; break; }
+      }
+    }
+    if (!found){ s = s0; vx = (B.pminx + B.pmaxx) / 2 - .52 * W / s; vy = (B.miny + B.maxy) / 2 - .445 * H / s; }
+  } else {
+    const nb = notes.hidden ? 64 : notes.offsetHeight + 30, avail = H - nb - 14;
+    s = Math.min((W - 16) / (B.maxx - B.minx), avail / (B.maxy - B.miny));
+    vx = (B.minx + B.maxx) / 2 - W / 2 / s; vy = B.miny - (12 + Math.max(0, avail - (B.maxy - B.miny) * s) * .45) / s;
+  }
+  view = { s, vx, vy, W, H };
+  svg.setAttribute('viewBox', `${f2(vx)} ${f2(vy)} ${f2(W / s)} ${f2(H / s)}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+}
+
+/* ---------------- loop & hooks ---------------- */
+const qs = new URLSearchParams(location.search);
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const HERO_T = 13;
+let T = 0, playing = true, last = null, dirty = true;
+if (qs.has('t')){ T = parseFloat(qs.get('t')) || 0; playing = false; }
+else if (RM){ T = HERO_T; playing = false; }
+function kick(){ dirty = true; }
+function stepLifts(dt){
+  let moving = false;
+  for (const k in lift){
+    const target = (hoverK[k] || focusK[k] || pinned === k) ? .28 : 0;
+    liftT[k] = target;
+    const nv = RM ? target : lift[k] + (target - lift[k]) * (1 - Math.exp(-dt * 14));
+    const v = Math.abs(nv - target) < .002 ? target : nv;
+    if (v !== lift[k]){ lift[k] = v; moving = true; }
+  }
+  return moving;
+}
+function loop(ts){
+  requestAnimationFrame(loop);
+  const dt = last == null ? 0 : Math.min(.1, (ts - last) / 1000); last = ts;
+  const mv = stepLifts(dt);
+  if (playing){ T += dt; render(T); }
+  else if (mv || dirty){ render(T); }
+  dirty = false;
+}
+function syncBtn(){ ppBtn.textContent = playing ? 'Pause' : 'Play'; ppBtn.setAttribute('aria-pressed', playing ? 'false' : 'true'); }
+function resetInteraction(){
+  for (const k in lift){ lift[k] = 0; liftT[k] = 0; hoverK[k] = false; focusK[k] = false; }
+  pinned = null; tipKey = null; tip.hidden = true;
+}
+
+function init(){
+  svg = $('scene');
+  defs = mk('defs', svg);
+  const fS = mk('filter', defs, { id:'blurS', x:'-40%', y:'-40%', width:'180%', height:'180%' }); mk('feGaussianBlur', fS, { stdDeviation:'26' });
+  const fL = mk('filter', defs, { id:'blurL', x:'-50%', y:'-50%', width:'200%', height:'200%' }); mk('feGaussianBlur', fL, { stdDeviation:'60' });
+  const fF = mk('filter', defs, { id:'blurF', x:'-30%', y:'-30%', width:'160%', height:'160%' }); mk('feGaussianBlur', fF, { stdDeviation:'8' });
+  const cg = mk('radialGradient', defs, { id:'coreGlow' }); mk('stop', cg, { offset:'0', 'stop-color': C.frost, 'stop-opacity':'.55' }); mk('stop', cg, { offset:'.4', 'stop-color': C.mist, 'stop-opacity':'.18' }); mk('stop', cg, { offset:'1', 'stop-color': C.mist, 'stop-opacity':'0' });
+  const tgf = mk('filter', defs, { id:'textGlow', x:'-10%', y:'-40%', width:'120%', height:'180%' });
+  mk('feGaussianBlur', tgf, { in:'SourceGraphic', stdDeviation:'6', result:'b' });
+  mk('feColorMatrix', tgf, { in:'b', type:'matrix', values:'1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .55 0', result:'g' });
+  const tgm = mk('feMerge', tgf); mk('feMergeNode', tgm, { in:'g' }); mk('feMergeNode', tgm, { in:'SourceGraphic' });
+  const fA = mk('filter', defs, { id:'blurAO', x:'-20%', y:'-20%', width:'140%', height:'140%' }); mk('feGaussianBlur', fA, { stdDeviation:'7' });
+  const bg = mk('linearGradient', defs, { id:'beamGrad', x1:'0', y1:'1', x2:'0', y2:'0' }); mk('stop', bg, { offset:'0', 'stop-color': C.ice, 'stop-opacity':'.55' }); mk('stop', bg, { offset:'.6', 'stop-color': C.ice, 'stop-opacity':'.12' }); mk('stop', bg, { offset:'1', 'stop-color': C.ice, 'stop-opacity':'0' });
+  const ig = mk('radialGradient', defs, { id:'iceGlow' }); mk('stop', ig, { offset:'0', 'stop-color': C.ice, 'stop-opacity':'.45' }); mk('stop', ig, { offset:'1', 'stop-color': C.ice, 'stop-opacity':'0' });
+  L_bg = mk('g', svg); L_shadow = mk('g', svg); L_ground = mk('g', svg); L_gdyn = mk('g', svg); L_world = mk('g', svg); L_hit = mk('g', svg);
+  fitView(); render(T); syncBtn();
+  addEventListener('resize', () => { fitView(); scene.sig = ''; render(T); });
+  ppBtn.addEventListener('click', () => { playing = !playing; last = null; syncBtn(); });
+  $('hide-notes').addEventListener('click', () => { notes.hidden = true; showBtn.hidden = false; showBtn.focus(); fitView(); render(T); });
+  showBtn.addEventListener('click', () => { notes.hidden = false; showBtn.hidden = true; fitView(); render(T); });
+  addEventListener('keydown', e => {
+    if (e.key === 'h' || e.key === 'H'){ if (e.metaKey || e.ctrlKey || e.altKey) return; if (notes.hidden) showBtn.click(); else $('hide-notes').click(); }
+    else if (e.key === ' ' || e.code === 'Space'){
+      const a = document.activeElement;
+      if (a && (a.tagName === 'BUTTON' || a.tagName === 'A' || a.getAttribute('role') === 'button')) return;
+      e.preventDefault(); playing = !playing; last = null; syncBtn();
+    }
+  });
+  requestAnimationFrame(loop);
+  const ready = document.fonts && document.fonts.ready ? Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 3000))]) : Promise.resolve();
+  ready.then(() => {
+    window.__seek = t => { playing = false; resetInteraction(); T = +t || 0; scene.sig = ''; render(T); syncBtn(); };
+    window.__play = () => { playing = true; last = null; syncBtn(); };
+    render(T);
+  });
+}
+init();
+})();
+</script>
+</body>
+</html>

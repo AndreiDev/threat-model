@@ -1,0 +1,981 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cipher lock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--void)}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab;background:var(--void)}
+#c.dragging{cursor:grabbing}
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="A raymarched padlock opening and closing above a field of data blocks that a scan wave cools to blue or burns hot and sinks"></canvas>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Cipher lock</h1>
+  <p>A padlock guards a field of data blocks: while it stands open a scan wave checks every block, trusted ones cool to ice, hostile ones flare hot and sink into quarantine, and then the lock drops shut and freezes.</p>
+  <ul class="tech">
+    <li>One GLSL fragment shader in raw WebGL2 that raymarches signed distance fields</li>
+    <li>Padlock built from a bevelled box, an engraved keyhole and a capped-torus shackle, all animated by easing curves inside the shader</li>
+    <li>Domain-repeated data blocks with hashed bobbing and a cell-bounded step that keeps the march artefact-free</li>
+    <li>Penumbra soft shadows, 5-tap ambient occlusion, fresnel rims and a marched floor reflection</li>
+    <li>Adaptive render scale from 0.5 to 1.0, upscaled in a filmic post pass</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<script id="vs" type="x-shader/x-vertex">#version 300 es
+void main(){
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}
+</script>
+
+<script id="fs-scene" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+precision highp int;
+
+uniform float uTime;   // seconds
+uniform vec2  uRes;    // render target size in pixels
+uniform vec2  uCam;    // drag orbit offsets (yaw, pitch)
+uniform float uQ;      // 1 = full quality, 0 = low
+out vec4 fragColor;
+
+#define TAU 6.28318530718
+#define PI  3.14159265359
+#define CYCLE 12.0
+#define CELL 0.55
+#define BHS 0.13          // data block half size
+#define WAVE_T0 2.1       // scan wave leaves the lock
+#define WAVE_SPEED 2.05
+#define HOSTILE_P 0.075
+#define LOCK_T 8.32       // shackle hits home
+#define EXCL_R 1.5        // no blocks inside this radius
+#define FIELD_R 11.5      // the data field is an island this wide
+
+// ---------- palette (sRGB hex from the brief) ----------
+const vec3 C_VOID  = vec3( 16., 12., 42.)/255.;
+const vec3 C_DEEP  = vec3( 27., 23., 71.)/255.;
+const vec3 C_STEEL = vec3( 78., 90.,140.)/255.;
+const vec3 C_MIST  = vec3(140.,147.,196.)/255.;
+const vec3 C_ICE   = vec3(155.,232.,255.)/255.;
+const vec3 C_FROST = vec3(232.,247.,255.)/255.;
+
+vec3 lin(vec3 c){ return pow(c, vec3(2.2)); }
+
+// ironbow heat ramp: heat-0 .. heat-5, piecewise linear in sRGB, returned linear
+vec3 ironbow(float x){
+  x = clamp(x, 0.0, 1.0) * 5.0;
+  vec3 c = mix(vec3( 58., 15.,107.), vec3(155., 29.,143.), clamp(x      , 0.0, 1.0));
+  c = mix(c,   vec3(240., 48.,106.), clamp(x - 1.0, 0.0, 1.0));
+  c = mix(c,   vec3(255.,122., 47.), clamp(x - 2.0, 0.0, 1.0));
+  c = mix(c,   vec3(255.,211.,107.), clamp(x - 3.0, 0.0, 1.0));
+  c = mix(c,   vec3(255.,246.,224.), clamp(x - 4.0, 0.0, 1.0));
+  return lin(c / 255.0);
+}
+// cold trust ramp: #1B1747 > #2F4FA8 > #4FA3E0 > #9BE8FF > #E8F7FF
+vec3 coldbow(float x){
+  x = clamp(x, 0.0, 1.0) * 4.0;
+  vec3 c = mix(vec3( 27., 23., 71.), vec3( 47., 79.,168.), clamp(x      , 0.0, 1.0));
+  c = mix(c,   vec3( 79.,163.,224.), clamp(x - 1.0, 0.0, 1.0));
+  c = mix(c,   vec3(155.,232.,255.), clamp(x - 2.0, 0.0, 1.0));
+  c = mix(c,   vec3(232.,247.,255.), clamp(x - 3.0, 0.0, 1.0));
+  return lin(c / 255.0);
+}
+
+float hash12(vec2 p){
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+// ---------- easing ----------
+float easeOutBack(float x, float s){
+  x = clamp(x, 0.0, 1.0); float y = x - 1.0;
+  return 1.0 + (s + 1.0) * y * y * y + s * y * y;
+}
+float easeInOutCubic(float x){
+  x = clamp(x, 0.0, 1.0);
+  if (x < 0.5) return 4.0 * x * x * x;
+  float y = -2.0 * x + 2.0; return 1.0 - y * y * y * 0.5;
+}
+float easeInCubic(float x){ x = clamp(x, 0.0, 1.0); return x * x * x; }
+float easeOutCubic(float x){ x = clamp(x, 0.0, 1.0); float y = 1.0 - x; return 1.0 - y * y * y; }
+
+// ---------- per-frame globals (pure functions of uTime) ----------
+float gTc, gCyc;
+float gLift, gCt, gSt;
+float gWarm, gCold, gFlash;
+float gBlkHeat, gBlkD;
+float gPix;
+vec3 gDaisRefl;
+
+const vec3 KEY_DIR  = vec3(0.5698, 0.7051, 0.4220);   // normalize(0.55,0.68,0.41)
+const vec3 FILL_DIR = vec3(-0.9152, 0.3147, -0.2518);
+
+// storyboard for the lock (tc in [0,12)):
+// 0.00-0.30 anticipation dip | 0.30-1.05 lift, easeOutBack | 0.95-2.05 swing open
+// 7.00-7.95 swing shut | 8.05-8.65 drop with bounce, home at 8.32 | 8.32+ ice
+void lockAnim(float tc){
+  float lift;
+  if (tc < 0.3) lift = -0.035 * sin(PI * tc / 0.3);
+  else lift = 0.42 * easeOutBack((tc - 0.3) / 0.75, 1.7);
+  if (tc > 8.05){
+    float u = clamp((tc - 8.05) / 0.6, 0.0, 1.0), y;
+    if (u < 0.45){ float v = u / 0.45; y = 1.0 - v * v; }
+    else if (u < 0.78){ float v = (u - 0.45) / 0.33; y = 0.13 * 4.0 * v * (1.0 - v); }
+    else { float v = (u - 0.78) / 0.22; y = 0.035 * 4.0 * v * (1.0 - v); }
+    lift = 0.42 * y;
+  }
+  gLift = lift;
+  float th = 3.05 * easeOutBack((tc - 0.95) / 1.15, 1.1);
+  th *= 1.0 - easeInOutCubic((tc - 7.0) / 0.95);
+  gCt = cos(th); gSt = sin(th);
+  gWarm  = smoothstep(0.35, 1.7, tc) * (1.0 - smoothstep(LOCK_T - 0.04, LOCK_T + 0.3, tc));
+  gCold  = max(1.0 - smoothstep(0.15, 1.1, tc), smoothstep(LOCK_T - 0.02, LOCK_T + 0.32, tc));
+  gFlash = tc > LOCK_T ? exp(-(tc - LOCK_T) * 2.2) : 0.0;
+}
+
+// ---------- SDF primitives ----------
+float sdBox(vec3 p, vec3 b){
+  vec3 q = abs(p) - b;
+  return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+float sdRoundBox(vec3 p, vec3 b, float r){
+  vec3 q = abs(p) - b + r;
+  return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
+}
+float sdBox2(vec2 p, vec2 b){
+  vec2 q = abs(p) - b;
+  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+}
+// box with chamfered edges, then softened by r
+float sdBevelBox(vec3 p, vec3 b, float ch, float r){
+  vec3 bb = b - r;
+  vec3 q = abs(p);
+  float d = sdBox(p, bb);
+  d = max(d, (q.x + q.y - (bb.x + bb.y - ch)) * 0.70710678);
+  d = max(d, (q.y + q.z - (bb.y + bb.z - ch)) * 0.70710678);
+  d = max(d, (q.x + q.z - (bb.x + bb.z - ch)) * 0.70710678);
+  return d - r;
+}
+float sdTrapezoid(vec2 p, float r1, float r2, float he){
+  vec2 k1 = vec2(r2, he);
+  vec2 k2 = vec2(r2 - r1, 2.0 * he);
+  p.x = abs(p.x);
+  vec2 ca = vec2(p.x - min(p.x, (p.y < 0.0) ? r1 : r2), abs(p.y) - he);
+  vec2 cb = p - k1 + k2 * clamp(dot(k1 - p, k2) / dot(k2, k2), 0.0, 1.0);
+  float s = (cb.x < 0.0 && ca.y < 0.0) ? -1.0 : 1.0;
+  return s * sqrt(min(dot(ca, ca), dot(cb, cb)));
+}
+
+// ---------- lock ----------
+const vec3 BODY_C = vec3(0.0, 0.66, 0.0);
+const vec3 BODY_B = vec3(0.78, 0.60, 0.30);
+#define BODY_TOP 1.26
+#define SH_X  -0.48
+#define SH_R   0.48
+#define SH_r   0.105
+#define SH_CY  1.80
+
+float keyhole2D(vec2 kp){   // kp relative to body centre
+  kp.y -= 0.02;
+  float kc = length(kp - vec2(0.0, 0.10)) - 0.095;
+  float ks = sdTrapezoid(kp - vec2(0.0, -0.08), 0.062, 0.028, 0.14);
+  return min(kc, ks);
+}
+
+// returns (distance, material) 1 body, 2 shackle, 6 dais
+vec2 mapLock(vec3 p){
+  vec3 bq = abs(p - vec3(-0.225, 1.5, 0.0)) - vec3(1.53, 1.56, 1.3);
+  float bd = length(max(bq, 0.0)) + min(max(bq.x, max(bq.y, bq.z)), 0.0);
+  if (bd > 0.2) return vec2(bd, 1.0);
+
+  // body
+  vec3 q = p - BODY_C;
+  float b0 = sdBevelBox(q, BODY_B, 0.075, 0.012);
+  float body = b0;
+  float gy = abs(abs(q.y) - 0.44) - 0.0065;                       // two grooves
+  body = max(body, -max(gy, -(b0 + 0.016)));
+  float hole = max(length(vec2(abs(q.x) - 0.48, q.z)) - 0.128, (BODY_B.y - 0.14) - q.y);
+  body = max(body, -hole);                                         // shackle holes
+  float k2 = keyhole2D(q.xy);
+  body = max(body, -max(k2, (BODY_B.z - 0.09) - abs(q.z)));         // keyhole, both faces
+  float ring = abs(length(q.xy - vec2(0.0, 0.05)) - 0.27) - 0.0055;
+  body = max(body, -max(ring, (BODY_B.z - 0.012) - abs(q.z)));      // escutcheon ring
+  vec2 res = vec2(body, 1.0);
+
+  // shackle: rotate about the long leg, after lifting
+  vec3 sp = p - vec3(SH_X, gLift, 0.0);
+  sp.xz = vec2(sp.x * gCt + sp.z * gSt, -sp.x * gSt + sp.z * gCt);
+  vec3 ap = sp - vec3(SH_R, SH_CY, 0.0);
+  float tor = ap.y > 0.0 ? length(vec2(length(ap.xy) - SH_R, ap.z)) - SH_r : 1e3;
+  vec3 l1 = sp; l1.y -= clamp(l1.y, 0.62, SH_CY);
+  vec3 l2 = sp - vec3(2.0 * SH_R, 0.0, 0.0); l2.y -= clamp(l2.y, BODY_TOP - 0.1, SH_CY);
+  float sh = min(tor, min(length(l1), length(l2)) - SH_r);
+  vec3 np = sp - vec3(2.0 * SH_R, BODY_TOP - 0.03, 0.0);           // locking notch
+  sh = max(sh, -(length(vec2(length(np.xz) - SH_r, np.y)) - 0.03));
+  if (sh < res.x) res = vec2(sh, 2.0);
+
+  // dais
+  vec2 dd = abs(vec2(length(p.xz), p.y - 0.03)) - vec2(1.2 - 0.02, 0.03 - 0.02);
+  float dais = min(max(dd.x, dd.y), 0.0) + length(max(dd, 0.0)) - 0.02;
+  float rg = abs(length(p.xz) - 1.02) - 0.012;
+  dais = max(dais, -max(rg, 0.048 - p.y));
+  if (dais < res.x) res = vec2(dais, 6.0);
+  return res;
+}
+
+// ---------- data field ----------
+// geometry of the block in cell id: x = y offset, y = swell, z = heat envelope
+vec3 blockGeo(vec2 id, float r){
+  float h0 = hash12(id + 0.37);
+  float k = 2.0 + floor(h0 * 4.0);
+  float bob = 0.032 * (0.5 + 0.5 * sin(TAU * k * gTc / CYCLE + h0 * 37.0));
+  float s = gTc - (WAVE_T0 + r / WAVE_SPEED);
+  float yoff, heat = 0.0;
+  if (s < 0.0){
+    float hostP = step(hash12(id * 1.31 + (gCyc - 1.0) * 7.17 + 3.1), HOSTILE_P);
+    float rf = smoothstep(0.2, 1.5, gTc - r * 0.05);
+    yoff = -0.62 * hostP * (1.0 - easeOutCubic(rf));
+  } else {
+    float hostN = step(hash12(id * 1.31 + gCyc * 7.17 + 3.1), HOSTILE_P);
+    float sink = hostN * easeInCubic((s - 0.95) / 0.85);
+    yoff = hostN * 0.065 * smoothstep(0.05, 0.45, s) * (1.0 - sink) - 0.62 * sink;
+    heat = hostN * smoothstep(0.0, 0.18, s) * (1.0 - smoothstep(1.25, 2.3, s));
+  }
+  return vec3(yoff + bob, 0.02 * heat, heat);
+}
+
+// 0 = empty cell, otherwise the block's size factor (shrinks toward the island edge)
+float blockScale(vec2 id, float r){
+  float e = step(0.24, hash12(id * 0.73 + 5.1));
+  return e * smoothstep(FIELD_R, FIELD_R - 2.4, r) * step(EXCL_R, r);
+}
+
+float mapBlocks(vec3 p){
+  gBlkHeat = 0.0; gBlkD = 1e3;
+  if (p.y > 0.52) return p.y - 0.47;
+  vec2 id = floor(p.xz / CELL);
+  vec2 c  = (id + 0.5) * CELL;
+  vec2 lp = p.xz - c;
+  vec2 bw = 0.5 * CELL - abs(lp);
+  // any other cell's block is at least (distance to this cell's wall + gap) away
+  float bound = max(min(bw.x, bw.y) + (0.5 * CELL - BHS - 0.025), p.y - 0.47);
+  float radial = length(p.xz) - (FIELD_R + 0.45);       // every block lies inside the island
+  float r = length(c);
+  float sc = blockScale(id, r);
+  if (sc < 0.02) return max(bound, radial);
+  vec3 g = blockGeo(id, r);
+  float hs = (BHS + g.y) * sc;
+  vec3 q = vec3(lp.x, p.y - (0.03 + hs + g.x), lp.y);
+  float d = sdRoundBox(q, vec3(hs), 0.035 * sc);
+  gBlkHeat = g.z * sc; gBlkD = d;
+  return max(min(d, bound), radial);
+}
+
+vec2 map(vec3 p){
+  vec2 res = vec2(p.y, 3.0);
+  float b = mapBlocks(p);
+  if (b < res.x) res = vec2(b, 4.0);
+  vec2 l = mapLock(p);
+  if (l.x < res.x) res = l;
+  return res;
+}
+float mapShadow(vec3 p){ return min(mapBlocks(p), mapLock(p).x); }
+
+vec3 calcNormal(vec3 p, float t){
+  float e = 0.0005 + 0.00025 * t;
+  const vec2 k = vec2(1.0, -1.0);
+  return normalize(k.xyy * map(p + k.xyy * e).x + k.yyx * map(p + k.yyx * e).x +
+                   k.yxy * map(p + k.yxy * e).x + k.xxx * map(p + k.xxx * e).x);
+}
+vec3 lockNormal(vec3 p){
+  const float e = 0.0008;
+  const vec2 k = vec2(1.0, -1.0);
+  return normalize(k.xyy * mapLock(p + k.xyy * e).x + k.yyx * mapLock(p + k.yyx * e).x +
+                   k.yxy * mapLock(p + k.yxy * e).x + k.xxx * mapLock(p + k.xxx * e).x);
+}
+
+// iq improved penumbra shadow
+float softShadow(vec3 ro, vec3 rd, float k){
+  int steps = uQ > 0.5 ? 40 : 18;
+  float res = 1.0, t = 0.015, ph = 1e10;
+  for (int i = 0; i < 40; i++){
+    if (i >= steps) break;
+    float h = mapShadow(ro + rd * t);
+    float y = h * h / (2.0 * ph);
+    float d = sqrt(max(h * h - y * y, 0.0));
+    res = min(res, k * d / max(0.0, t - y));
+    ph = h;
+    t += clamp(h, 0.012, 0.3);
+    if (res < 0.002 || t > 7.0) break;
+  }
+  res = clamp(res, 0.0, 1.0);
+  return res * res * (3.0 - 2.0 * res);
+}
+
+float calcAO(vec3 p, vec3 n){
+  int taps = uQ > 0.5 ? 5 : 3;
+  float occ = 0.0, sca = 1.0;
+  for (int i = 0; i < 5; i++){
+    if (i >= taps) break;
+    float h = 0.012 + 0.16 * float(i) / 4.0;
+    occ += (h - map(p + h * n).x) * sca;
+    sca *= 0.9;
+  }
+  return clamp(1.0 - 2.6 * occ, 0.0, 1.0);
+}
+
+// ---------- environment & lighting ----------
+vec3 envMap(vec3 r){
+  vec3 c = mix(lin(C_VOID), lin(C_DEEP) * 1.5, smoothstep(-0.2, 0.8, r.y));
+  c += lin(C_STEEL) * 0.45 * exp(-abs(r.y - 0.03) * 14.0);
+  float k = max(dot(r, KEY_DIR), 0.0);
+  c += vec3(0.92, 0.95, 1.0) * (pow(k, 64.0) * 6.0 + pow(k, 5.0) * 0.12);
+  // tall strip softboxes: one at the key azimuth, a cold one opposite
+  vec2 rh = normalize(r.xz + vec2(1e-5));
+  float az1 = dot(rh, normalize(KEY_DIR.xz));
+  float az2 = dot(rh, normalize(FILL_DIR.xz));
+  float band = smoothstep(-0.05, 0.15, r.y) * smoothstep(0.9, 0.6, r.y);
+  c += vec3(0.85, 0.9, 1.0) * 3.6 * smoothstep(0.972, 0.99, az1) * band;
+  c += lin(C_ICE) * 2.4 * smoothstep(0.978, 0.994, az2) * band;
+  c += lin(C_MIST) * 0.7 * smoothstep(0.88, 0.97, r.y);
+  return c;
+}
+vec3 skyCol(vec3 rd){
+  vec3 c = lin(C_VOID);
+  c = mix(c, lin(C_DEEP), 0.55 * exp(-abs(rd.y) * 7.0));
+  return c;
+}
+
+const vec3 KEY_COL  = vec3(2.45, 2.4, 2.6);
+
+// light thrown by the keyhole (warm when open, ice when locked)
+vec3 lockSpill(vec3 p, vec3 n){
+  vec3 lp = vec3(0.0, 0.72, sign(p.z + 1e-4) * 0.62);
+  vec3 L = lp - p; float d2 = dot(L, L); L *= inversesqrt(d2);
+  vec3 c = ironbow(0.45) * 1.1 * gWarm + lin(C_ICE) * 0.35 * gCold + lin(C_FROST) * 1.6 * gFlash;
+  return c * max(dot(n, L), 0.0) * exp(-d2 * 1.15);
+}
+
+// state of a block for shading
+struct Blk { float heat; float temp; float cold; float flash; float seal; float lvl; float host; };
+Blk blockLook(vec2 id, float r){
+  Blk b; b.heat = 0.0; b.temp = 0.0; b.cold = 0.0; b.flash = 0.0; b.seal = 0.0; b.lvl = 0.0; b.host = 0.0;
+  float s = gTc - (WAVE_T0 + r / WAVE_SPEED);
+  if (s < 0.0){
+    float hostP = step(hash12(id * 1.31 + (gCyc - 1.0) * 7.17 + 3.1), HOSTILE_P);
+    float lvlP = hash12(id + (gCyc - 1.0) * 3.1 + 9.2);
+    float rf = smoothstep(0.2, 1.5, gTc - r * 0.05);
+    b.cold = (1.0 - hostP) * (1.0 - rf);
+    b.lvl = lvlP;
+    b.seal = hostP * (1.0 - rf);
+  } else {
+    float hostN = step(hash12(id * 1.31 + gCyc * 7.17 + 3.1), HOSTILE_P);
+    b.host = hostN;
+    b.lvl = hash12(id + gCyc * 3.1 + 9.2);
+    b.heat = hostN * smoothstep(0.0, 0.18, s) * (1.0 - smoothstep(1.25, 2.3, s));
+    b.temp = 1.0 - 0.5 * smoothstep(0.25, 2.0, s);
+    b.cold = (1.0 - hostN) * smoothstep(0.0, 0.6, s);
+    b.flash = smoothstep(0.0, 0.05, s) * exp(-s * 4.5);
+    b.seal = hostN * smoothstep(1.5, 2.3, s);
+  }
+  return b;
+}
+
+// lock + dais shading; cheap = no shadow / ao (used in reflections)
+vec3 shadeLock(vec3 p, vec3 n, vec3 rd, float mat, bool cheap){
+  float ndv = clamp(dot(n, -rd), 0.0, 1.0);
+  float fres = pow(1.0 - ndv, 5.0);
+  vec3 ref = reflect(rd, n);
+  float sh = 1.0, occ = 1.0;
+  if (!cheap){ sh = softShadow(p + n * 0.003, KEY_DIR, 10.0); occ = calcAO(p, n); }
+  float dif = max(dot(n, KEY_DIR), 0.0);
+  float fil = clamp(dot(n, FILL_DIR) * 0.5 + 0.5, 0.0, 1.0);
+  float hem = 0.5 + 0.5 * n.y;
+  vec3 hal = normalize(KEY_DIR - rd);
+  float spe = pow(max(dot(n, hal), 0.0), 90.0) * dif * sh;
+  vec3 amb = mix(lin(C_VOID) * 2.0, lin(C_DEEP) * 2.2, hem);
+  vec3 fillC = coldbow(0.3) * 1.5;
+  float rimF = smoothstep(0.35, 1.0, 1.0 - ndv); rimF *= rimF;
+  vec3 col;
+
+  if (mat < 1.5){
+    // body: dark anodised steel with bevels catching strip lights
+    vec3 q = p - BODY_C;
+    vec3 alb = lin(vec3(34., 40., 86.) / 255.);
+    vec3 F0 = lin(vec3(96., 106., 150.) / 255.);
+    vec3 F = F0 + (1.0 - F0) * fres;
+    col = alb * (KEY_COL * dif * sh * 0.45 + fillC * fil * 0.5 * occ + amb * occ);
+    col += envMap(ref) * F * occ * mix(0.5, 1.0, sh);
+    col += KEY_COL * spe * 1.6;
+    col += vec3(0.05, 0.055, 0.09) * smoothstep(-0.9, 0.9, q.y + 0.4 * q.x) * occ;   // softbox falloff
+    // thermal read-out on the keyhole faces
+    float k2 = keyhole2D(q.xy);
+    float face = smoothstep(0.6, 0.95, abs(n.z));
+    float depth = clamp((BODY_B.z - abs(q.z)) / 0.09, 0.0, 1.0);
+    float inside = (1.0 - smoothstep(-0.004, 0.004, k2)) * smoothstep(0.08, 0.2, depth);
+    float halo = exp(-max(k2, 0.0) * 16.0) * face;
+    col *= 1.0 - 0.85 * inside;
+    col += ironbow(0.42 + 0.48 * depth) * 3.2 * inside * gWarm;
+    col += ironbow(0.28) * 0.9 * halo * gWarm * (1.0 - inside);
+    col += ironbow(0.1) * 0.1 * gWarm * exp(-length(q.xy) * 2.2) * face;
+    col += coldbow(0.8) * 1.3 * inside * gCold;
+    col += lin(C_ICE) * 0.25 * halo * gCold * (1.0 - inside);
+    // escutcheon ring
+    float ring = abs(length(q.xy - vec2(0.0, 0.05)) - 0.27);
+    float rl = (1.0 - smoothstep(0.004, 0.004 + gPix, ring)) * face;
+    col += (ironbow(0.5) * gWarm + lin(C_ICE) * 1.2 * gCold) * rl * 0.9;
+  } else if (mat < 2.5){
+    // shackle: polished chrome
+    vec3 F0 = lin(vec3(196., 204., 230.) / 255.);
+    vec3 F = F0 + (1.0 - F0) * fres;
+    col = envMap(ref) * F * occ * mix(0.5, 1.0, sh);
+    col += lin(vec3(30., 34., 70.) / 255.) * (KEY_COL * dif * sh * 0.3 + amb * occ);
+    col += KEY_COL * spe * 2.2;
+  } else {
+    // dais
+    vec3 alb = lin(vec3(32., 28., 82.) / 255.);
+    vec3 F = vec3(0.04) + 0.96 * fres;
+    col = alb * (KEY_COL * dif * sh * 0.5 + fillC * fil * 0.5 * occ + amb * occ);
+    col += (cheap ? envMap(ref) : gDaisRefl) * F * occ * 0.8;
+    col += KEY_COL * pow(max(dot(n, hal), 0.0), 30.0) * dif * sh * 0.15;
+    float rr = abs(length(p.xz) - 1.02);
+    float ringL = 1.0 - smoothstep(0.012, 0.012 + gPix, rr);
+    col += (ironbow(0.55) * 2.2 * gWarm + lin(C_ICE) * 2.0 * gCold + lin(C_FROST) * 3.0 * gFlash) * ringL;
+  }
+  if (mat > 5.5) col += lockSpill(p, n) * 0.9 * occ;
+
+  // state rim: warm magenta while open, crisp ice once locked
+  if (mat < 5.5){
+    vec3 rimC = ironbow(0.3) * 0.8 * gWarm + lin(C_ICE) * 2.4 * gCold;
+    col += rimC * rimF * mix(0.6, 1.0, occ);
+    col += mix(lin(C_ICE), lin(C_FROST), 0.5) * 3.0 * gFlash * rimF * rimF;
+    float back = clamp(dot(n, normalize(vec3(-0.35, 0.35, -0.87))) * 0.7 + 0.3, 0.0, 1.0);
+    col += lin(C_MIST) * 0.55 * rimF * back * occ;
+    col += coldbow(0.62) * 0.1 * gFlash;
+  }
+  return col;
+}
+
+// curtain glow from a cylindrical wave sheet of radius R (analytic)
+float curtain(vec3 ro, vec3 rd, float R, float tEnd, float hgt){
+  float a = dot(rd.xz, rd.xz);
+  float b = dot(ro.xz, rd.xz);
+  float c = dot(ro.xz, ro.xz) - R * R;
+  float disc = b * b - a * c;
+  if (disc <= 0.0 || a < 1e-5) return 0.0;
+  float sq = sqrt(disc);
+  float g = 0.0;
+  for (int i = 0; i < 2; i++){
+    float t = (-b + (i == 0 ? -sq : sq)) / a;
+    if (t > 0.0 && t < tEnd){
+      vec3 p = ro + rd * t;
+      if (p.y > 0.0){
+        vec3 nrm = vec3(p.x, 0.0, p.z) / R;
+        float cs = abs(dot(nrm, rd));
+        g += exp(-p.y / hgt) / max(cs, 0.12);
+      }
+    }
+  }
+  return g;
+}
+
+// marched reflection of the lock (used by the floor and the dais)
+vec3 lockReflection(vec3 p, vec3 ref){
+  vec3 env = envMap(ref);
+  if (uQ < 0.5) return env;
+  float rt = 0.02, hm = -1.0;
+  vec3 rp = p;
+  for (int i = 0; i < 56; i++){
+    rp = p + ref * rt;
+    vec2 h = mapLock(rp);
+    if (h.x < 0.0015 * rt + 0.0005){ hm = h.y; break; }
+    rt += h.x;
+    if (rt > 14.0 || rp.y > 3.3) break;
+  }
+  if (hm < 0.0) return env;
+  vec3 lc = shadeLock(rp, lockNormal(rp), ref, hm, true);
+  return mix(env, lc, exp(-rt * 0.3));
+}
+
+vec3 tonemap(vec3 c){
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  c = mix(c, vec3(l), smoothstep(1.2, 6.0, l) * 0.6);
+  vec3 a = vec3(0.62);
+  vec3 s = a + (1.0 - a) * (1.0 - exp(-(c - a) / (1.0 - a)));
+  return mix(c, s, step(a, c));
+}
+
+void main(){
+  vec2 fc = gl_FragCoord.xy;
+  vec2 uv = (fc - 0.5 * uRes) / uRes.y;
+  gTc = mod(uTime, CYCLE);
+  gCyc = floor(uTime / CYCLE);
+  lockAnim(gTc);
+
+  // camera: slow orbit, drag adds; portrait pulls back and widens
+  float aspect = uRes.x / uRes.y;
+  float port = 1.0 - smoothstep(0.62, 1.15, aspect);
+  float f = mix(1.9, 1.32, port);
+  float yaw = -0.18 + 0.48 * sin(TAU * gTc / CYCLE + 0.5) + uCam.x;
+  float pitch = clamp(0.3 + 0.04 * sin(TAU * gTc / CYCLE * 2.0 + 1.1) + 0.2 * port + uCam.y, 0.04, 1.35);
+  float D = max(9.2, 1.78 * f / (0.5 * aspect));
+  vec3 ta = vec3(-0.2, mix(1.2, 0.55, port), 0.0);
+  vec3 ro = ta + D * vec3(cos(pitch) * sin(yaw), sin(pitch), cos(pitch) * cos(yaw));
+  vec3 fw = normalize(ta - ro);
+  vec3 rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+  vec3 up = cross(rt, fw);
+  vec3 rd = normalize(uv.x * rt + uv.y * up + f * fw);
+  gPix = 1.0 / (f * uRes.y);
+
+  // march
+  int steps = uQ > 0.5 ? 100 : 72;
+  float tFloor = rd.y < 0.0 ? -ro.y / rd.y : 1e9;
+  float tMax = min(48.0, tFloor + 0.01);
+  float t = 0.0, m = -1.0, glow = 0.0;
+  for (int i = 0; i < 100; i++){
+    if (i >= steps) break;
+    vec3 p = ro + rd * t;
+    vec2 h = map(p);
+    glow += gBlkHeat * exp(-max(gBlkD, 0.0) * 6.5) * min(h.x, 0.25);
+    if (h.x < 0.0003 * t + 0.0003){ m = h.y; break; }
+    t += h.x;
+    if (t > tMax) break;
+    if (p.y > 3.2 && rd.y > 0.0) break;
+  }
+  if (m < 0.0 && rd.y < 0.0 && tFloor < 48.0){ t = tFloor; m = 3.0; }   // safety: grazing rays
+
+  vec3 col;
+  float tHit = m < 0.0 ? 1e9 : t;
+  if (m < 0.0){
+    col = skyCol(rd);
+  } else {
+    vec3 p = ro + rd * t;
+    gPix = t / (f * uRes.y);
+    vec3 n = (m == 3.0) ? vec3(0.0, 1.0, 0.0) : calcNormal(p, t);
+    if (m == 3.0 && p.y > 0.002) n = calcNormal(p, t);
+
+    if (m == 1.0 || m == 2.0 || m == 6.0){
+      if (m == 6.0) gDaisRefl = lockReflection(p + n * 0.004, reflect(rd, n));
+      col = shadeLock(p, n, rd, m, false);
+    } else {
+      // shared terms for floor & blocks
+      float ndv = clamp(dot(n, -rd), 0.0, 1.0);
+      float fres = pow(1.0 - ndv, 5.0);
+      vec3 ref = reflect(rd, n);
+      bool offIsland = dot(p.xz, p.xz) > (FIELD_R + 0.8) * (FIELD_R + 0.8);   // nothing out there casts
+      float sh = offIsland ? 1.0 : softShadow(p + n * 0.003, KEY_DIR, 9.0);
+      float occ = offIsland ? 1.0 : calcAO(p, n);
+      float dif = max(dot(n, KEY_DIR), 0.0);
+      float fil = clamp(dot(n, FILL_DIR) * 0.5 + 0.5, 0.0, 1.0);
+      vec3 hal = normalize(KEY_DIR - rd);
+      vec3 amb = mix(lin(C_VOID) * 2.0, lin(C_DEEP) * 2.2, 0.5 + 0.5 * n.y);
+      vec3 fillC = coldbow(0.3) * 1.4;
+
+      vec2 id = floor(p.xz / CELL);
+      vec2 cc = (id + 0.5) * CELL;
+      vec2 lp = p.xz - cc;
+      float rc = length(cc);
+      Blk b = blockLook(id, rc);
+      float bsc = blockScale(id, rc);
+      if (bsc < 0.02){ b.heat = 0.0; b.cold = 0.0; b.flash = 0.0; b.seal = 0.0; }
+      vec3 hotC = ironbow(b.temp);
+      vec3 coolC = coldbow(0.22 + 0.3 * b.lvl);
+
+      if (m == 4.0){
+        // data block
+        vec3 alb = lin(vec3(34., 36., 84.) / 255.);
+        vec3 F = vec3(0.04) + 0.96 * fres;
+        col = alb * (KEY_COL * dif * sh * 0.16 + fillC * fil * 0.4 * occ + amb * occ);
+        col += envMap(ref) * F * occ * 0.28;
+        col += KEY_COL * pow(max(dot(n, hal), 0.0), 60.0) * dif * sh * 0.3;
+        // code minimap on the top face: four lines with hashed indent and length
+        vec3 g = blockGeo(id, rc);
+        float hs = (BHS + g.y) * bsc;
+        float topY = 0.03 + 2.0 * hs + g.x;
+        float top = smoothstep(0.85, 0.97, n.y) * step(topY - 0.02, p.y);
+        vec2 tq = lp / hs;                                  // -1..1 across the face
+        float rv = (0.74 - tq.y) / 1.48 * 4.0;
+        float ri = clamp(floor(rv), 0.0, 3.0);
+        float fy = abs(fract(rv) - 0.5) * 0.37;
+        float hr = hash12(id * 5.3 + ri * 1.7);
+        float ind = (ri < 0.5 ? 0.0 : floor(hr * 3.0)) * 0.2;
+        float len = 0.3 + 0.7 * fract(hr * 13.7);
+        float x0 = -0.72 + ind;
+        float x1 = x0 + len * (1.44 - ind);
+        float dbar = max(max(x0 - tq.x, tq.x - x1), fy - 0.075);
+        float aa = gPix / hs;
+        float bit = (1.0 - smoothstep(0.0, aa * 1.5, dbar)) * top * step(abs(tq.y), 0.74);
+        vec3 state = lin(C_MIST) * 0.3 * (1.0 - b.cold) * (1.0 - b.heat) * exp(-t * 0.05)
+                   + coldbow(0.5 + 0.3 * b.lvl) * 1.5 * b.cold + ironbow(min(b.temp + 0.2, 1.0)) * 7.0 * b.heat;
+        col = mix(col, state, bit);
+        // thermal emission of the whole block
+        col += coolC * 0.15 * b.cold * (0.6 + 0.4 * (1.0 - top));
+        col += hotC * (2.6 + 1.6 * (1.0 - top)) * b.heat;
+        col += mix(lin(C_ICE), lin(C_FROST), 0.35) * 1.9 * b.flash;
+        col += coldbow(0.6) * 0.6 * pow(1.0 - ndv, 4.0) * b.cold * (1.0 - top);
+        col += lin(C_STEEL) * 0.3 * pow(1.0 - ndv, 3.0) * (1.0 - b.cold) * (1.0 - b.heat);
+        if (gTc > LOCK_T){   // the lock's ice shockwave frosts each block as it passes
+          float R2 = (gTc - LOCK_T) * 6.5;
+          col += lin(C_FROST) * 1.4 * exp(-abs(rc - R2) * 3.0) * exp(-(gTc - LOCK_T) * 0.9);
+        }
+        col += lockSpill(p, n) * occ;
+      } else {
+        // floor: glossy indigo with an etched steel grid
+        vec3 alb = lin(C_VOID) * 1.5;
+        vec3 F = vec3(0.035) + 0.965 * fres;
+        col = alb * (KEY_COL * dif * sh * 0.4 + fillC * fil * 0.4 * occ + amb * occ);
+        vec3 refl = offIsland ? envMap(ref) : lockReflection(p + n * 0.002, ref);
+        col += refl * F * occ * mix(0.6, 1.0, sh);
+        // grid etched at cell borders
+        vec2 gd = abs(fract(p.xz / CELL) - 0.5);
+        float ld = (0.5 - max(gd.x, gd.y)) * CELL;
+        float line = 1.0 - smoothstep(0.0035, 0.0035 + gPix * 1.2, ld);
+        col *= 1.0 - 0.35 * line;
+        col += lin(C_STEEL) * 0.4 * line * exp(-t * 0.05);
+        // quarantine seal where a hostile block sank
+        float sqd = sdBox2(lp, vec2(BHS + 0.02));
+        float outline = 1.0 - smoothstep(0.006, 0.006 + gPix * 1.2, abs(sqd));
+        float pulse = 0.75 + 0.25 * sin(gTc * 4.0 + rc);
+        col *= 1.0 - 0.6 * b.seal * step(sqd, 0.0);
+        col += ironbow(0.3) * 1.3 * outline * b.seal * pulse;
+        col += ironbow(0.12) * 0.35 * b.seal * step(sqd, 0.0);
+        // contact light from the block above
+        float near = exp(-max(sqd, 0.0) * 26.0);
+        col += hotC * 1.6 * b.heat * near;
+        col += coolC * 0.12 * b.cold * near;
+        col += lin(C_FROST) * 0.5 * b.flash * near;
+        // thermal pool around the lock
+        float rr = length(p.xz);
+        col += (ironbow(0.15) * 0.12 * gWarm + coldbow(0.45) * 0.06 * gCold) * exp(-rr * rr * 0.65);
+        col += lockSpill(p, n) * occ;
+        // scan wave front on the floor
+        float R = (gTc - WAVE_T0) * WAVE_SPEED;
+        float wa = step(WAVE_T0, gTc) * (1.0 - smoothstep(FIELD_R - 1.5, FIELD_R + 1.0, R));
+        float front = exp(-abs(rr - R) * 16.0);
+        float trail = rr < R ? exp(-(R - rr) * 1.1) : 0.0;
+        col += lin(C_ICE) * (front * 2.2 + trail * 0.12) * wa;
+        // ice shockwave when the lock closes
+        float R2 = (gTc - LOCK_T) * 6.5;
+        float wb = gTc > LOCK_T ? exp(-(gTc - LOCK_T) * 1.1) : 0.0;
+        col += lin(C_FROST) * exp(-abs(rr - R2) * 9.0) * 3.0 * wb;
+      }
+    }
+  }
+
+  // hostile glow halos gathered during the march
+  col += ironbow(0.6) * glow * 2.6;
+
+  // scan curtain + lock shockwave (analytic cylinders)
+  float R = (gTc - WAVE_T0) * WAVE_SPEED;
+  float wa = step(WAVE_T0, gTc) * (1.0 - smoothstep(FIELD_R - 1.5, FIELD_R + 1.0, R)) * smoothstep(0.0, 0.6, R - 1.0);
+  float tEnd = min(tHit, 48.0);
+  col += lin(C_ICE) * curtain(ro, rd, max(R, 0.01), tEnd, 0.3) * 0.11 * wa;
+  if (gTc > LOCK_T){
+    float R2 = (gTc - LOCK_T) * 6.5;
+    float wb = exp(-(gTc - LOCK_T) * 1.1);
+    col += lin(C_FROST) * curtain(ro, rd, R2, tEnd, 0.14) * 0.06 * wb;
+  }
+
+  // distance fog into the void
+  float fogT = m < 0.0 ? 48.0 : t;
+  float fog = 1.0 - exp(-fogT * fogT * 0.0042);
+  col = mix(col, skyCol(rd), fog);
+
+  col = tonemap(col);
+  col = pow(max(col, 0.0), vec3(1.0 / 2.2));
+  col += (hash12(fc + fract(uTime * 7.31) * 113.0) - 0.5) / 255.0;
+  fragColor = vec4(col, 1.0);
+}
+</script>
+
+<script id="fs-post" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+uniform sampler2D uTex;
+uniform vec2 uScale;   // fraction of the texture that holds the frame
+uniform vec2 uTexel;   // 1 / texture size
+uniform vec2 uRes;     // canvas size
+uniform float uTime;
+out vec4 o;
+float hash12(vec2 p){
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+vec3 samp(vec2 uv){
+  vec2 st = clamp(uv * uScale, 0.5 * uTexel, uScale - 0.5 * uTexel);
+  return texture(uTex, st).rgb;
+}
+void main(){
+  vec2 uv = gl_FragCoord.xy / uRes;
+  vec2 dc = uv - 0.5;
+  float aspect = uRes.x / uRes.y;
+  vec2 dca = dc * vec2(aspect, 1.0);
+  float r2 = dot(dca, dca);
+  vec2 off = dc * 0.003 * r2;
+  vec3 c;
+  c.r = samp(uv + off).r;
+  c.g = samp(uv).g;
+  c.b = samp(uv - off).b;
+  float v = smoothstep(1.25, 0.35, length(dca * vec2(0.82, 1.0)));
+  vec3 voidC = vec3(16., 12., 42.) / 255.;
+  c = mix(voidC * 0.55, c, mix(0.55, 1.0, v));
+  c += (hash12(gl_FragCoord.xy + fract(uTime * 3.17) * 71.0) - 0.5) / 255.0;
+  o = vec4(c, 1.0);
+}
+</script>
+
+<script>
+(() => {
+  'use strict';
+  const params = new URLSearchParams(location.search);
+  const LOW = params.get('q') === 'low' || params.has('low');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const HERO_T = 5.4;
+
+  const canvas = document.getElementById('c');
+  const notes = document.getElementById('notes');
+  const showNotes = document.getElementById('show-notes');
+  const hideNotes = document.getElementById('hide-notes');
+  const playBtn = document.getElementById('playpause');
+
+  let t = 0, playing = true;
+  if (params.has('t') && isFinite(parseFloat(params.get('t')))) { t = parseFloat(params.get('t')); playing = false; }
+  else if (reduced) { t = HERO_T; playing = false; }
+
+  function setButton(){
+    playBtn.textContent = playing ? 'Pause' : 'Play';
+    playBtn.setAttribute('aria-pressed', playing ? 'false' : 'true');
+  }
+  setButton();
+
+  const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false,
+    preserveDrawingBuffer: false, powerPreference: 'high-performance' });
+  if (!gl) {
+    notes.querySelector('p').textContent = 'This piece needs WebGL2, which this browser does not provide.';
+    window.__seek = () => {}; window.__play = () => {};
+    return;
+  }
+
+  function compile(type, src){
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src.trim());
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  }
+  function program(vsId, fsId){
+    const p = gl.createProgram();
+    gl.attachShader(p, compile(gl.VERTEX_SHADER, document.getElementById(vsId).textContent));
+    gl.attachShader(p, compile(gl.FRAGMENT_SHADER, document.getElementById(fsId).textContent));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const u = {};
+    const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) { const a = gl.getActiveUniform(p, i); u[a.name] = gl.getUniformLocation(p, a.name); }
+    return { p, u };
+  }
+  const scene = program('vs', 'fs-scene');
+  const post = program('vs', 'fs-post');
+  const vao = gl.createVertexArray();
+
+  // offscreen target sized to the full canvas; we render into a sub-rectangle of it
+  const tex = gl.createTexture();
+  const fbo = gl.createFramebuffer();
+  let texW = 0, texH = 0;
+  function allocTarget(w, h){
+    if (w === texW && h === texH) return;
+    texW = w; texH = h;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  function resize(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
+    const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    allocTarget(w, h);
+    dirty = true; settle = 6;
+  }
+
+  // drag orbit (adds to the time-driven camera)
+  let camYaw = 0, camPitch = 0, drag = null;
+  canvas.addEventListener('pointerdown', e => {
+    drag = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    canvas.setPointerCapture(e.pointerId);
+    canvas.classList.add('dragging');
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    camYaw -= (e.clientX - drag.x) * 0.006;
+    camPitch = Math.max(-0.3, Math.min(0.9, camPitch + (e.clientY - drag.y) * 0.004));
+    drag.x = e.clientX; drag.y = e.clientY;
+    dirty = true;
+  });
+  const endDrag = e => {
+    if (!drag || (e && e.pointerId !== drag.id)) return;
+    drag = null; canvas.classList.remove('dragging');
+    dirty = true;
+  };
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+
+  // adaptive resolution
+  const MIN_S = 0.5, MAX_S = 1.0;
+  let scale = LOW ? 0.5 : 0.75;
+  const STILL_S = LOW ? 0.5 : 1.0;
+  let ema = 16.7, sinceChange = 0, ceiling = MAX_S, ceilingUntil = 0, settle = 6;
+  function adapt(dtMs, now){
+    if (LOW) return;
+    if (settle > 0) { settle--; return; }
+    if (dtMs > 250) return;
+    ema += (dtMs - ema) * 0.08;
+    sinceChange++;
+    if (now > ceilingUntil) ceiling = MAX_S;
+    if (sinceChange < 24) return;
+    if (ema > 21 && scale > MIN_S) {
+      ceiling = scale; ceilingUntil = now + 10000;
+      scale = Math.max(MIN_S, scale * 0.88); sinceChange = 0; ema = 16.7; settle = 4;
+    } else if (ema < 17.6 && sinceChange > 90 && scale < Math.min(MAX_S, ceiling - 0.02)) {
+      scale = Math.min(MAX_S, ceiling - 0.02, scale + 0.04); sinceChange = 0; settle = 4;
+    }
+  }
+
+  function draw(time, s){
+    const W = canvas.width, H = canvas.height;
+    const rw = Math.max(1, Math.round(W * s)), rh = Math.max(1, Math.round(H * s));
+    gl.bindVertexArray(vao);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.viewport(0, 0, rw, rh);
+    gl.useProgram(scene.p);
+    gl.uniform1f(scene.u.uTime, time);
+    gl.uniform2f(scene.u.uRes, rw, rh);
+    gl.uniform2f(scene.u.uCam, camYaw, camPitch);
+    gl.uniform1f(scene.u.uQ, LOW ? 0 : 1);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, W, H);
+    gl.useProgram(post.p);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.uniform1i(post.u.uTex, 0);
+    gl.uniform2f(post.u.uScale, rw / texW, rh / texH);
+    gl.uniform2f(post.u.uTexel, 1 / texW, 1 / texH);
+    gl.uniform2f(post.u.uRes, W, H);
+    gl.uniform1f(post.u.uTime, time);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  let dirty = true, last = performance.now();
+  function frame(now){
+    requestAnimationFrame(frame);
+    const dtMs = now - last; last = now;
+    if (playing) {
+      t += Math.min(dtMs, 100) / 1000;
+      adapt(dtMs, now);
+      draw(t, scale);
+    } else if (dirty) {
+      draw(t, drag ? scale : STILL_S);
+      dirty = false;
+    }
+  }
+
+  function setPlaying(p){
+    playing = p;
+    last = performance.now();
+    settle = 6;
+    if (!p) dirty = true;
+    setButton();
+  }
+
+  window.__seek = (time) => {
+    t = +time || 0;
+    camYaw = 0; camPitch = 0; drag = null;
+    canvas.classList.remove('dragging');
+    playing = false; setButton();
+    resize();
+    draw(t, STILL_S);
+    dirty = false;
+  };
+  window.__play = () => setPlaying(true);
+
+  playBtn.addEventListener('click', () => setPlaying(!playing));
+  function toggleNotes(){
+    const hide = !notes.hidden;
+    notes.hidden = hide;
+    showNotes.hidden = !hide;
+    (hide ? showNotes : hideNotes).focus({ preventScroll: true });
+  }
+  hideNotes.addEventListener('click', toggleNotes);
+  showNotes.addEventListener('click', toggleNotes);
+  window.addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'h' || e.key === 'H') { toggleNotes(); }
+    else if (e.code === 'Space' || e.key === ' ') {
+      const a = document.activeElement;
+      if (a && (a.tagName === 'BUTTON' || a.tagName === 'A')) return;
+      e.preventDefault();
+      setPlaying(!playing);
+    }
+  });
+  window.addEventListener('resize', resize);
+
+  resize();
+  draw(t, playing ? scale : STILL_S);
+  dirty = false;
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "name": "five-hundred-ms",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Five hundred milliseconds: a Remotion explainer of the xz-utils backdoor (CVE-2024-3094)",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "node scripts/make-audio.mjs && remotion render FiveHundredMs ../out/five-hundred-ms.mp4",
+    "audio": "node scripts/make-audio.mjs"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.532",
+    "@remotion/fonts": "4.0.532",
+    "@remotion/media": "4.0.532",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "remotion": "4.0.532"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.8",
+    "typescript": "5.8.3"
+  }
+}

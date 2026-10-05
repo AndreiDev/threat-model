@@ -1,0 +1,2921 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hands on</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--void)}
+body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent;color:var(--frost);
+  font:400 14px/1.45 "Schibsted Grotesk",system-ui,sans-serif}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;outline:none;cursor:crosshair}
+#c.can-grab{cursor:grab}
+#c.grabbing{cursor:grabbing}
+
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+
+/* shared pill button */
+.pill{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost);background:rgba(78,90,140,.25);
+  border:1px solid rgba(140,147,196,.35);border-radius:999px;padding:8px 12px;cursor:pointer}
+.pill:hover{background:rgba(155,232,255,.16)}
+
+/* labels that follow orbs */
+#labels{position:fixed;inset:0;pointer-events:none;z-index:2;overflow:hidden}
+#labels span{position:absolute;left:0;top:0;font:500 12px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--heat-4);
+  white-space:nowrap;text-shadow:0 0 6px rgba(16,12,42,.95),0 0 2px rgba(16,12,42,.95);will-change:transform,opacity}
+#labels span.held{color:var(--heat-5);font-weight:600}
+#labels span.field{color:var(--ice);font-weight:500}
+#labels span.toast{color:var(--frost);font:500 13px/1.2 "Schibsted Grotesk",system-ui,sans-serif}
+
+/* breach flash + lock frame */
+#vignette{position:fixed;inset:0;pointer-events:none;z-index:3;opacity:0;
+  background:radial-gradient(ellipse at 50% 50%,rgba(240,48,106,0) 45%,rgba(240,48,106,.28) 78%,rgba(255,122,47,.42) 100%)}
+#lockframe{position:fixed;inset:10px;pointer-events:none;z-index:3;border:1px solid rgba(155,232,255,.55);border-radius:18px;
+  box-shadow:inset 0 0 60px rgba(155,232,255,.16),0 0 24px rgba(155,232,255,.18);opacity:0;transition:opacity .25s}
+#lockframe.on{opacity:1}
+#locktext{position:fixed;left:50%;top:76px;transform:translateX(-50%);z-index:4;pointer-events:none;text-align:center;
+  font:250 22px/1.2 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;color:var(--ice);opacity:0;transition:opacity .25s;
+  text-shadow:0 0 18px rgba(155,232,255,.45)}
+#locktext small{display:block;margin-top:6px;font:500 13px/1.3 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist);text-shadow:none}
+#locktext.on{opacity:1}
+
+/* HUD: wave, core integrity, contained, objective */
+.hud{position:fixed;left:16px;top:14px;z-index:5;max-width:min(500px,calc(100vw - 350px))}
+.hud .stats{display:flex;gap:22px;align-items:flex-end;flex-wrap:wrap}
+.stat .n{display:block;font:250 30px/1 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;font-variant-numeric:tabular-nums;color:var(--frost)}
+.stat .n.word{font-size:21px;line-height:30px}
+.stat .k{display:block;margin-top:4px;font:500 12px/1.2 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist)}
+.stat.cold .n{color:var(--ice)}
+.stat.bump .n,.stat.bump .pips{animation:bump .5s ease-out}
+@keyframes bump{0%{transform:scale(1.25);filter:brightness(1.6)}100%{transform:scale(1);filter:none}}
+.pips{display:flex;gap:6px;height:30px;align-items:center;transform-origin:left center}
+.pips i{display:block;width:17px;height:19px;background:var(--ice);clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);transition:background .3s}
+.pips i.lost{background:rgba(240,48,106,.35)}
+.hud-btns{display:flex;gap:6px;align-self:center}
+.objective{margin:9px 0 0;font:500 13px/1.4 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost);opacity:.86}
+
+/* gesture legend */
+.legend{position:fixed;right:16px;top:14px;z-index:5;width:292px;padding:12px 12px 10px;background:rgba(16,12,42,.62);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(140,147,196,.2);border-radius:14px}
+.legend h2{margin:0 4px 6px;font:500 13px/1.2 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist);display:flex;justify-content:space-between;gap:8px}
+.legend h2 span{color:var(--ice);font-weight:500}
+.legend ol{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.legend li{display:grid;grid-template-columns:30px 1fr;align-items:center;column-gap:8px;padding:5px 6px;border-radius:9px;
+  border:1px solid transparent;transition:background .15s,border-color .15s}
+.legend li svg{width:28px;height:28px;stroke:var(--mist);fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;transition:stroke .15s}
+.legend li b{display:block;font:600 13px/1.2 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost)}
+.legend li span{display:block;font:400 12px/1.25 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist)}
+.legend li.on{background:rgba(155,232,255,.12);border-color:rgba(155,232,255,.45)}
+.legend li.on svg{stroke:var(--ice)}
+.legend li.on b{color:var(--ice)}
+.legend li.hot{background:rgba(255,122,47,.12);border-color:rgba(255,122,47,.5)}
+.legend li.hot svg{stroke:var(--heat-3)}
+.legend .alt{color:var(--steel)}
+.legend .alt i{font-style:normal;color:var(--mist)}
+
+/* tutorial checklist */
+.tut{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:6;width:min(390px,calc(100vw - 32px));padding:12px 14px 12px;
+  background:rgba(16,12,42,.74);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(155,232,255,.35);border-radius:14px}
+.tut h2{margin:0 0 6px;display:flex;justify-content:space-between;font:500 13px/1.2 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist)}
+.tut h2 span{color:var(--ice)}
+.tut ol{list-style:none;margin:0 0 10px;padding:0;display:grid;gap:2px}
+.tut li{display:grid;grid-template-columns:20px 1fr;gap:9px;align-items:start;padding:5px 4px;border-radius:8px;
+  font:500 14px/1.35 "Schibsted Grotesk",system-ui,sans-serif;color:var(--steel);transition:color .2s,background .2s}
+.tut li::before{content:"";width:16px;height:16px;margin-top:1px;border:1.5px solid currentColor;border-radius:50%;box-sizing:border-box}
+.tut li.now{color:var(--frost);background:rgba(155,232,255,.08)}
+.tut li.now::before{border-color:var(--ice);box-shadow:0 0 10px rgba(155,232,255,.7)}
+.tut li.done{color:var(--mist)}
+.tut li.done::before{border-color:var(--ice);background:var(--ice) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.4l2.6 2.6L12 5.6' fill='none' stroke='%23100C2A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/12px no-repeat}
+.tut li.done.just::before{animation:pop .45s ease-out}
+@keyframes pop{0%{transform:scale(.4)}60%{transform:scale(1.35)}100%{transform:scale(1)}}
+
+/* banner for game beats */
+.banner{position:fixed;left:50%;top:29%;z-index:6;transform:translate(-50%,-50%) scale(.94);text-align:center;pointer-events:none;
+  opacity:0;transition:opacity .25s,transform .4s cubic-bezier(.2,1.5,.4,1);width:min(640px,calc(100vw - 32px))}
+.banner.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.banner b{display:block;font:250 36px/1.1 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;color:var(--ice);text-shadow:0 0 22px rgba(155,232,255,.5),0 2px 10px rgba(16,12,42,.9)}
+.banner span{display:block;margin-top:8px;font:500 15px/1.35 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost);text-shadow:0 1px 8px rgba(16,12,42,.95)}
+.banner.hot b{color:var(--heat-3);text-shadow:0 0 22px rgba(255,122,47,.55),0 2px 10px rgba(16,12,42,.9)}
+
+/* hint */
+#hint{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:6;margin:0;max-width:min(560px,calc(100vw - 840px));
+  padding:9px 14px;border-radius:12px;background:rgba(16,12,42,.6);border:1px solid rgba(140,147,196,.2);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);text-align:center;
+  font:500 14px/1.35 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost);transition:opacity .4s;pointer-events:none}
+#hint.warn{color:var(--heat-4);border-color:rgba(255,122,47,.45)}
+#hint.gone{opacity:0}
+@media (max-width:1180px) and (min-width:601px){#hint{max-width:min(520px,calc(100vw - 32px));bottom:calc(var(--notes-h,0px) + 28px)}}
+
+/* start card, camera block, end card */
+.start,.cam{position:fixed;right:16px;bottom:16px;z-index:7;width:320px;padding:14px;background:rgba(16,12,42,.72);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(140,147,196,.24);border-radius:14px}
+.start h2{margin:0 0 6px;font:250 19px/1.2 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;color:var(--ice)}
+.start > p{margin:0 0 12px;font:400 13px/1.45 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost)}
+.go{width:100%;font:600 14px/1.2 "Schibsted Grotesk",system-ui,sans-serif;color:var(--void);background:var(--ice);
+  border:0;border-radius:999px;padding:10px 14px;cursor:pointer}
+.go:hover{background:var(--frost)}
+.fine{margin:7px 2px 0;font:400 12px/1.4 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist)}
+.fine strong{color:var(--frost);font-weight:500}
+.pill.wide{width:100%;margin-top:10px;padding:10px 12px;font-size:14px}
+.cam{display:grid;gap:8px}
+.cam .bar{height:3px;margin:0 2px;background:rgba(78,90,140,.35);border-radius:2px;overflow:hidden}
+.cam .bar i{display:block;height:100%;width:0;background:var(--ice);transition:width .15s}
+.cam .preview{position:relative;width:100%;aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:#0B0820;border:1px solid rgba(140,147,196,.25)}
+.cam .preview video,.cam .preview canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cam .preview video{transform:scaleX(-1);opacity:.55;filter:saturate(.35) contrast(1.05)}
+.cam .preview.off{height:0;aspect-ratio:auto;border:0;opacity:0}
+.cam .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.cam .status{flex:1 1 100%;font:500 12px/1.3 "Schibsted Grotesk",system-ui,sans-serif;color:var(--ice)}
+.cam .status.err{color:var(--heat-4)}
+.over{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9;width:min(430px,calc(100vw - 32px));padding:22px 22px 18px;
+  background:rgba(16,12,42,.84);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,122,47,.45);border-radius:16px;text-align:center}
+.over h2{margin:0 0 4px;font:250 28px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;color:var(--heat-3)}
+.over > p{margin:0;font:400 14px/1.4 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist)}
+.over dl{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0 18px}
+.over dl div{padding:10px;border-radius:10px;background:rgba(78,90,140,.16)}
+.over dt{font:500 12px/1.2 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist)}
+.over dd{margin:4px 0 0;font:250 28px/1 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;color:var(--frost)}
+.again{display:flex;align-items:center;justify-content:center;gap:8px;margin:12px 0 0;font:500 13px/1.3 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist)}
+.again svg{width:26px;height:26px;transform:rotate(-90deg)}
+.again circle{fill:none;stroke-width:3}
+.again .track{stroke:rgba(140,147,196,.3)}
+.again .prog{stroke:var(--ice);stroke-dasharray:94.25;stroke-dashoffset:94.25}
+
+/* during play: slim legend strip, camera preview bottom-left, banner above the arena */
+.qbtn{display:none;width:24px;height:24px;border-radius:50%;border:1px solid rgba(140,147,196,.45);background:rgba(78,90,140,.25);color:var(--frost);
+  font:600 13px/1 "Schibsted Grotesk",system-ui,sans-serif;cursor:pointer;padding:0}
+.qbtn:hover{background:rgba(155,232,255,.16)}
+.legend .now{display:none}
+body.playing .legend{width:auto;min-width:0;padding:7px 8px 7px 12px}
+body.playing .legend h2{margin:0;align-items:center;gap:10px}
+body.playing .legend .ttl,body.playing .legend #mode{display:none}
+body.playing .legend .now{display:flex;align-items:center;gap:7px;font:600 13px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist)}
+body.playing .legend .now svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+body.playing .legend .now.on{color:var(--ice)}
+body.playing .legend .now.hot{color:var(--heat-3)}
+body.playing .qbtn{display:inline-block}
+body.playing .legend ol{display:none}
+body.playing .legend.open{width:292px}
+body.playing .legend.open ol{display:grid;margin-top:8px}
+body.playing .cam{left:16px;right:auto;width:240px;bottom:calc(var(--notes-h,34px) + 24px);padding:10px}
+body.playing .banner{top:150px;transform:translate(-50%,0) scale(.94)}
+body.playing .banner.on{transform:translate(-50%,0) scale(1)}
+body.playing.tutoring .banner{top:262px}
+
+@media (max-width:600px){
+  .hud{left:12px;right:12px;top:10px;max-width:none}
+  .hud .stats{gap:12px;flex-wrap:nowrap;align-items:flex-end}
+  .stat .n{font-size:22px}
+  .stat .n.word{font-size:13px;line-height:22px}
+  .hud-btns{margin-left:auto;align-self:flex-start}
+  .hud-btns .pill{font-size:12px;padding:6px 9px}
+  .pips{height:22px}
+  .pips i{width:13px;height:15px}
+  .stat .k{font-size:11px}
+  .objective{font-size:12px;margin-top:5px}
+  .legend{left:12px;right:12px;top:auto;bottom:calc(var(--notes-h,0px) + 26px);width:auto;padding:5px 6px}
+  .legend h2{display:none}
+  .legend ol{grid-template-columns:repeat(5,1fr);gap:3px}
+  .legend li{grid-template-columns:1fr;justify-items:center;padding:3px 2px;text-align:center}
+  .legend li svg{width:20px;height:20px}
+  .legend li b{font-size:10.5px;font-weight:500}
+  .legend li span,.legend .alt{display:none}
+  .tut{top:auto;bottom:calc(var(--notes-h,0px) + 86px);padding:8px 10px}
+  .tut ol{margin-bottom:6px}
+  .tut li:not(.now){display:none}
+  .start,.cam{left:12px;right:12px;width:auto;bottom:calc(var(--notes-h,0px) + 24px);padding:10px 12px}
+  .start h2{display:none}
+  .start .go{padding:9px 12px}
+  .start .fine{margin-top:5px;font-size:11px;line-height:1.3}
+  .pill.wide{margin-top:7px;padding:8px 12px;font-size:13px}
+  .cam{grid-template-columns:110px 1fr;align-items:start;bottom:calc(var(--notes-h,0px) + 86px)}
+  .cam .bar{grid-column:1/-1}
+  .banner{top:42%}
+  .banner b{font-size:25px}
+  .banner span{font-size:13px}
+  #hint{bottom:auto;top:100px;max-width:calc(100vw - 24px);font-size:13px;padding:7px 12px}
+  body.playing .legend{left:auto;right:12px;bottom:16px;top:auto;padding:5px 6px 5px 10px}
+  body.playing .legend h2{display:flex}
+  .hud-btns .pill{white-space:nowrap}
+  .stat .k{white-space:nowrap}
+  body.playing .legend.open{left:12px;width:auto}
+  body.playing .legend.open ol{grid-template-columns:repeat(5,1fr)}
+  body.playing .cam{left:12px;right:12px;width:auto;bottom:62px;grid-template-columns:110px 1fr;padding:8px}
+  body.playing .tut{bottom:62px}
+  body.playing.cam-on .tut{bottom:170px}
+  body.playing .banner{top:100px}
+  body.playing.tutoring .banner{top:100px}
+  body.playing .banner b{font-size:22px}
+  body.banner-on #hint{opacity:0}
+}
+</style>
+</head>
+<body>
+<canvas id="c" tabindex="0" role="img" aria-label="A dark console where glowing 3D hand skeletons pinch hot, pulsing threat orbs and flick them into a cold containment tube; an open palm raises a hexagonal shield that shatters incoming hot packets"></canvas>
+<div id="labels" aria-hidden="true"></div>
+<div id="vignette" aria-hidden="true"></div>
+<div id="lockframe" aria-hidden="true"></div>
+<div id="locktext" aria-live="polite">Console paused<small id="lockhow">Make a fist again to resume</small></div>
+
+<div class="hud" id="hud">
+  <div class="stats">
+    <div class="stat" id="s-wave"><span class="n word" id="n-wave">Demo</span><span class="k" id="k-wave">watch how it plays</span></div>
+    <div class="stat" id="s-core"><span class="pips" id="pips" role="img" aria-label="Core integrity 3 of 3"><i></i><i></i><i></i></span><span class="k">core integrity</span></div>
+    <div class="stat cold" id="s-contained"><span class="n" id="n-contained">0</span><span class="k">contained</span></div>
+    <div class="hud-btns" id="hud-btns" hidden><button type="button" class="pill" id="sound" aria-pressed="true">Sound on</button><button type="button" class="pill" id="reset">Restart</button></div>
+  </div>
+  <p class="objective">Protect the core: catch threats before they reach it and throw them into the containment field.</p>
+</div>
+
+<section class="legend" id="legend" aria-label="Gestures">
+  <h2><span class="ttl">Gestures</span> <span id="mode">Demo hand</span><span class="now" id="legend-now" aria-live="polite"></span><button type="button" class="qbtn" id="legend-toggle" aria-expanded="false" aria-label="Show all gestures">?</button></h2>
+  <ol>
+    <li data-g="pinch"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M7 22c0-6 2-10 7-12"/><path d="M21 22c0-5-2-9-6-11"/><circle cx="14.5" cy="9.5" r="2.4"/></svg>
+      <div><b>Pinch</b><span>grab a threat <em class="alt">or <i>press and drag</i></em></span></div></li>
+    <li data-g="flick"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M5 20c5-1 10-5 13-12"/><path d="M14 7.5l4.4.2.6 4.3"/><path d="M4 14h4M6 9h3"/></svg>
+      <div><b>Flick</b><span>throw it into the field <em class="alt">or <i>fast release</i></em></span></div></li>
+    <li data-g="palm"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M14 3.5l9 5.2v10.6l-9 5.2-9-5.2V8.7z"/><path d="M14 9.5l4.3 2.5v5L14 19.5 9.7 17v-5z"/></svg>
+      <div><b>Open palm</b><span>shield the core <em class="alt">or <i>hold right button, two fingers</i></em></span></div></li>
+    <li data-g="two"><svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="7" cy="17" r="2.4"/><circle cx="21" cy="11" r="2.4"/><path d="M9.6 15.8l8.8-3.6"/><path d="M4 9a10 10 0 0 1 7-5M24 19a10 10 0 0 1-7 5"/></svg>
+      <div><b>Two-hand pinch</b><span>scale and rotate <em class="alt">or <i>mouse wheel</i></em></span></div></li>
+    <li data-g="fist"><svg viewBox="0 0 28 28" aria-hidden="true"><rect x="6.5" y="12" width="15" height="11" rx="2.5"/><path d="M10 12V9a4 4 0 0 1 8 0v3"/></svg>
+      <div><b>Fist</b><span>pause the console <em class="alt">or <i>L key</i></em></span></div></li>
+  </ol>
+</section>
+
+<section class="tut" id="tut" hidden aria-label="Tutorial">
+  <h2>Tutorial <span id="tut-n">step 1 of 4</span></h2>
+  <ol id="tut-list"><li></li><li></li><li></li><li></li></ol>
+  <button type="button" class="pill" id="tut-skip">Skip tutorial</button>
+</section>
+
+<div class="banner" id="banner" aria-live="polite"><b id="banner-t"></b><span id="banner-s"></span></div>
+
+<p id="hint" aria-live="polite"></p>
+
+<section class="start" id="start" aria-label="Start a game">
+  <h2>Protect the core</h2>
+  <button type="button" class="go" id="cam-go">Use my camera for hand tracking</button>
+  <p class="fine"><strong>Video stays on this device; nothing is uploaded.</strong> The tracker is a one-time download of about 20 MB.</p>
+  <button type="button" class="pill wide" id="mouse-go">Play with mouse or touch</button>
+</section>
+
+<section class="cam" id="cam" aria-label="Hand tracking" hidden>
+  <div class="preview" id="preview"><video id="video" playsinline muted></video><canvas id="overlay" width="320" height="240"></canvas></div>
+  <div class="row">
+    <span class="status" id="cam-status" role="status">Waiting for camera permission</span>
+    <button type="button" class="pill" id="cam-preview">Hide preview</button>
+    <button type="button" class="pill" id="cam-stop">Stop camera</button>
+  </div>
+  <div class="bar" id="cam-bar"><i></i></div>
+</section>
+
+<section class="over" id="over" hidden aria-label="Game over">
+  <h2>Core breached</h2>
+  <p id="over-why"></p>
+  <dl>
+    <div><dt>Threats contained</dt><dd id="o-contained">0</dd></div>
+    <div><dt>Reached wave</dt><dd id="o-wave">1</dd></div>
+    <div><dt>Best wave</dt><dd id="o-best">1</dd></div>
+    <div><dt>Packets blocked</dt><dd id="o-blocked">0</dd></div>
+  </dl>
+  <button type="button" class="go" id="again">Play again</button>
+  <p class="again"><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" class="track"/><circle cx="18" cy="18" r="15" class="prog" id="again-ring"/></svg><span id="again-how">or hold an open palm up for 1 second</span></p>
+</section>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Hands on</h1>
+  <p>A defence game for bare hands: pinch hot threats before they reach the core, flick them into the cold field, and raise a palm to shatter volleys.</p>
+  <ul class="tech">
+    <li>MediaPipe Tasks Vision 1.0.1 HandLandmarker (float16, GPU with CPU fallback): 21 landmarks per hand, on device</li>
+    <li>One Euro filtered and tuned at 30 detections/s; pinch, palm, fist and flick classified with hysteresis and debounce</li>
+    <li>Three.js 0.186 with bloom: hand skeletons, fingertip trails, a hex shield with heat-ring impacts</li>
+    <li>The demo hand is scripted landmark data through the same classifier at a fixed 60 Hz, so frames re-simulate exactly</li>
+    <li>Mouse and touch drive a virtual hand; nothing downloads until you click the camera button</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+/* =====================================================================
+   Hands on. Pipeline:
+     input source (demo script | mouse/touch virtual hand | MediaPipe camera)
+       -> 21 landmarks per hand in scene space (camera ones One Euro filtered)
+       -> classifier (pinch / open palm / fist with hysteresis, flick from velocity)
+       -> interactions (grab, drag, throw, shield, two-hand console transform, lock)
+       -> world simulation on a fixed 1/60 s step
+       -> Three.js render
+   __seek(t) re-simulates the demo from a seeded start, so frames are a pure function of t.
+   ===================================================================== */
+
+const params = new URLSearchParams(location.search);
+const LOW = params.get('q') === 'low';
+const T_PARAM = params.has('t') ? parseFloat(params.get('t')) : NaN;
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const DT = 1 / 60, PERIOD = 36, HERO_T = 12.2, IDLE_MS = 12000;
+const POSE_DEBUG = params.get('pose');
+const AUTOGRAB = params.get('autograb') === '1';   // test hook: a camera pinch on empty space spawns and grabs an orb   // ?pose=relax|pinch|palm|fist shows a static pair of hands
+
+/* ---------- small utils ---------- */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
+const lerp = (a, b, u) => a + (b - a) * u;
+const smooth = (a, b, x) => { const u = clamp((x - a) / (b - a), 0, 1); return u * u * (3 - 2 * u); };
+const EASE = {
+  lin: u => u,
+  io: u => u * u * (3 - 2 * u),
+  in: u => u * u * u,
+  out: u => 1 - (1 - u) * (1 - u) * (1 - u),
+};
+const V3 = THREE.Vector3;
+
+/* ---------- palette ---------- */
+const col = h => new THREE.Color(h);
+const HEAT = ['#3A0F6B', '#9B1D8F', '#F0306A', '#FF7A2F', '#FFD36B', '#FFF6E0'].map(col);
+const COLD = ['#1B1747', '#2F4FA8', '#4FA3E0', '#9BE8FF', '#E8F7FF'].map(col);
+const ICE = col('#9BE8FF'), FROST = col('#E8F7FF'), STEEL = col('#4E5A8C'), MIST = col('#8C93C4');
+function ramp(arr, x, out, k = 1) {
+  x = clamp(x, 0, 1) * (arr.length - 1);
+  const i = Math.min(Math.floor(x), arr.length - 2), f = x - i, a = arr[i], b = arr[i + 1];
+  out.r = (a.r + (b.r - a.r) * f) * k; out.g = (a.g + (b.g - a.g) * f) * k; out.b = (a.b + (b.b - a.b) * f) * k;
+  return out;
+}
+const GLSL_COMMON = /* glsl */`
+  uniform vec3 uHeat[6]; uniform vec3 uCold[5];
+  vec3 ironbow(float x){ x = clamp(x, 0., 1.) * 5.; int i = int(min(floor(x), 4.)); return mix(uHeat[i], uHeat[i + 1], x - float(i)); }
+  vec3 coldbow(float x){ x = clamp(x, 0., 1.) * 4.; int i = int(min(floor(x), 3.)); return mix(uCold[i], uCold[i + 1], x - float(i)); }
+  float h31(vec3 p){ p = fract(p * .3183099 + .1); p *= 17.; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+  float vnoise(vec3 x){
+    vec3 i = floor(x), f = fract(x); f = f * f * (3. - 2. * f);
+    return mix(mix(mix(h31(i), h31(i + vec3(1,0,0)), f.x), mix(h31(i + vec3(0,1,0)), h31(i + vec3(1,1,0)), f.x), f.y),
+               mix(mix(h31(i + vec3(0,0,1)), h31(i + vec3(1,0,1)), f.x), mix(h31(i + vec3(0,1,1)), h31(i + vec3(1,1,1)), f.x), f.y), f.z);
+  }
+  float fbm(vec3 p){ float a = .5, s = 0.; for (int i = 0; i < 4; i++){ s += a * vnoise(p); p = p * 2.03 + 1.7; a *= .5; } return s; }
+  vec4 hexCell(vec2 uv){
+    const vec2 r = vec2(1., 1.7320508); vec2 h = r * .5;
+    vec2 a = mod(uv, r) - h, b = mod(uv - h, r) - h;
+    vec2 g = dot(a, a) < dot(b, b) ? a : b;
+    return vec4(g, uv - g);
+  }
+  float hexEdge(vec2 p){ p = abs(p); return max(dot(p, vec2(.8660254, .5)), p.y); }
+`;
+const paletteUniforms = () => ({ uHeat: { value: HEAT }, uCold: { value: COLD } });
+
+/* ---------- threat names (real vulnerability classes) ---------- */
+const THREATS = ['prompt injection', 'leaked API key', 'dependency confusion', 'SQL injection', 'SSRF',
+  'path traversal', 'typosquatted package', 'token replay', 'unsafe deserialization', 'secret in a log line'];
+
+/* =====================================================================
+   Layout: everything that depends on the viewport
+   ===================================================================== */
+const L = { camZ: 10, play: {}, field: { pos: new V3(), axis: new V3(0, 1, 0) }, pivot: new V3(), core: { pos: new V3(), R: 0.5 } };
+function computeLayout() {
+  const w = window.innerWidth, h = window.innerHeight, aspect = w / h, portrait = aspect < 0.8;
+  L.w = w; L.h = h; L.aspect = aspect; L.portrait = portrait;
+  L.fov = portrait ? 62 : aspect < 1.25 ? 50 : 42;
+  L.halfH = L.camZ * Math.tan(L.fov * Math.PI / 360);
+  L.halfW = L.halfH * aspect;
+  if (portrait) {
+    L.play = { cx: 0, cy: 0.15, hw: L.halfW * 0.74, hh: L.halfH * 0.3 };
+    L.field.pos.set(0, L.halfH * 0.5, -1.5); L.field.axis.set(1, 0, 0);
+    L.field.R = 0.6; L.field.H = Math.min(L.halfW * 0.66, 2.0);
+    L.handS = 0.78; L.orbR = 0.3; L.shieldR = 1.5; L.grabPad = 0.42;
+  } else {
+    L.play = { cx: -L.halfW * 0.04, cy: 0.15, hw: L.halfW * 0.4, hh: L.halfH * 0.55 };
+    L.field.pos.set(L.halfW * 0.6, -0.3, -1.4); L.field.axis.set(0, 1, 0);
+    L.field.R = 0.85; L.field.H = Math.min(L.halfH * 0.42, 1.8);
+    L.handS = 1.0; L.orbR = 0.36; L.shieldR = 2.0; L.grabPad = 0.5;
+  }
+  L.handZ = 1.0;
+  L.core.pos.set(L.play.cx + L.play.hw * (portrait ? 0 : 0.05), L.play.cy - L.play.hh * (portrait ? 0.05 : 0.12), -1.6);
+  L.core.R = portrait ? 0.42 : 0.5;
+  L.pivot.set((L.play.cx + L.field.pos.x) * 0.5, (L.play.cy + L.field.pos.y) * 0.5, -1.2);
+  L.flickV = 1.05 * Math.sqrt(L.halfW * L.halfH);          // mouse/touch: about 600-700 px/s
+  L.camGain = 1.3;
+  L.flickVcam = 0.9 * 2 * L.halfW * L.camGain * 0.9;         // camera: about one frame width per second
+}
+
+/* =====================================================================
+   Parametric hand (demo + mouse). Right hand, local units: wrist->middle MCP = 1.
+   Local frame: fingers +y, palm normal -z (palm faces into the scene), thumb toward -x.
+   Landmark order matches MediaPipe: 0 wrist, 1-4 thumb, 5-8 index, 9-12 middle, 13-16 ring, 17-20 pinky.
+   ===================================================================== */
+const MCP = [-0.30, 0.92, -0.04, 1.0, 0.20, 0.94, 0.40, 0.80];
+const SEG = [0.42, 0.25, 0.21, 0.47, 0.29, 0.22, 0.43, 0.27, 0.21, 0.33, 0.21, 0.19];
+const FAN = [0.13, 0.02, -0.10, -0.22], FAN_S = [0.14, 0.03, -0.09, -0.19];
+const JA = [1.22, 1.66, 1.05];
+const CURL = { relax: [0.4, 0.5, 0.6, 0.68], pinch: [0.62, 0.3, 0.38, 0.46], palm: [0.02, 0, 0.03, 0.06], fist: [1, 1, 1, 1] };
+const SPREAD = { relax: 0.25, pinch: 0.4, palm: 1, fist: 0 };
+const TH1 = [-0.21, 0.19, -0.07];
+const TH_FIST = [-0.40, 0.45, -0.28, -0.30, 0.72, -0.50, -0.10, 0.84, -0.57];
+const ORI = { relax: [0.9, -0.32, -0.28], palm: [0.0, 0.06, -0.08], fist: [0.35, -0.05, -0.12] };
+const nrm3 = (x, y, z) => { const l = Math.hypot(x, y, z); return [x / l, y / l, z / l]; };
+const TD_OPEN = [nrm3(-0.90, 0.40, -0.20), nrm3(-0.80, 0.56, -0.16), nrm3(-0.66, 0.72, -0.12)];
+const TD_WIDE = [nrm3(-0.86, 0.46, -0.16), nrm3(-0.68, 0.7, -0.12), nrm3(-0.48, 0.86, -0.1)];
+const TLEN = [0.42, 0.33, 0.28];
+
+function handLocal(pinch, palm, fist, out) {
+  let s = SPREAD.relax; s += (SPREAD.pinch - s) * pinch; s += (SPREAD.palm - s) * palm; s += (SPREAD.fist - s) * fist;
+  for (let f = 0; f < 4; f++) {
+    let c = CURL.relax[f];
+    c += (CURL.pinch[f] - c) * pinch; c += (CURL.palm[f] - c) * palm; c += (CURL.fist[f] - c) * fist;
+    const a = FAN[f] + FAN_S[f] * s, dx = -Math.sin(a), dy = Math.cos(a);
+    let px = MCP[f * 2], py = MCP[f * 2 + 1], pz = 0;
+    const b = (5 + f * 4) * 3;
+    out[b] = px; out[b + 1] = py; out[b + 2] = pz;
+    let cum = 0;
+    for (let k = 0; k < 3; k++) {
+      cum += JA[k] * c;
+      const L_ = SEG[f * 3 + k], cc = Math.cos(cum), ss = Math.sin(cum);
+      px += dx * cc * L_; py += dy * cc * L_; pz -= ss * L_;
+      out[b + 3 + k * 3] = px; out[b + 4 + k * 3] = py; out[b + 5 + k * 3] = pz;
+    }
+  }
+  out[0] = out[1] = out[2] = 0;
+  // thumb: open chain (wider when the palm opens), pinch Bezier to the index tip, fist wrap
+  let x = TH1[0], y = TH1[1], z = TH1[2];
+  out[3] = x; out[4] = y; out[5] = z;
+  const open = _thumbOpen;
+  for (let k = 0; k < 3; k++) {
+    const a = TD_OPEN[k], w = TD_WIDE[k];
+    const dx = a[0] + (w[0] - a[0]) * palm, dy = a[1] + (w[1] - a[1]) * palm, dz = a[2] + (w[2] - a[2]) * palm;
+    x += dx * TLEN[k]; y += dy * TLEN[k]; z += dz * TLEN[k];
+    open[k * 3] = x; open[k * 3 + 1] = y; open[k * 3 + 2] = z;
+  }
+  // pinch target: just below the index tip
+  const tx = out[24] + 0.02, ty = out[25] - 0.05, tz = out[26] - 0.03;
+  const cx = (TH1[0] + tx) * 0.5 - 0.30, cy = (TH1[1] + ty) * 0.5 - 0.06, cz = (TH1[2] + tz) * 0.5 - 0.14;
+  const bz = (u, a, c, b) => (1 - u) * (1 - u) * a + 2 * (1 - u) * u * c + u * u * b;
+  const us = [0.42, 0.74, 1];
+  for (let k = 0; k < 3; k++) {
+    const u = us[k];
+    let px = bz(u, TH1[0], cx, tx), py = bz(u, TH1[1], cy, ty), pz = bz(u, TH1[2], cz, tz);
+    px = open[k * 3] + (px - open[k * 3]) * pinch; py = open[k * 3 + 1] + (py - open[k * 3 + 1]) * pinch; pz = open[k * 3 + 2] + (pz - open[k * 3 + 2]) * pinch;
+    px += (TH_FIST[k * 3] - px) * fist; py += (TH_FIST[k * 3 + 1] - py) * fist; pz += (TH_FIST[k * 3 + 2] - pz) * fist;
+    out[6 + k * 3] = px; out[7 + k * 3] = py; out[8 + k * 3] = pz;
+  }
+}
+const _thumbOpen = new Float32Array(9), _hl = new Float32Array(63), _hlp = new Float32Array(63);
+
+// P: { right, x,y,z (anchor), pinch, palm, fist, scale, dyaw, dpitch, droll }
+function buildHand(P, out) {
+  handLocal(P.pinch, P.palm, P.fist, _hl);
+  // anchor where the pinch point is when fully pinched, so opening or closing the fingers never moves the palm
+  handLocal(1, P.palm, P.fist, _hlp);
+  const sg = P.right ? 1 : -1;
+  let yaw = ORI.relax[0], pitch = ORI.relax[1], roll = ORI.relax[2];
+  yaw += (ORI.palm[0] - yaw) * P.palm; pitch += (ORI.palm[1] - pitch) * P.palm; roll += (ORI.palm[2] - roll) * P.palm;
+  yaw += (ORI.fist[0] - yaw) * P.fist; pitch += (ORI.fist[1] - pitch) * P.fist; roll += (ORI.fist[2] - roll) * P.fist;
+  yaw = (yaw + (P.dyaw || 0)) * sg; roll = (roll + (P.droll || 0)) * sg; pitch += P.dpitch || 0;
+  const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch), cr = Math.cos(roll), sr = Math.sin(roll);
+  const S = P.scale;
+  const rot = (x, y, z, o, k) => {
+    x *= sg;
+    let x1 = x * cr - y * sr, y1 = x * sr + y * cr; x = x1; y = y1;          // roll (z)
+    y1 = y * cp - z * sp; let z1 = y * sp + z * cp; y = y1; z = z1;          // pitch (x)
+    x1 = x * cy + z * sy; z1 = -x * sy + z * cy; x = x1; z = z1;             // yaw (y)
+    o[k] = x * S; o[k + 1] = y * S; o[k + 2] = z * S;
+  };
+  for (let j = 0; j < 21; j++) rot(_hl[j * 3], _hl[j * 3 + 1], _hl[j * 3 + 2], out, j * 3);
+  rot((_hlp[12] + _hlp[24]) * 0.5, (_hlp[13] + _hlp[25]) * 0.5, (_hlp[14] + _hlp[26]) * 0.5, _anc, 0);
+  // anchor: the (fully) pinched pinch point, blended to the palm centre as the hand opens flat or closes
+  const w = clamp(Math.max(P.palm, P.fist), 0, 1);
+  let ax = _anc[0], ay = _anc[1], az = _anc[2];
+  let qx = 0, qy = 0, qz = 0;
+  for (const j of PALM_IDX) { qx += out[j * 3]; qy += out[j * 3 + 1]; qz += out[j * 3 + 2]; }
+  qx /= 5; qy /= 5; qz /= 5;
+  ax += (qx - ax) * w; ay += (qy - ay) * w; az += (qz - az) * w;
+  for (let j = 0; j < 21; j++) { out[j * 3] += P.x - ax; out[j * 3 + 1] += P.y - ay; out[j * 3 + 2] += P.z - az; }
+}
+const PALM_IDX = [0, 5, 9, 13, 17];
+const _anc = new Float32Array(3);
+const BONES = [0, 1, 1, 2, 2, 3, 3, 4, 0, 5, 5, 6, 6, 7, 7, 8, 5, 9, 9, 10, 10, 11, 11, 12, 9, 13, 13, 14, 14, 15, 15, 16, 13, 17, 0, 17, 17, 18, 18, 19, 19, 20];
+const TIPS = [4, 8, 12, 16, 20];
+
+/* =====================================================================
+   One Euro filter (Casiez, Roussel, Vogel 2012)
+   ===================================================================== */
+class OneEuro {
+  constructor(minCutoff, beta, dCutoff) { this.mc = minCutoff; this.beta = beta; this.dc = dCutoff; this.x = null; this.dx = 0; this.t = 0; }
+  reset() { this.x = null; this.dx = 0; }
+  static alpha(fc, dt) { const tau = 1 / (2 * Math.PI * fc); return 1 / (1 + tau / dt); }
+  filter(x, t) {
+    if (this.x === null) { this.x = x; this.dx = 0; this.t = t; return x; }
+    const dt = Math.max(t - this.t, 1e-3); this.t = t;
+    const dx = (x - this.x) / dt;
+    this.dx += OneEuro.alpha(this.dc, dt) * (dx - this.dx);
+    const fc = this.mc + this.beta * Math.abs(this.dx);
+    this.x += OneEuro.alpha(fc, dt) * (x - this.x);
+    return this.x;
+  }
+}
+
+/* =====================================================================
+   Gesture classifier. Works on 21 scene-space landmarks of one hand.
+   Features (all scale-free, measured on real MediaPipe output, see the notes at TH):
+     pinchD   = |thumb tip - index tip| in the image plane (x, y) / 3D |wrist - middle MCP|. Monocular depth is
+                the noisy axis: on a real OK-sign photo the tips touch in 2D (0.10 palm lengths) but the world
+                landmarks put them 0.72 apart, almost all of it in z.
+     tipRatio = |thumb tip - index tip| / |thumb tip - index PIP| (x, y): below 1 when the thumb meets the index
+                fingertip, above 1 when it sits near the middle of the finger (a relaxed or reaching hand).
+     ext[f]   = |tip - MCP| / (sum of the three finger segments)   1 = straight, ~0.45 = curled into a fist
+     facing   = palm normal . (0,0,-1)    1 = palm toward the camera (into the scene)
+   ===================================================================== */
+// Pinch, measured on 6 touching hands (OK sign photo x2, 4 frames of a pinch video) against 13 open/relaxed/fist hands:
+//   pinchD   touching 0.06-0.14, nearest non-pinch 0.29 (an open hand reaching toward the camera)  -> in < 0.21, out > 0.32
+//   tipRatio touching 0.14-0.28, every non-pinch 1.06-5.7 (fist 0.94, excluded anyway)          -> in < 0.6,  out > 0.9
+// Both must pass, so a near miss has to fool two independent measures.
+const TH = {
+  zW: 0, fistIn: 0.64, fistOut: 0.74, fistThumb: 0.65,
+  pinchIn: 0.21, pinchOut: 0.32, tipIn: 0.6, tipOut: 0.9, pinchIdxIn: 0.52, pinchIdxOut: 0.42, settleCam: 0.12,
+  palmExtIn: 0.88, palmExtOut: 0.78, palmFaceIn: 0.7, palmFaceOut: 0.5, palmThumbIn: 0.75, palmThumbOut: 0.6,
+  palmDwell: 0.03, palmDwellCam: 0.06, fistHold: 0.45,
+  pinchOnCam: 0.03, pinchOffCam: 0.05,           // camera only: a pinch must hold 30 ms to engage, 50 ms of open to release
+};
+// zw: how much to trust depth. Camera depth is a monocular guess (0); demo and mouse hands are exact (1).
+function features(lm, isRight, F, zw = TH.zW) {
+  const d = (a, b) => Math.hypot(lm[a * 3] - lm[b * 3], lm[a * 3 + 1] - lm[b * 3 + 1], lm[a * 3 + 2] - lm[b * 3 + 2]);
+  const S = Math.max(d(0, 9), 1e-5);
+  F.S = S;
+  // normalised by the true 3D palm length, which does not change when the hand tilts
+  F.pinchD = Math.hypot(lm[12] - lm[24], lm[13] - lm[25], (lm[14] - lm[26]) * zw) / S;
+  F.tipRatio = Math.hypot(lm[12] - lm[24], lm[13] - lm[25], (lm[14] - lm[26]) * zw) / (Math.hypot(lm[12] - lm[18], lm[13] - lm[19], (lm[14] - lm[20]) * zw) + 1e-6);
+  for (let f = 0; f < 4; f++) { const m = 5 + f * 4; F.ext[f] = d(m, m + 3) / Math.max(d(m, m + 1) + d(m + 1, m + 2) + d(m + 2, m + 3), 1e-5); }
+  const ax = lm[15] - lm[0], ay = lm[16] - lm[1], az = lm[17] - lm[2];
+  const bx = lm[51] - lm[0], by = lm[52] - lm[1], bz = lm[53] - lm[2];
+  const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+  const nl = Math.hypot(nx, ny, nz) || 1, sg = isRight ? 1 : -1;
+  F.nx = nx / nl * sg; F.ny = ny / nl * sg; F.nz = nz / nl * sg;
+  F.facing = -F.nz;
+  F.minE = Math.min(F.ext[0], F.ext[1], F.ext[2], F.ext[3]);
+  F.maxE = Math.max(F.ext[0], F.ext[1], F.ext[2], F.ext[3]);
+  return F;
+}
+function classify(h, dt) {
+  const F = features(h.lm, h.isRight, h.F, h.src === 'camera' ? TH.zW : 1);
+  // a hand cut by the camera frame edge gives squashed landmarks: it may keep its gesture but not start a new one
+  if (h.edge && h.gestureSet) { h.palmDwell = 0; h.pinchT = 0; return; }
+  h.gestureSet = true;
+  const camSrc = h.src === 'camera', settled = !camSrc || h.stableT >= TH.settleCam;
+  // a fist needs the thumb tucked over the fingers, so a thumbs-up does not lock the console
+  h.fist = !h.edge && (h.fist ? F.maxE < TH.fistOut && F.pinchD < TH.fistThumb + 0.1 : settled && F.maxE < TH.fistIn && F.pinchD < TH.fistThumb);
+  const rawPinch = !h.fist && !h.edge && (h.pinch ? true : settled) && (h.pinch ? (F.pinchD < TH.pinchOut && F.tipRatio < TH.tipOut && F.ext[0] > TH.pinchIdxOut)
+    : (F.pinchD < TH.pinchIn && F.tipRatio < TH.tipIn && F.ext[0] > TH.pinchIdxIn));
+  if (rawPinch !== h.pinch) {
+    h.pinchT += dt;
+    if (h.pinchT >= (camSrc ? (h.pinch ? TH.pinchOffCam : TH.pinchOnCam) - 1e-6 : 0)) { h.pinch = rawPinch; h.pinchT = 0; }
+  } else h.pinchT = 0;
+  const raw = !h.fist && !h.pinch && !h.edge && (h.palmRaw || settled) && (h.palmRaw
+    ? (F.minE > TH.palmExtOut && F.facing > TH.palmFaceOut && F.pinchD > TH.palmThumbOut)
+    : (F.minE > TH.palmExtIn && F.facing > TH.palmFaceIn && F.pinchD > TH.palmThumbIn));
+  h.palmRaw = raw;
+  h.palmDwell = raw ? h.palmDwell + dt : 0;
+  h.palm = raw && (h.palm || h.palmDwell >= (camSrc ? TH.palmDwellCam : TH.palmDwell));
+  h.pinchStr = clamp((0.55 - F.pinchD) / (0.55 - TH.pinchIn), 0, 1);   // 0 open, 1 at the pinch threshold
+  h.gesture = h.fist ? 'fist' : h.pinch ? 'pinch' : h.palm ? 'palm' : 'open';
+}
+
+/* =====================================================================
+   World: hands, orbs, packets, sparks, and the game (core, waves, tutorial)
+   ===================================================================== */
+const MAX_ORB = 18, MAX_P = 40, MAX_S = 640, TL = 14, NSLOT = 10;
+function newHand(i) {
+  return {
+    idx: i, present: false, vis: 0, isRight: i === 0, src: '', lm: new Float32Array(63),
+    F: { ext: [1, 1, 1, 1] }, gesture: 'none', pinch: false, prevPinch: false, pinchStr: 0, palm: false, palmRaw: false, palmDwell: 0,
+    fist: false, fistHold: 0, fistLatched: false, shield: 0, grabT: -99, pinchT: 0, stableT: 0, histSkip: 0,
+    palmC: new V3(), pinchP: new V3(), prevPalm: new V3(), n: new V3(0, 0, -1), vel: new V3(), speed: 0,
+    hist: new Float32Array(10 * 4), histI: 0,
+    held: -1, hover: -1, hoverAmt: 0,
+    trail: new Float32Array(5 * TL * 3), tHead: 0, tCount: 0, tTick: 0,
+    imp: Array.from({ length: 12 }, () => new THREE.Vector4(0, 0, -99, 0)), impI: 0,
+    sc: new V3(), sq: new THREE.Quaternion(), sR: 1,
+  };
+}
+function newGame(attract) {
+  return {
+    phase: attract ? 'demo' : 'tutorial', input: 'mouse', phaseT: 0,
+    tut: 0, tutT: 0, tutHold: 0, tutOrb: -1, tutVid: -1,
+    wave: 0, total: 0, spawned: 0, next: 0, travel: 13, interval: 2.8, maxActive: 3, cleared: 0,
+    integrity: 3, hitT: -99, overT: -99, again: 0,
+    banner: '', bannerSub: '', bannerKind: '', bannerT: -99, bannerDur: 2,
+    noHand: 0, waiting: false,
+  };
+}
+function newWorld(attract) {
+  const W = {
+    attract, t: 0, wt: 0, rng: mulberry32(0x0A11CE),
+    orbs: Array.from({ length: MAX_ORB }, (_, i) => ({ i, alive: false, state: 'free', pos: new V3(), vel: new V3(), hover: new V3(), far: new V3(), slot: -1, travel: Infinity })),
+    labelNext: 0, volleys: [], vid: 0, schedI: 0, warnT: -99, warnPos: new V3(),
+    packets: Array.from({ length: MAX_P }, () => ({ alive: false, launchAt: 0, dur: 1, pos: new V3(), prev: new V3(), vel: new V3(), S: new V3(), C: new V3(), T: new V3(), heat: 0, vid: 0 })),
+    sp: new Float32Array(MAX_S * 3), sv: new Float32Array(MAX_S * 3), sl: new Float32Array(MAX_S), sm: new Float32Array(MAX_S).fill(1), sH: new Float32Array(MAX_S), sI: 0,
+    hands: [newHand(0), newHand(1)],
+    con: { s: 1, roll: 0, yaw: 0, two: null }, M: new THREE.Matrix4(), Minv: new THREE.Matrix4(), q: new THREE.Quaternion(), coreW: new V3(),
+    locked: false, lockT: -99, unlockT: -99,
+    contained: 0, deflected: 0, breaches: 0, breachT: -99, flickT: -99, containT: -99, containAlong: 0, slotNext: 0, lastContained: '',
+    coreHitT: -99, coreFlashT: -99, rel: [],
+    game: newGame(attract),
+    latch: new Map(), events: [],
+  };
+  updateConsole(W);
+  return W;
+}
+const _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new V3(), _p = new V3();
+function updateConsole(W) {
+  const c = W.con;
+  _e.set(0, c.yaw, c.roll, 'YXZ'); W.q.setFromEuler(_e);
+  _s.set(c.s, c.s, c.s);
+  _p.copy(L.pivot).multiplyScalar(-1).multiplyScalar(c.s).applyQuaternion(W.q).add(L.pivot);
+  W.M.compose(_p, W.q, _s);
+  W.Minv.copy(W.M).invert();
+  W.coreW.copy(L.core.pos).applyMatrix4(W.M);
+}
+const toWorld = (W, v, out) => out.copy(v).applyMatrix4(W.M);
+const toLocal = (W, v, out) => out.copy(v).applyMatrix4(W.Minv);
+const dirToLocal = (W, v, out) => { _q.copy(W.q).invert(); return out.copy(v).applyQuaternion(_q).divideScalar(W.con.s); };
+
+/* screen-plane projection in scene units (z = 0 plane extents) */
+const _pr = new V3();
+function proj(v, out) { _pr.copy(v).project(camera); out.x = _pr.x * L.halfW; out.y = _pr.y * L.halfH; out.z = _pr.z; return out; }
+
+/* ---------- orbs: arrive from the dark, then drift toward the core ---------- */
+function spawnOrb(W, hoverWorld, t0, label, sid) {
+  const o = W.orbs.find(o => !o.alive); if (!o) return null;
+  o.alive = true; o.state = 'free'; o.sid = sid || ''; o.t0 = t0; o.dur = 3.2; o.travel = Infinity; o.wave = 0; o.prog = 0;
+  toLocal(W, hoverWorld, o.hover);
+  const r = W.rng;
+  o.far.set((r() - 0.5) * 3, (r() - 0.5) * 2, 0);
+  o.ph0 = r() * 6.28; o.ph1 = r() * 6.28; o.ph2 = r() * 6.28; o.seed = r();
+  o.label = label; o.freeze = 0; o.alpha = 1; o.by = -1; o.homing = false; o.slot = -1; o.ct = 0; o.held = 0; o.hot = 0;
+  orbFree(o, W.wt, o.pos); o.vel.set(0, 0, 0);
+  return o;
+}
+function orbFree(o, wt, out) {
+  const u = clamp((wt - o.t0) / o.dur, 0, 1), e = 1 - (1 - u) * (1 - u) * (1 - u);
+  const fx = o.hover.x + o.far.x, fy = o.hover.y + o.far.y, fz = o.hover.z - 32;
+  const p = o.travel < 1e6 ? clamp((wt - o.t0 - o.dur) / o.travel, 0, 1) : 0;
+  o.prog = p;
+  const w = smooth(0.55, 1, u) * (1 - p), c = L.core.pos;
+  out.set(lerp(fx, o.hover.x, e) + (c.x - o.hover.x) * p + w * 0.30 * Math.sin(0.53 * wt + o.ph0),
+          lerp(fy, o.hover.y, e) + (c.y - o.hover.y) * p + w * 0.22 * Math.sin(0.71 * wt + o.ph1),
+          lerp(fz, o.hover.z, e) + (c.z - o.hover.z) * p + w * 0.26 * Math.sin(0.43 * wt + o.ph2));
+  return out;
+}
+function slotPos(i, out) {
+  const f = L.field, n = NSLOT / 2, k = i % n, side = i < n ? 1 : -1;
+  const along = (-0.76 + 1.52 * k / (n - 1)) * f.H;
+  const px = f.axis.y, py = -f.axis.x;            // perpendicular in the xy plane
+  return out.set(f.pos.x + f.axis.x * along + px * side * f.R * 0.36,
+                 f.pos.y + f.axis.y * along + py * side * f.R * 0.36,
+                 f.pos.z + side * 0.12);
+}
+function insideField(p) {
+  const f = L.field;
+  const dx = p.x - f.pos.x, dy = p.y - f.pos.y, dz = p.z - f.pos.z;
+  const al = dx * f.axis.x + dy * f.axis.y + dz * f.axis.z;
+  const rx = dx - f.axis.x * al, ry = dy - f.axis.y * al, rz = dz - f.axis.z * al;
+  return Math.abs(al) < f.H * 1.02 && Math.hypot(rx, ry, rz) < f.R * 1.05 ? al : null;
+}
+function burst(W, pos, n, cold, speed) {
+  const r = W.rng;
+  for (let k = 0; k < n; k++) {
+    _t1.set(r() - 0.5, r() - 0.5, r() - 0.5).normalize().multiplyScalar(speed * (0.4 + r() * 0.8));
+    spark(W, pos.x, pos.y, pos.z, _t1.x, _t1.y + 0.6, _t1.z, 0.5 + r() * 0.6, cold ? -(0.7 + r() * 0.3) : 0.8 + r() * 0.2);
+  }
+}
+function contain(W, o, along) {
+  o.state = 'contained'; o.ct = W.wt; o.by = -1;
+  const s = W.slotNext % NSLOT; W.slotNext++;
+  for (const q of W.orbs) if (q.alive && q.state === 'contained' && q.slot === s) { q.state = 'archived'; q.ct = W.wt; }
+  o.slot = s; W.contained++; W.containT = W.t; W.containAlong = along / L.field.H; W.lastContained = o.label;
+  toWorld(W, o.pos, _o3); burst(W, _o3, 22, true, 4);
+  W.events.push('contain');
+}
+const _o3 = new V3();
+function coreHit(W, why) {
+  const g = W.game;
+  W.coreHitT = W.t;
+  if (g.phase !== 'wave' && g.phase !== 'cleared' && g.phase !== 'intro') { W.events.push('leak'); return; }   // demo and tutorial: no damage
+  g.integrity = Math.max(0, g.integrity - 1); g.hitT = W.t;
+  W.events.push('corehit');
+  if (g.integrity > 0) setBanner(W, `Core hit: ${g.integrity} left`, why, 'hot', 2.2);
+  else gameOver(W, why);
+}
+
+/* ---------- picking ---------- */
+const _a = new V3(), _b = new V3(), _c = new V3(), _d = new V3(), _pa = new V3(), _pb = new V3();
+function pickOrb(W, h, mult) {
+  proj(h.pinchP, _pa);
+  let best = -1, bd = 1e9;
+  for (const o of W.orbs) {
+    if (!o.alive || (o.state !== 'free' && o.state !== 'drift' && o.state !== 'thrown')) continue;
+    if (o.state === 'thrown' && o.vel.length() > L.flickV * 0.8) continue;
+    toWorld(W, o.pos, _a);
+    if (_a.z < -5) continue;
+    proj(_a, _pb);
+    const rS = L.orbR * W.con.s * L.camZ / (L.camZ - _a.z);
+    const d = Math.hypot(_pa.x - _pb.x, _pa.y - _pb.y);
+    const thr = (rS + L.grabPad) * mult;
+    if (d < thr && d < bd) { bd = d; best = o.i; }
+  }
+  return best;
+}
+function grab(W, h, k) {
+  const o = W.orbs[k];
+  o.state = 'held'; o.by = h.idx; o.homing = false; h.held = k; h.grabT = W.t;
+  // only motion after the grab can become a flick; if the hand was already moving, skip the smoothing lag too
+  h.hist.fill(0); h.histSkip = h.speed > flickThr(h) * 0.5 ? 0.07 : 0;
+  W.events.push('grab');
+}
+const flickThr = h => h.src === 'camera' ? L.flickVcam : L.flickV;
+function release(W, h, why) {
+  const o = W.orbs[h.held]; h.held = -1;
+  if (!o || o.state !== 'held') return;
+  o.by = -1;
+  // peak smoothed velocity over the last ~0.15 s
+  let best = 0, bi = -1;
+  for (let k = 0; k < 10; k++) { const s = h.hist[k * 4 + 3]; if (s > best) { best = s; bi = k; } }
+  const thr = flickThr(h);
+  if (W.rel.length < 50) W.rel.push({ t: +W.t.toFixed(2), src: h.src, why: why || 'open', peak: +best.toFixed(2), thr: +thr.toFixed(2), flick: best >= thr && bi >= 0,
+    v: bi >= 0 ? [h.hist[bi * 4], h.hist[bi * 4 + 1]].map(x => +x.toFixed(1)) : null, hv: [+h.vel.x.toFixed(1), +h.vel.y.toFixed(1)] });
+  if (best >= thr && bi >= 0) {
+    // speed from the peak, direction from the mean of the last ~100 ms
+    _a.set(0, 0, 0);
+    for (let j = 0; j < 6; j++) { const q = ((h.histI - j) % 10 + 10) % 10; _a.x += h.hist[q * 4]; _a.y += h.hist[q * 4 + 1]; _a.z += h.hist[q * 4 + 2]; }
+    if (_a.lengthSq() < 1e-6) _a.set(h.hist[bi * 4], h.hist[bi * 4 + 1], h.hist[bi * 4 + 2]);
+    _a.setLength(Math.min(best * 1.15, 26));
+    toWorld(W, o.pos, _b); toWorld(W, L.field.pos, _c);
+    _d.subVectors(_c, _b);
+    const cosA = (_a.x * _d.x + _a.y * _d.y) / (Math.hypot(_a.x, _a.y) * Math.hypot(_d.x, _d.y) + 1e-6);
+    dirToLocal(W, _a, o.vel);
+    o.state = 'thrown'; o.homing = cosA > 0.5; o.throwT = W.wt;
+    W.flickT = W.t; W.events.push('flick');
+  } else if (overField(W, o)) {
+    // let go over the field (on screen): it drops in
+    o.state = 'thrown'; o.homing = true; o.throwT = W.wt; o.vel.set(0, 0, -2);
+  } else {
+    o.state = 'drift';
+    dirToLocal(W, h.vel, o.vel).multiplyScalar(0.3);
+  }
+}
+function overField(W, o) {
+  toWorld(W, o.pos, _b); proj(_b, _pa);
+  const f = L.field;
+  _c.copy(f.pos).addScaledVector(f.axis, f.H); toWorld(W, _c, _c); proj(_c, _pb);
+  _d.copy(f.pos).addScaledVector(f.axis, -f.H); toWorld(W, _d, _d); proj(_d, _d);
+  const ex = _pb.x - _d.x, ey = _pb.y - _d.y, l2 = ex * ex + ey * ey || 1;
+  const u = clamp(((_pa.x - _d.x) * ex + (_pa.y - _d.y) * ey) / l2, 0, 1);
+  const dist = Math.hypot(_pa.x - (_d.x + ex * u), _pa.y - (_d.y + ey * u));
+  return dist < (f.R * W.con.s + L.orbR) * L.camZ / (L.camZ - f.pos.z) * 1.1;
+}
+
+/* ---------- hands per step ---------- */
+function handStep(W, h, inp, dt) {
+  const was = h.present;
+  h.present = !!(inp && inp.present);
+  if (h.present) {
+    h.isRight = inp.isRight; h.src = inp.src; h.lm.set(inp.lm); h.edge = !!inp.edge; h.cosmeticFist = !!inp.cosmeticFist;
+    if (!was) h.gestureSet = false;
+    // a camera hand must be fully in frame for 120 ms before it can start a gesture
+    h.stableT = (!was || h.edge) ? 0 : h.stableT + dt;
+    classify(h, dt);
+    const lm = h.lm;
+    let x = 0, y = 0, z = 0;
+    for (const j of PALM_IDX) { x += lm[j * 3]; y += lm[j * 3 + 1]; z += lm[j * 3 + 2]; }
+    h.palmC.set(x / 5, y / 5, z / 5);
+    h.pinchP.set((lm[12] + lm[24]) * 0.5, (lm[13] + lm[25]) * 0.5, (lm[14] + lm[26]) * 0.5);
+    h.n.set(h.F.nx, h.F.ny, h.F.nz);
+    if (inp.teleport && was) { h.prevPalm.copy(h.palmC); h.vel.set(0, 0, 0); h.hist.fill(0); h.tCount = 0; }
+    if (!was) {
+      h.prevPalm.copy(h.palmC); h.vel.set(0, 0, 0); h.hist.fill(0); h.tCount = 0;
+      h.pinchT = 0;
+      h.pinch = h.prevPinch = false; h.palm = false; h.palmDwell = 0; h.fist = false; h.fistHold = 0; h.fistLatched = false;
+      if (h.src !== 'camera') classify(h, 0);
+      h.prevPinch = h.pinch;     // a hand that appears already pinched does not grab
+    }
+    // velocity: camera hands bring their own (from tracker timestamps, smoothed over ~3 frames);
+    // synthetic and mouse hands are differenced per step (EMA, tau 40 ms)
+    if (inp.vel) h.vel.copy(inp.vel);
+    else { _a.subVectors(h.palmC, h.prevPalm).divideScalar(dt); h.vel.lerp(_a, 1 - Math.exp(-dt / 0.04)); }
+    h.prevPalm.copy(h.palmC);
+    h.speed = h.vel.length();
+    const k = h.histI = (h.histI + 1) % 10;
+    if (h.histSkip > 0) { h.histSkip -= dt; h.hist[k * 4] = h.hist[k * 4 + 1] = h.hist[k * 4 + 2] = h.hist[k * 4 + 3] = 0; }
+    else { h.hist[k * 4] = h.vel.x; h.hist[k * 4 + 1] = h.vel.y; h.hist[k * 4 + 2] = h.vel.z; h.hist[k * 4 + 3] = h.speed; }
+    // fingertip trails at 30 Hz
+    if ((h.tTick = (h.tTick + 1) % 2) === 0) {
+      h.tHead = (h.tHead + 1) % TL;
+      for (let f = 0; f < 5; f++) {
+        const j = TIPS[f], o = (f * TL + h.tHead) * 3;
+        h.trail[o] = lm[j * 3]; h.trail[o + 1] = lm[j * 3 + 1]; h.trail[o + 2] = lm[j * 3 + 2];
+      }
+      h.tCount = Math.min(h.tCount + 1, TL);
+    }
+  } else {
+    if (was) {
+      if (h.held >= 0) { h.hist.fill(0); release(W, h, 'lost'); }
+      h.pinch = h.prevPinch = h.palm = h.fist = false; h.fistHold = 0; h.fistLatched = false; h.gesture = 'none';
+    }
+    if ((h.tTick = (h.tTick + 1) % 2) === 0) h.tCount = Math.max(h.tCount - 1, 0);
+  }
+  if (inp && inp.vis !== undefined) h.vis = inp.vis;
+  else h.vis = clamp(h.vis + (h.present ? 1 : -1) * dt * 7, 0, 1);
+  const target = h.present && h.palm ? 1 : 0;
+  h.shield = clamp(h.shield + (target ? dt / 0.13 : -dt / 0.22), 0, 1);
+  if (h.present) {
+    // the shield is projected from the palm along the camera ray, to a plane just beyond the core,
+    // so holding your palm over the core on screen is what protects it
+    const zS = Math.min(W.coreW.z - 2.6, h.palmC.z - 0.6);
+    const k = (L.camZ - zS) / (L.camZ - h.palmC.z);
+    h.sc.set(h.palmC.x * k, h.palmC.y * k, zS);
+    h.sR = L.shieldR * k;
+    h.sq.setFromUnitVectors(_zAxis, h.n);
+  }
+}
+const _zAxis = new V3(0, 0, 1);
+
+function interactions(W, dt) {
+  const hs = W.hands;
+  for (let i = 0; i < 2; i++) {
+    const h = hs[i], o = hs[1 - i];
+    if (!h.present) { h.prevPinch = false; h.hover = -1; continue; }
+    const rise = h.pinch && !h.prevPinch, fall = !h.pinch && h.prevPinch;
+    if (rise) {
+      const otherFree = o.present && o.pinch && o.held < 0;
+      if (!otherFree) {
+        let k = pickOrb(W, h, 1);
+        if (k < 0 && AUTOGRAB && h.src === 'camera') { const o = spawnOrb(W, h.pinchP, W.wt - 10, 'test orb', 'auto'); if (o) { toLocal(W, h.pinchP, o.pos); k = o.i; } }
+        if (k >= 0) grab(W, h, k);
+      }
+    }
+    if (h.held >= 0 && W.orbs[h.held].state !== 'held') h.held = -1;
+    if (fall && h.held >= 0) release(W, h, 'open');
+    // camera players often fling without opening their fingers; mouse and touch throw only on release
+    if (h.held >= 0 && h.src === 'camera' && W.t - h.grabT > 0.1 && h.speed > flickThr(h) * 1.8) release(W, h, 'speed');
+    h.prevPinch = h.pinch;
+    // fist held -> toggle lock (a fist animated by the L key is only cosmetic: the key already toggled)
+    if (h.fist && !h.cosmeticFist) {
+      if (!h.fistLatched) {
+        h.fistHold += dt;
+        if (h.fistHold >= TH.fistHold) { toggleLock(W); h.fistLatched = true; }
+      }
+    } else { h.fistHold = 0; h.fistLatched = false; }
+    h.hover = (h.held >= 0 || h.pinch || h.fist || h.palm) ? -1 : pickOrb(W, h, 1.35);
+    h.hoverAmt = h.hover >= 0 ? h.pinchStr : 0;
+  }
+  // two-hand pinch: scale, roll and yaw the console
+  const a = hs[0], b = hs[1];
+  const two = a.present && b.present && a.pinch && b.pinch && a.held < 0 && b.held < 0;
+  const c = W.con;
+  if (two) {
+    const dx = a.pinchP.x - b.pinchP.x, dy = a.pinchP.y - b.pinchP.y, dz = a.pinchP.z - b.pinchP.z;
+    const d = Math.hypot(dx, dy), ang = Math.atan2(dy, dx);
+    if (!c.two) c.two = { d0: Math.max(d, 0.3), a0: ang, z0: dz, s0: c.s, r0: c.roll, y0: c.yaw };
+    const g = c.two;
+    let da = ang - g.a0; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+    c.s = clamp(g.s0 * d / g.d0, 0.6, 1.7);
+    c.roll = clamp(g.r0 + da, -0.9, 0.9);
+    c.yaw = clamp(g.y0 + (dz - g.z0) * 0.55, -0.6, 0.6);
+  } else c.two = null;
+  updateConsole(W);
+}
+function toggleLock(W) {
+  if (W.game.phase === 'over') return;
+  W.locked = !W.locked;
+  if (W.locked) W.lockT = W.t; else W.unlockT = W.t;
+  W.events.push('lock');
+}
+
+/* ---------- packets, sparks, volleys (volleys always aim at the core) ---------- */
+function scheduleVolley(W, at, n, target, tut, slow) {
+  const v = { id: ++W.vid, at, n, target: target.clone(), fired: false, blocked: 0, leaked: 0, resolved: false, tut: !!tut, slow: !!slow };
+  W.volleys.push(v);
+  return v;
+}
+function fireVolley(W, v) {
+  const r = W.rng;
+  let made = 0;
+  for (const p of W.packets) {
+    if (made >= v.n) break;
+    if (p.alive) continue;
+    p.alive = true; p.vid = v.id;
+    p.launchAt = W.wt + made * ((v.slow ? 1.8 : 1.1) / v.n) + r() * 0.08;
+    // a curved path: from a wide ring deep in the corridor, bending in onto the core
+    const a = r() * 6.283, rr = 7 + r() * 5, ja = r() * 6.283, jr = Math.sqrt(r()) * L.core.R * 1.5;
+    p.T.set(v.target.x + Math.cos(ja) * jr, v.target.y + Math.sin(ja) * jr, v.target.z);
+    p.S.set(p.T.x + Math.cos(a) * rr, p.T.y + Math.sin(a) * rr * 0.7, p.T.z - 28);
+    const bend = (r() < 0.5 ? -1 : 1) * (2 + r() * 3);
+    p.C.set((p.S.x + p.T.x) * 0.5 - Math.sin(a) * bend, (p.S.y + p.T.y) * 0.5 + Math.cos(a) * bend * 0.7, p.T.z - 11);
+    p.dur = (v.slow ? 2.2 : 1.45) + r() * 0.45;
+    packetAt(p, 0, p.pos); p.prev.copy(p.pos); p.vel.set(0, 0, 1); p.heat = 0.7 + r() * 0.3;
+    made++;
+  }
+  if (made < v.n) v.n = made;
+}
+function packetAt(p, u, out) {
+  if (u <= 1) {
+    const a = (1 - u) * (1 - u), b = 2 * (1 - u) * u, c = u * u;
+    return out.set(a * p.S.x + b * p.C.x + c * p.T.x, a * p.S.y + b * p.C.y + c * p.T.y, a * p.S.z + b * p.C.z + c * p.T.z);
+  }
+  return out.set(p.T.x + 2 * (p.T.x - p.C.x) * (u - 1), p.T.y + 2 * (p.T.y - p.C.y) * (u - 1), p.T.z + 2 * (p.T.z - p.C.z) * (u - 1));
+}
+function spark(W, x, y, z, vx, vy, vz, life, heat) {
+  const i = W.sI = (W.sI + 1) % MAX_S;
+  W.sp[i * 3] = x; W.sp[i * 3 + 1] = y; W.sp[i * 3 + 2] = z;
+  W.sv[i * 3] = vx; W.sv[i * 3 + 1] = vy; W.sv[i * 3 + 2] = vz;
+  W.sl[i] = life; W.sm[i] = life; W.sH[i] = heat;
+}
+function packetDone(W, p, blocked) {
+  p.alive = false;
+  const v = W.volleys.find(v => v.id === p.vid);
+  if (!v) return;
+  if (blocked) v.blocked++; else v.leaked++;
+  if (!v.resolved && v.blocked + v.leaked >= v.n) {
+    v.resolved = true;
+    if (!v.tut && v.leaked > v.n / 2) coreHit(W, `The volley got through (${v.blocked} of ${v.n} blocked)`);
+    else if (!v.tut && W.game.phase === 'wave') setBanner(W, 'Volley blocked', `${v.blocked} of ${v.n} packets stopped`, 'cold', 1.6);
+  }
+}
+const _t1 = new V3(), _t2 = new V3(), _hit = new V3();
+function packetsStep(W, dt) {
+  for (const p of W.packets) {
+    if (!p.alive || W.wt < p.launchAt) continue;
+    p.prev.copy(p.pos);
+    const u = (W.wt - p.launchAt) / p.dur;
+    packetAt(p, u, p.pos);
+    p.vel.subVectors(p.pos, p.prev).divideScalar(dt);
+    for (const h of W.hands) {
+      if (!h.present || h.shield < 0.55) continue;
+      const s0 = _a.subVectors(p.prev, h.sc).dot(h.n), s1 = _b.subVectors(p.pos, h.sc).dot(h.n);
+      if (s0 > 0 && s1 <= 0) {
+        _hit.copy(p.prev).lerp(p.pos, s0 / (s0 - s1));
+        _c.subVectors(_hit, h.sc);
+        const R = h.sR * h.shield;
+        if (_c.length() < R) {
+          _q.copy(h.sq).invert(); _c.applyQuaternion(_q);
+          const im = h.imp[h.impI = (h.impI + 1) % 12];
+          im.set(_c.x / h.sR, _c.y / h.sR, W.wt, 0.8 + 0.4 * p.heat);
+          const r = W.rng, vn = p.vel.dot(h.n);
+          for (let k = 0; k < 16; k++) {
+            _t1.set(r() - 0.5, r() - 0.5, r() - 0.5).normalize();
+            _t2.copy(p.vel).addScaledVector(h.n, -2 * vn).multiplyScalar(0.12 + r() * 0.12);
+            _t2.addScaledVector(_t1, 3 + r() * 5).addScaledVector(h.n, 1.5 + r() * 3);
+            spark(W, _hit.x, _hit.y, _hit.z, _t2.x, _t2.y, _t2.z, 0.45 + r() * 0.55, 0.75 + r() * 0.25);
+          }
+          W.deflected++; W.events.push('deflect');
+          packetDone(W, p, true);
+          break;
+        }
+      }
+    }
+    if (!p.alive) continue;
+    if (u >= 1) {         // reached the core
+      burst(W, p.pos, 10, false, 3);
+      W.breaches++; W.breachT = W.t; W.coreFlashT = W.t;
+      packetDone(W, p, false);
+    }
+  }
+}
+function sparksStep(W, dt) {
+  const k = Math.exp(-dt * 3.4);
+  for (let i = 0; i < MAX_S; i++) {
+    if (W.sl[i] <= 0) continue;
+    W.sl[i] -= dt;
+    W.sv[i * 3] *= k; W.sv[i * 3 + 1] = W.sv[i * 3 + 1] * k - dt * 2.2; W.sv[i * 3 + 2] *= k;
+    W.sp[i * 3] += W.sv[i * 3] * dt; W.sp[i * 3 + 1] += W.sv[i * 3 + 1] * dt; W.sp[i * 3 + 2] += W.sv[i * 3 + 2] * dt;
+  }
+}
+
+/* ---------- orbs per step ---------- */
+const _o1 = new V3(), _o2 = new V3();
+function orbsStep(W, dt) {
+  const f = L.field, core = L.core.pos, hitR = (L.core.R + L.orbR) * 0.85;
+  for (const o of W.orbs) {
+    if (!o.alive) continue;
+    o.hot = Math.min(1, o.hot + dt * 0.05);
+    switch (o.state) {
+      case 'free': {
+        _o1.copy(o.pos); orbFree(o, W.wt, o.pos);
+        o.vel.subVectors(o.pos, _o1).divideScalar(dt);
+        break;
+      }
+      case 'held': {
+        const h = W.hands[o.by];
+        _o2.copy(h.pinchP); _o2.z -= 0.18;
+        toLocal(W, _o2, _o1);
+        _o2.copy(o.pos);
+        o.pos.lerp(_o1, 1 - Math.exp(-dt * 26));
+        o.vel.subVectors(o.pos, _o2).divideScalar(dt);
+        o.held = Math.min(1, o.held + dt * 5);
+        break;
+      }
+      case 'thrown': {
+        if (o.homing) {
+          _o1.subVectors(f.pos, o.pos);
+          const sp = Math.max(o.vel.length(), 8);
+          _o1.setLength(sp);
+          o.vel.lerp(_o1, 1 - Math.exp(-dt * 5.5));
+        }
+        o.pos.addScaledVector(o.vel, dt);
+        o.vel.multiplyScalar(Math.exp(-dt * (o.homing ? 0.2 : 0.9)));
+        bounds(W, o);
+        if (W.wt - o.throwT > 2.5 || o.vel.length() < 0.8) o.state = 'drift';
+        break;
+      }
+      case 'drift': {
+        o.pos.addScaledVector(o.vel, dt);
+        o.vel.multiplyScalar(Math.exp(-dt * 2.2));
+        if (o.travel < 1e6) {       // dropped or missed threats resume their path to the core
+          _o1.subVectors(core, o.pos);
+          const d = _o1.length(), sp = Math.max(0.35, o.hover.distanceTo(core) / o.travel) * 1.1;
+          o.vel.addScaledVector(_o1.divideScalar(Math.max(d, 1e-3)), sp * dt * 2.2);
+        }
+        bounds(W, o);
+        break;
+      }
+      case 'contained': {
+        o.freeze = Math.min(1, (W.wt - o.ct) / 0.9);
+        slotPos(o.slot, _o1);
+        o.pos.lerp(_o1, 1 - Math.exp(-dt * 5));
+        break;
+      }
+      case 'archived': {
+        o.alpha = 1 - (W.wt - o.ct) / 0.6;
+        if (o.alpha <= 0) o.alive = false;
+        break;
+      }
+      case 'leaving': {
+        o.vel.z -= dt * 26; o.pos.addScaledVector(o.vel, dt);
+        if (o.pos.z < -40) o.alive = false;
+        break;
+      }
+    }
+    if (o.state === 'thrown' || o.state === 'drift') {
+      const al = insideField(o.pos);
+      if (al !== null) contain(W, o, al);
+    }
+    if ((o.state === 'free' && o.prog >= 1) || ((o.state === 'free' || o.state === 'drift') && o.travel < 1e6 && o.pos.distanceTo(core) < hitR)) {
+      toWorld(W, o.pos, _o3); burst(W, _o3, 34, false, 5);
+      o.alive = false;
+      coreHit(W, o.label + ' reached the core');
+    }
+    o.held = o.state === 'held' ? o.held : Math.max(0, o.held - dt * 3);
+  }
+}
+function bounds(W, o) {
+  toWorld(W, o.pos, _o1);
+  const k = (L.camZ - _o1.z) / L.camZ, bx = L.halfW * k * 0.97, by = L.halfH * k * 0.95;
+  let hit = false;
+  if (_o1.x > bx && o.vel.x > 0) { o.vel.x *= -0.5; hit = true; }
+  if (_o1.x < -bx && o.vel.x < 0) { o.vel.x *= -0.5; hit = true; }
+  if (_o1.y > by && o.vel.y > 0) { o.vel.y *= -0.5; hit = true; }
+  if (_o1.y < -by && o.vel.y < 0) { o.vel.y *= -0.5; hit = true; }
+  if (_o1.z < -6 && o.vel.z < 0) { o.vel.z *= -0.5; hit = true; }
+  if (_o1.z > L.handZ + 0.4 && o.vel.z > 0) o.vel.z *= -0.3;
+  if (hit) o.homing = false;
+  if (o.state === 'drift') o.vel.z += (-0.8 - o.pos.z) * 0.02;
+}
+function volleysStep(W) {
+  for (const v of W.volleys) {
+    if (v.fired) continue;
+    if (W.wt >= v.at - 1.2 && W.warnT < v.at - 1.3) { W.warnT = W.wt; W.warnPos.copy(v.target); }
+    if (W.wt >= v.at) { v.fired = true; fireVolley(W, v); }
+  }
+}
+
+/* ---------- the game: tutorial, waves, end ---------- */
+function setBanner(W, text, sub, kind, dur) { const g = W.game; g.banner = text; g.bannerSub = sub || ''; g.bannerKind = kind || ''; g.bannerT = W.t; g.bannerDur = dur || 2; }
+function activeThreats(W) {
+  let n = 0;
+  for (const o of W.orbs) if (o.alive && o.wave && (o.state === 'free' || o.state === 'held' || o.state === 'thrown' || o.state === 'drift')) n++;
+  return n;
+}
+function spawnThreat(W) {
+  const g = W.game, r = W.rng;
+  let best = null, bd = -1;
+  for (let k = 0; k < 12; k++) {
+    _a.set(L.play.cx + (r() * 2 - 1) * L.play.hw * 0.95, L.play.cy + (r() * 2 - 1) * L.play.hh * 0.92, -0.5 - r() * 1.1);
+    if (Math.hypot(_a.x - W.coreW.x, _a.y - W.coreW.y) < L.core.R * 3.4) continue;
+    let md = 9;
+    for (const o of W.orbs) if (o.alive && o.state !== 'contained' && o.state !== 'archived') { toWorld(W, o.pos, _b); md = Math.min(md, Math.hypot(_a.x - _b.x, _a.y - _b.y)); }
+    if (md > bd) { bd = md; best = _c.copy(_a); }
+  }
+  if (!best) best = _c.set(L.play.cx - L.play.hw * 0.8, L.play.cy + L.play.hh * 0.7, -1);
+  const used = new Set(W.orbs.filter(o => o.alive && o.state !== 'contained' && o.state !== 'archived').map(o => o.label));
+  let lab = THREATS[W.labelNext++ % THREATS.length];
+  for (let k = 0; k < THREATS.length && used.has(lab); k++) lab = THREATS[W.labelNext++ % THREATS.length];
+  const o = spawnOrb(W, best, W.wt, lab);
+  if (o) { o.travel = g.travel * (0.9 + r() * 0.2); o.wave = g.wave; }
+}
+function startWave(W, n) {
+  const g = W.game;
+  if (n === 1) { W.contained = 0; W.deflected = 0; W.breaches = 0; g.integrity = 3; }
+  g.phase = 'wave'; g.phaseT = 0; g.wave = n; g.total = 2 + n; g.spawned = 0; g.next = W.wt + 1.2;
+  g.travel = Math.max(5, 13 - 1.7 * (n - 1)); g.interval = Math.max(0.9, 2.9 - 0.35 * (n - 1)); g.maxActive = 3 + Math.floor((n - 1) / 2);
+  const nv = n >= 2 ? Math.floor(n / 2) : 0;
+  for (let k = 0; k < nv; k++) scheduleVolley(W, W.wt + 4.5 + k * 7, Math.min(6 + n, 14), W.coreW, false);
+  setBanner(W, `Wave ${n}`, n === 1 ? 'Catch the threats before they reach the core'
+    : `${g.total} threats` + (nv ? ` and ${nv === 1 ? 'a volley' : nv + ' volleys'}: raise a palm over the core` : ''), 'cold', 2.6);
+  W.events.push('wave');
+}
+function waveStep(W) {
+  const g = W.game;
+  if (g.spawned < g.total && W.wt >= g.next && activeThreats(W) < g.maxActive) { spawnThreat(W); g.spawned++; g.next = W.wt + g.interval; }
+  const pending = W.volleys.some(v => !v.resolved && !v.tut);
+  if (g.spawned >= g.total && !activeThreats(W) && !pending) {
+    g.phase = 'cleared'; g.phaseT = 0; g.cleared = g.wave;
+    setBanner(W, `Wave ${g.wave} contained`, g.integrity === 3 ? 'Core untouched' : `Core integrity ${g.integrity} of 3`, 'cold', 2.6);
+    W.events.push('cleared');
+  }
+}
+function gameOver(W, why) {
+  const g = W.game;
+  g.phase = 'over'; g.phaseT = 0; g.overT = W.t; g.again = 0;
+  for (const o of W.orbs) if (o.alive && o.state !== 'contained' && o.state !== 'archived') { o.state = 'leaving'; o.vel.set(0, 0, -2); }
+  for (const p of W.packets) p.alive = false;
+  for (const v of W.volleys) v.resolved = true;
+  W.locked = false;
+  setBanner(W, 'Core breached', why, 'hot', 2.4);
+  W.events.push('over');
+}
+function tutorialStep(W, dt, anyHand) {
+  const g = W.game;
+  g.tutT += dt;
+  const done = () => { g.tut++; g.tutT = 0; W.events.push('step'); };
+  if (g.tut === 0) { g.tutHold = anyHand ? g.tutHold + dt : 0; if (g.tutHold >= 0.5) done(); }
+  else if (g.tut === 1 || g.tut === 2) {
+    let o = g.tutOrb >= 0 ? W.orbs[g.tutOrb] : null;
+    if (!o || !o.alive || o.sid !== 'tut') {
+      PP(L.portrait ? 0.35 : 0.45, L.portrait ? 0.45 : 0.3, 0, _a); _a.z = -0.6;
+      o = spawnOrb(W, _a, W.wt, 'prompt injection', 'tut'); o.dur = 1.6; g.tutOrb = o.i;
+    }
+    if (g.tut === 1 && (o.state === 'held' || o.state === 'contained')) done();
+    if (g.tut === 2 && o.state === 'contained') done();
+  } else if (g.tut === 3) {
+    const v = g.tutVid >= 0 ? W.volleys.find(v => v.id === g.tutVid) : null;
+    if (!v) { if (g.tutT > 1.0) g.tutVid = scheduleVolley(W, W.wt + 1.4, 6, W.coreW, true, true).id; }
+    else if (v.resolved) {
+      if (v.blocked >= 3) done();
+      else { g.tutVid = -1; g.tutT = 0; setBanner(W, `${v.blocked} of ${v.n} blocked`, 'Keep the shield over the core while the volley lands', 'hot', 2.4); }
+    }
+  } else if (g.tutT > 0.8) { g.phase = 'intro'; g.phaseT = 0; setBanner(W, 'Tutorial complete', 'Wave 1 is coming', 'cold', 2.0); }
+}
+function gameStep(W, dt, anyHand) {
+  const g = W.game;
+  g.phaseT += dt;
+  if (g.phase === 'tutorial') tutorialStep(W, dt, anyHand);
+  else if (g.phase === 'intro') { if (g.phaseT > 2.2) startWave(W, 1); }
+  else if (g.phase === 'cleared') { if (g.phaseT > 2.6) startWave(W, g.wave + 1); }
+  else if (g.phase === 'wave') waveStep(W);
+}
+function overStep(W, dt) {
+  const g = W.game;
+  const palm = W.hands.some(h => h.present && h.palm);
+  g.again = palm && W.t - g.overT > 1.2 ? g.again + dt : Math.max(0, g.again - dt * 2);
+  if (g.again >= 1) { g.again = 0; W.events.push('again'); }
+}
+
+/* ---------- one fixed step ---------- */
+function worldStep(W, inputs) {
+  const dt = DT, g = W.game;
+  W.t += dt;
+  W.events.length = 0;
+  for (let i = 0; i < 2; i++) handStep(W, W.hands[i], inputs[i], dt);
+  interactions(W, dt);
+  const anyHand = W.hands[0].present || W.hands[1].present;
+  if (W.attract) attractSchedule(W);
+  else {
+    // camera play: g.noHand (seconds without any hand, wall clock) is set by the page before each frame;
+    // after 1.5 s the game holds still and asks for a hand
+    g.waiting = g.input === 'camera' && !anyHand && g.noHand > 1.5 && g.phase !== 'over' && !(g.phase === 'tutorial' && g.tut === 0);
+  }
+  if (!W.locked && !g.waiting) {
+    W.wt += dt;
+    if (!W.attract) gameStep(W, dt, anyHand);
+    volleysStep(W);
+    orbsStep(W, dt);
+    packetsStep(W, dt);
+    sparksStep(W, dt);
+  }
+  if (g.phase === 'over') overStep(W, dt);
+}
+
+/* =====================================================================
+   Attract script: deterministic synthetic hands (a function of t, reading the
+   world only for where scripted orbs currently are)
+   ===================================================================== */
+const SCRIPT_ORBS = [
+  { id: 'A', t: 0.0, u: -0.15, v: 0.42, z: -0.6, label: 0 },
+  { id: 'B', t: 0.35, u: 0.32, v: -0.22, z: -0.9, label: 1 },
+  { id: 'C', t: 0.9, u: -0.85, v: 0.1, z: -1.3, label: 2 },
+  { id: 'D', t: 4.4, u: 0.28, v: 0.62, z: -1.0, label: 3 },
+  { id: 'E', t: 8.6, u: -0.52, v: 0.8, z: -1.6, label: 4 },
+  { id: 'F', t: 14.2, u: 0.62, v: 0.36, z: -1.2, label: 5 },
+  { id: 'G', t: 21.6, u: -0.3, v: -0.6, z: -1.1, label: 6 },
+];
+const PP = (u, v, dz = 0, out = new V3()) => out.set(L.play.cx + u * L.play.hw, L.play.cy + v * L.play.hh, L.handZ + dz);
+function rayTarget(p, z, out) {
+  const cz = L.camZ, k = (cz - z) / (cz - p.z);
+  return out.set(p.x * k, p.y * k, z);
+}
+const P = (u, v, dz = 0) => ({ fn: (W, out) => PP(u, v, dz, out) });
+const ORB = (id, du = 0, dv = 0) => ({ fn: (W, out) => {
+  const o = W.orbs.find(o => o.alive && o.sid === id);
+  if (!o) return PP(0, 0, 0, out);
+  toWorld(W, o.pos, _a);
+  rayTarget(_a, L.handZ, out); out.x += du * L.play.hw; out.y += dv * L.play.hh; return out;
+} });
+const FLING = (dist) => ({ fling: dist });
+
+const SCRIPT = {
+  R: {
+    pos: [
+      [0.0, P(0.55, -1.6)], [1.3, ORB('A', 0.12, -0.2), 'out'], [2.12, ORB('A'), 'io'], [2.4, ORB('A')],
+      [3.7, P(-0.55, 0.05), 'io'], [4.0, FLING(3.0), 'in'], [4.55, FLING(0.7), 'out'],
+      [6.15, ORB('B', 0.08, 0.12), 'io'], [6.4, ORB('B'), 'io'], [6.62, ORB('B')],
+      [7.5, P(-0.25, -0.45), 'io'], [7.8, FLING(3.0), 'in'], [8.35, FLING(0.7), 'out'],
+      [9.5, P(0.04, -0.1, 0.3), 'io'], [12.0, P(0.07, -0.06, 0.3), 'io'], [14.0, P(0.04, -0.12, 0.3), 'io'],
+      [15.0, P(0.5, -0.62), 'io'], [16.2, P(0.55, -0.35), 'io'], [16.45, P(0.55, -0.35)],
+      [17.8, P(0.78, -0.08, -0.35), 'io'], [19.2, P(0.55, -0.35), 'io'], [19.5, P(0.55, -0.35)],
+      [20.4, P(0.05, -0.2, 0.2), 'io'], [23.2, P(0.05, -0.2, 0.2)],
+      [23.5, P(0.04, -0.1, 0.3), 'io'], [25.0, P(0.05, -0.11, 0.3)],
+      [26.4, ORB('D'), 'io'], [26.75, ORB('D')], [27.5, P(-0.1, 0.18), 'io'], [27.78, P(-0.02, 0.06), 'out'],
+      [28.02, ORB('D'), 'io'], [28.25, ORB('D')], [28.85, P(-0.45, 0.3), 'io'], [29.15, FLING(3.0), 'in'], [29.7, FLING(0.7), 'out'],
+      [30.8, ORB('C'), 'io'], [31.05, ORB('C')], [31.8, P(-0.7, -0.32), 'io'], [32.1, FLING(3.2), 'in'], [32.65, FLING(0.7), 'out'],
+      [34.0, P(0.4, -1.6), 'io'],
+    ],
+    pinch: [[0, 0], [2.12, 0], [2.3, 1], [3.93, 1], [3.99, 0], [6.4, 0], [6.55, 1], [7.73, 1], [7.79, 0],
+      [16.2, 0], [16.4, 1], [19.3, 1], [19.45, 0], [26.42, 0], [26.62, 1], [27.42, 1], [27.78, 0],
+      [28.02, 0], [28.17, 1], [29.08, 1], [29.14, 0], [30.8, 0], [30.97, 1], [32.03, 1], [32.09, 0]],
+    palm: [[0, 0], [9.55, 0], [10.05, 1], [14.0, 1], [14.5, 0], [23.25, 0], [23.55, 1], [25.0, 1], [25.4, 0]],
+    fist: [[0, 0], [20.45, 0], [20.75, 1], [21.7, 1], [21.95, 0], [22.45, 0], [22.7, 1], [23.2, 1], [23.4, 0]],
+    vis: [[0, 0], [0.3, 0], [1.0, 1], [33.4, 1], [34.2, 0]],
+  },
+  L: {
+    pos: [[0, P(-0.2, -1.6)], [14.9, P(-0.22, -1.6)], [16.2, P(-0.3, -0.35), 'out'], [16.45, P(-0.3, -0.35)],
+      [17.8, P(-0.5, -0.65, 0.35), 'io'], [19.2, P(-0.3, -0.35), 'io'], [19.5, P(-0.3, -0.35)], [20.6, P(-0.4, -1.6), 'in']],
+    pinch: [[0, 0], [16.2, 0], [16.4, 1], [19.3, 1], [19.45, 0]],
+    palm: [[0, 0]], fist: [[0, 0]],
+    vis: [[0, 0], [14.9, 0], [15.4, 1], [20.2, 1], [20.6, 0]],
+  },
+};
+const CAPTIONS = [
+  [0, 'Demo: hot threats drift toward the core, and the hand catches them.'],
+  [1.5, 'Pinch to grab a threat.'],
+  [3.55, 'Flick it into the cold containment field.'],
+  [5.2, 'Contained threats freeze into ice. One that reaches the core costs integrity.'],
+  [9.1, 'Volley incoming. Raise an open palm over the core.'],
+  [14.6, 'Pinch with both hands to scale and rotate the console.'],
+  [20.3, 'Make a fist to pause the console. Again to resume.'],
+  [23.35, 'Resumed. Palm up for the rest of the volley.'],
+  [25.6, 'Let go gently to drop. Flick to throw.'],
+  [32.6, 'Your turn: use your camera, or play with the mouse.'],
+];
+function scalarTrack(keys, t) {
+  if (t <= keys[0][0]) return keys[0][1];
+  for (let i = 1; i < keys.length; i++) {
+    if (t < keys[i][0]) {
+      const a = keys[i - 1], b = keys[i], u = (t - a[0]) / (b[0] - a[0]);
+      return lerp(a[1], b[1], EASE.io(u));
+    }
+  }
+  return keys[keys.length - 1][1];
+}
+// position keys may be dynamic; a key's value is latched the first step it is reached
+function keyVal(W, track, tag, i, t, out) {
+  const key = track[i], id = tag + i;
+  if (t >= key[0] && W.latch.has(id)) return out.copy(W.latch.get(id));
+  const k = key[1];
+  if (k.fling !== undefined) {
+    keyVal(W, track, tag, i - 1, t, out);
+    toWorld(W, L.field.pos, _b);
+    _c.subVectors(_b, out); _c.z = 0; _c.normalize();
+    out.addScaledVector(_c, k.fling);
+    if (track[i - 1][1].fling !== undefined) {   // follow-through continues from the flick end
+      keyVal(W, track, tag, i - 2, t, _d);
+      _c.subVectors(_b, _d); _c.z = 0; _c.normalize();
+      out.copy(_d).addScaledVector(_c, track[i - 1][1].fling + k.fling);
+    }
+  } else k.fn(W, out);
+  if (t >= key[0]) W.latch.set(id, out.clone());
+  return out;
+}
+const _k0 = new V3(), _k1 = new V3();
+function posTrack(W, track, tag, t, out) {
+  if (t <= track[0][0]) return keyVal(W, track, tag, 0, t, out);
+  for (let i = 1; i < track.length; i++) {
+    if (t < track[i][0]) {
+      keyVal(W, track, tag, i - 1, t, _k0); keyVal(W, track, tag, i, t, _k1);
+      const u = (t - track[i - 1][0]) / (track[i][0] - track[i - 1][0]);
+      return out.copy(_k0).lerp(_k1, EASE[track[i][2] || 'io'](u));
+    }
+  }
+  return keyVal(W, track, tag, track.length - 1, t, out);
+}
+const scriptP = [{ right: true, x: 0, y: 0, z: 0, pinch: 0, palm: 0, fist: 0, scale: 1 }, { right: false, x: 0, y: 0, z: 0, pinch: 0, palm: 0, fist: 0, scale: 1 }];
+const scriptIn = [{ present: false, lm: new Float32Array(63), isRight: true, src: 'demo', vis: 0 }, { present: false, lm: new Float32Array(63), isRight: false, src: 'demo', vis: 0 }];
+const _sp = new V3();
+function attractInputs(W) {
+  const t = W.t;     // time of the step being computed
+  if (POSE_DEBUG) {
+    const amt = { relax: [0, 0, 0], pinch: [1, 0, 0], palm: [0, 1, 0], fist: [0, 0, 1] }[POSE_DEBUG] || [0, 0, 0];
+    for (let i = 0; i < 2; i++) {
+      const Pm = scriptP[i], inp = scriptIn[i];
+      inp.vis = 1; inp.present = true;
+      Pm.pinch = amt[0]; Pm.palm = amt[1]; Pm.fist = amt[2];
+      Pm.x = i ? -1.6 : 1.6; Pm.y = -0.2; Pm.z = L.handZ; Pm.scale = L.handS; Pm.dyaw = Pm.dpitch = Pm.droll = 0;
+      buildHand(Pm, inp.lm);
+    }
+    return scriptIn;
+  }
+  for (let i = 0; i < 2; i++) {
+    const S = i === 0 ? SCRIPT.R : SCRIPT.L, Pm = scriptP[i], inp = scriptIn[i];
+    const vis = scalarTrack(S.vis, t);
+    inp.vis = vis; inp.present = vis > 0.02;
+    if (!inp.present) continue;
+    posTrack(W, S.pos, i === 0 ? 'R' : 'L', t, _sp);
+    Pm.pinch = scalarTrack(S.pinch, t); Pm.palm = scalarTrack(S.palm, t); Pm.fist = scalarTrack(S.fist, t);
+    // gentle life: a slow sway plus rising in from below with visibility
+    const sw = 1 - Pm.pinch * 0.6;
+    Pm.x = _sp.x + Math.sin(t * 0.9 + i * 2) * 0.06 * sw;
+    Pm.y = _sp.y + Math.sin(t * 1.3 + i) * 0.05 * sw - (1 - vis) * 0.8;
+    Pm.z = _sp.z;
+    Pm.scale = L.handS;
+    Pm.dyaw = Math.sin(t * 0.7 + i) * 0.08; Pm.dpitch = Math.sin(t * 0.55) * 0.06; Pm.droll = Math.sin(t * 0.8 + 1) * 0.05;
+    buildHand(Pm, inp.lm);
+  }
+  return scriptIn;
+}
+function attractSchedule(W) {
+  const t = W.t;
+  for (; W.schedI < SCRIPT_ORBS.length && t >= SCRIPT_ORBS[W.schedI].t; W.schedI++) {
+    const s = SCRIPT_ORBS[W.schedI];
+    PP(s.u, s.v, 0, _a); _a.z = s.z;
+    const o = spawnOrb(W, _a, W.wt, THREATS[s.label], s.id);
+    if (o) o.travel = 55;          // the demo's threats creep toward the core, slowly
+  }
+  if (!W.v1 && t >= 9.0) { W.v1 = true; scheduleVolley(W, W.wt + 1.2, 16, W.coreW, false); }
+  if (!W.v2 && t >= 19.4) { W.v2 = true; scheduleVolley(W, W.wt + 1.2, 9, W.coreW, false); }
+  if (!W.purged && t >= 34.0) {
+    W.purged = true;
+    let k = 0;
+    for (const o of W.orbs) {
+      if (!o.alive) continue;
+      if (o.state === 'contained') { o.state = 'archived'; o.ct = W.wt + 0.25 + 0.12 * k++; }
+      else if (o.state !== 'archived') { o.state = 'leaving'; o.vel.set(0, 0, -2); }
+    }
+  }
+  if (!W.zeroed && t >= 35.3) { W.zeroed = true; W.contained = W.deflected = W.breaches = 0; }
+  if (t >= 33.5 && !W.con.two) {
+    const k = 1 - Math.exp(-DT * 3);
+    W.con.s += (1 - W.con.s) * k; W.con.roll -= W.con.roll * k; W.con.yaw -= W.con.yaw * k;
+    if (t >= PERIOD - 0.3) { W.con.s = 1; W.con.roll = 0; W.con.yaw = 0; }
+    updateConsole(W);
+  }
+}
+function captionAt(t) {
+  let c = CAPTIONS[0][1];
+  for (const k of CAPTIONS) if (t >= k[0]) c = k[1];
+  return c;
+}
+
+/* =====================================================================
+   Live inputs: mouse / touch / keyboard virtual hand, and the camera
+   ===================================================================== */
+const ptr = { lastDownX: -1e4, lastDownY: -1e4, x: 0, y: 0, inside: false, moved: -1e9, down: false, shield: false, type: 'mouse', touches: new Map(), kbShield: false };
+const vh = { right: true, x: 0, y: 0, z: 1, pinch: 0, palm: 0, fist: 0, scale: 0.7, dyaw: 0, dpitch: 0, droll: 0, vx: 0, vy: 0, lastX: 0, lastY: 0, fistUntil: -1, macro: null, home: false };
+const mouseIn = { present: false, lm: new Float32Array(63), isRight: true, src: 'mouse', vel: new V3() };
+const _ray = new V3();
+function screenToPlane(px, py, z, out) {
+  _ray.set(px / L.w * 2 - 1, -(py / L.h) * 2 + 1, 0.5).unproject(camera).sub(camera.position).normalize();
+  const k = (z - camera.position.z) / _ray.z;
+  return out.copy(camera.position).addScaledVector(_ray, k);
+}
+function mouseInputs(nowMs, dt) {
+  const shield = ptr.shield || ptr.kbShield || ptr.touches.size >= 2;
+  const fistOn = nowMs < vh.fistUntil;
+  const active = ptr.down || shield || fistOn || vh.macro || (ptr.inside && nowMs - ptr.moved < 4000);
+  mouseIn.present = !!active;
+  mouseIn.cosmeticFist = fistOn || vh.fist > 0;
+  if (!active) return mouseIn;
+  let tx, ty;
+  if (vh.macro) {
+    const m = vh.macro, mt = (nowMs - m.t0) / 1000;
+    posTrack(W, m.pos, m.tag, mt, _sp); tx = _sp.x; ty = _sp.y;
+    vh.pinch = scalarTrack(m.pinch, mt);
+    if (mt > m.end) vh.macro = null;
+  } else {
+    let px = ptr.x, py = ptr.y;
+    if (ptr.touches.size >= 2) { px = 0; py = 0; for (const p of ptr.touches.values()) { px += p.x; py += p.y; } px /= ptr.touches.size; py /= ptr.touches.size; }
+    if (!vh.home && !ptr.inside && !ptr.down && ptr.touches.size === 0) { PP(0.1, -0.35, 0, _sp); tx = _sp.x; ty = _sp.y; }
+    else { screenToPlane(px, py, L.handZ, _sp); tx = _sp.x; ty = _sp.y; vh.home = true; }
+    vh.pinch = ptr.down && !shield ? 1 : 0;
+  }
+  vh.palm = clamp(vh.palm + (shield ? dt / 0.05 : -dt / 0.12), 0, 1);
+  vh.fist = clamp(vh.fist + (fistOn ? dt / 0.08 : -dt / 0.12), 0, 1);
+  // hand velocity is the cursor's own (real time, tau 40 ms): the lean below rotates the hand around the
+  // cursor and must not leak into flick speed or direction
+  const vx = (tx - vh.lastX) / Math.max(dt, 1e-3), vy = (ty - vh.lastY) / Math.max(dt, 1e-3);
+  const ka = 1 - Math.exp(-dt / 0.04);
+  if (vh.teleport) { vh.vx = 0; vh.vy = 0; } else { vh.vx += (vx - vh.vx) * ka; vh.vy += (vy - vh.vy) * ka; }
+  mouseIn.vel.set(vh.vx, vh.vy, 0);
+  vh.lastX = tx; vh.lastY = ty;
+  vh.x = tx; vh.y = ty; vh.z = L.handZ; vh.scale = L.handS;
+  vh.droll = clamp(-vh.vx * 0.012, -0.2, 0.2) * (1 - vh.palm);
+  vh.dpitch = clamp(vh.vy * 0.01, -0.18, 0.18) * (1 - vh.palm);
+  buildHand(vh, mouseIn.lm);
+  return mouseIn;
+}
+// keyboard: catch the nearest orb and flick it into the field, through the same pipeline
+function startCatchMacro(nowMs) {
+  const k = pickNearestFree();
+  if (k < 0) return;
+  const o = W.orbs[k];
+  const start = new V3(vh.x || PP(0.1, -0.35).x, vh.y || PP(0.1, -0.35).y, L.handZ);
+  toWorld(W, o.pos, _a); const tgt = rayTarget(_a, L.handZ, new V3());
+  const id = o.i;
+  const tracked = { fn: (W_, out) => { const q = W.orbs[id]; if (!q.alive) return out.copy(tgt); toWorld(W, q.pos, _a); return rayTarget(_a, L.handZ, out); } };
+  toWorld(W, L.field.pos, _b); _c.subVectors(_b, tgt); _c.z = 0; _c.normalize();
+  const wind = tgt.clone().addScaledVector(_c, -0.9);
+  vh.macro = {
+    t0: nowMs, tag: 'M' + nowMs + ':', end: 1.3,
+    pos: [[0, { fn: (W_, out) => out.copy(start) }], [0.35, tracked, 'io'], [0.5, tracked], [0.8, { fn: (W_, out) => out.copy(wind) }, 'io'], [1.05, FLING(3.0), 'in'], [1.3, FLING(0.6), 'out']],
+    pinch: [[0, 0], [0.38, 0], [0.48, 1], [0.99, 1], [1.02, 0]],
+  };
+}
+function pickNearestFree() {
+  let best = -1, bd = 1e9;
+  for (const o of W.orbs) {
+    if (!o.alive || (o.state !== 'free' && o.state !== 'drift')) continue;
+    toWorld(W, o.pos, _a); if (_a.z < -4) continue;
+    const d = Math.hypot(_a.x - (vh.x || 0), _a.y - (vh.y || 0));
+    if (d < bd) { bd = d; best = o.i; }
+  }
+  return best;
+}
+
+/* ---------- camera + MediaPipe ---------- */
+const MP_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1';
+const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const video = document.getElementById('video'), overlay = document.getElementById('overlay'), octx = overlay.getContext('2d');
+// One Euro, tuned at the real tracking rate (30 detections/s, Apple M4 Pro GPU delegate) on scene units:
+//   min cutoff 0.8 Hz, beta 2.5 -> still-palm jitter 1.85 px raw -> 0.45 px; slow-drag lag 10.3 px (old 1.4/0.45) -> 5.0 px
+const ONE_EURO = (() => { const o = (params.get('oe') || '').split(',').map(Number); return { minCutoff: o[0] || 0.8, beta: o[1] || 2.5, dCutoff: 1.0 }; })();
+const camSlot = () => ({ present: false, lastT: -1e9, lm: new Float32Array(63), isRight: true, src: 'camera', f: Array.from({ length: 63 }, () => new OneEuro(ONE_EURO.minCutoff, ONE_EURO.beta, ONE_EURO.dCutoff)), img: new Float32Array(42), score: 0,
+  vel: new V3(), palm: new V3(), palmPrev: new V3(), rawPalm: new V3(), rawPrev: new V3(), velT: -1, edge: false, jumps: 0 });
+const cam = { status: 'off', stream: null, lm: null, delegate: '', lastVT: -1, lastMs: 0, slots: [camSlot(), camSlot()], frames: 0, detections: 0, lastSeenMs: -1e9, err: '', preview: true, raw: [] };
+const camIn = [cam.slots[0], cam.slots[1]];
+const $ = id => document.getElementById(id);
+function camUI(text, cls, pct) {
+  $('cam-status').textContent = text;
+  $('cam-status').className = 'status' + (cls ? ' ' + cls : '');
+  $('cam-bar').hidden = pct === undefined;
+  if (pct !== undefined) $('cam-bar').firstElementChild.style.width = Math.round(pct * 100) + '%';
+}
+async function fetchBytes(url, known, onp) {
+  let cache = null;
+  try { if (window.caches) { cache = await caches.open('hands-on-v1'); const hit = await cache.match(url); if (hit) { const b = new Uint8Array(await hit.arrayBuffer()); onp(b.length, b.length); return b; } } } catch (e) { cache = null; }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status + ' for ' + url.split('/').pop());
+  const reader = res.body.getReader(), chunks = [];
+  let got = 0;
+  for (;;) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); got += value.length; onp(got, known); }
+  const buf = new Uint8Array(got); let o = 0;
+  for (const c of chunks) { buf.set(c, o); o += c.length; }
+  if (cache) try { await cache.put(url, new Response(buf.slice(), { headers: { 'content-type': 'application/octet-stream' } })); } catch (e) {}
+  return buf;
+}
+function getStream() {
+  return navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }, audio: false });
+}
+async function startCamera() {
+  if (cam.status === 'starting' || cam.status === 'on') return;
+  cam.status = 'starting'; cam.err = ''; cam.kicks = 0;
+  $('cam').hidden = false;
+  camUI('Waiting for camera permission');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return camFail('This browser does not allow camera access here.');
+  try { cam.stream = await getStream(); }
+  catch (e) {
+    const name = (e && e.name) || String(e);
+    return camFail(name === 'NotAllowedError' || name === 'SecurityError' ? 'Camera access was blocked.'
+      : name === 'NotFoundError' || name === 'OverconstrainedError' ? 'No camera was found.' : 'The camera could not start (' + name + ').');
+  }
+  attachStream();
+  try {
+    if (!cam.lm) {
+      camUI('Downloading the hand tracker, 0%', '', 0);
+      const mp = await import(MP_BASE + '/vision_bundle.mjs');
+      const fileset = await mp.FilesetResolver.forVisionTasks(MP_BASE + '/wasm');
+      const wasmKnown = /nosimd/.test(fileset.wasmBinaryPath) ? 10960242 : 11756954, modelKnown = 7819105;
+      const prog = [0, 0];
+      const upd = () => camUI('Downloading the hand tracker, ' + Math.min(99, Math.round((prog[0] + prog[1]) / (wasmKnown + modelKnown) * 100)) + '%', '', (prog[0] + prog[1]) / (wasmKnown + modelKnown));
+      const [wasm, model] = await Promise.all([
+        fetchBytes(fileset.wasmBinaryPath, wasmKnown, g => { prog[0] = g; upd(); }),
+        fetchBytes(MODEL_URL, modelKnown, g => { prog[1] = g; upd(); }),
+      ]);
+      fileset.wasmBinaryPath = URL.createObjectURL(new Blob([wasm], { type: 'application/wasm' }));
+      camUI('Starting the hand tracker', '', 1);
+      let lastErr = null;
+      for (const delegate of params.get('delegate') === 'cpu' ? ['CPU'] : ['GPU', 'CPU']) {   // GPU first, CPU if the GPU delegate cannot start (?delegate=cpu tests the fallback)
+        try {
+          cam.lm = await mp.HandLandmarker.createFromOptions(fileset, {
+            baseOptions: { modelAssetBuffer: model.slice(), delegate },
+            runningMode: 'VIDEO', numHands: 2,
+            minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5,
+          });
+          cam.delegate = delegate; cam.fileset = fileset; cam.mp = mp; cam.model = model;
+          break;
+        } catch (e) { lastErr = e; }
+      }
+      if (!cam.lm) throw lastErr || new Error('could not create the tracker');
+    }
+    if (cam.status !== 'starting') return;              // stopped while loading
+    cam.status = 'on'; cam.wdMs = cam.onMs = performance.now();
+    camUI('Tracking (' + cam.delegate + '). Show your hand.');
+  } catch (e) {
+    camFail('The hand tracker failed to load (' + String(e && e.message || e).slice(0, 80) + ').');
+  }
+}
+// camera failed or was stopped: say so plainly and carry on with the mouse
+function camFail(msg) {
+  cam.status = 'off'; cam.err = msg;
+  stopStream();
+  $('cam').hidden = true;
+  for (const s of cam.slots) s.present = false;
+  $('cam-go').textContent = 'Try the camera again';
+  if (mode === 'live' && W.game.input === 'camera') {
+    gameInput = 'mouse'; W.game.input = 'mouse'; W.game.waiting = false;
+    setBanner(W, 'Playing with the mouse', msg + ' Mouse and touch work the same way.', 'hot', 4.5);
+  }
+}
+function attachStream() {
+  video.srcObject = cam.stream;
+  video.play().catch(() => {});
+  cam.wdMs = performance.now(); cam.wdVT = -1;
+  startFrameLoop();
+}
+// track in step with the camera: one detection per new video frame (requestVideoFrameCallback), rAF otherwise
+const HAS_RVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+let rvfcToken = 0;
+function startFrameLoop() {
+  if (!HAS_RVFC) return;
+  const token = ++rvfcToken;
+  const cb = (now, meta) => { if (token !== rvfcToken || !cam.stream) return; camDetect(performance.now(), meta); video.requestVideoFrameCallback(cb); };
+  video.requestVideoFrameCallback(cb);
+}
+// re-acquire the camera (permission is already granted, so no prompt) when frames stop arriving
+async function restartStream() {
+  cam.restarting = true;
+  try { stopStream(); cam.stream = await getStream(); attachStream(); }
+  catch (e) { cam.err = String(e && e.name || e); }
+  cam.restarting = false; cam.wdMs = performance.now();
+}
+function camWatchdog(nowMs) {
+  if (cam.status !== 'on' || !cam.stream || cam.restarting) return;
+  if (video.currentTime !== cam.wdVT) { cam.wdVT = video.currentTime; cam.wdMs = nowMs; return; }
+  if (nowMs - cam.wdMs > 1500) {
+    cam.wdMs = nowMs; cam.kicks = (cam.kicks || 0) + 1;
+    if (cam.kicks > 6) camFail('The camera stopped sending frames.');
+    else restartStream();
+  }
+}
+function stopStream() { if (cam.stream) for (const tr of cam.stream.getTracks()) tr.stop(); cam.stream = null; video.srcObject = null; rvfcToken++; }
+function stopCamera() { camFail('Camera stopped.'); $('cam-go').textContent = 'Use my camera for hand tracking'; }
+async function recreateCPU() {
+  try {
+    cam.lm = await cam.mp.HandLandmarker.createFromOptions(cam.fileset, { baseOptions: { modelAssetBuffer: cam.model.slice(), delegate: 'CPU' }, runningMode: 'VIDEO', numHands: 2 });
+    cam.delegate = 'CPU'; cam.status = 'on';
+  } catch (e) { camFail('Tracking stopped (' + String(e.message || e).slice(0, 60) + ').'); }
+}
+// privacy: the camera is off whenever the tab is hidden or the page goes away
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (cam.status === 'on') { stopStream(); cam.status = 'paused'; camUI('Camera off while this tab is hidden'); }
+  } else {
+    lastInputMs = performance.now(); last = performance.now();
+    if (cam.status === 'paused') { cam.status = 'on'; restartStream(); camUI('Tracking (' + cam.delegate + '). Show your hand.'); }
+  }
+});
+window.addEventListener('pagehide', () => stopStream());
+const _wl = new Float32Array(63), _vt = new V3();
+const EDGE_IDX = [2, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19, 20];
+const camStats = { det: [], lat: [], gap: [], lastDone: 0 };
+const pushStat = (a, v) => { a.push(v); if (a.length > 300) a.shift(); };
+const frameCanvas = document.createElement('canvas'), frameCtx = frameCanvas.getContext('2d', { alpha: false, desynchronized: true });
+function camDetect(nowMs, meta) {
+  if (cam.status !== 'on' || !cam.lm || !cam.stream || cam.restarting) return;
+  if (video.readyState < 2 || video.currentTime === cam.lastVT) return;
+  if (cam.delegate === 'CPU' && nowMs - cam.lastMs < 40) return;
+  cam.lastVT = video.currentTime; cam.lastMs = nowMs;
+  // copy the frame into a canvas first: the tracker's GPU upload then never holds on to the camera's own frame buffers
+  const vw = video.videoWidth, vhh = video.videoHeight;
+  if (!vw || !vhh) return;
+  if (frameCanvas.width !== vw || frameCanvas.height !== vhh) { frameCanvas.width = vw; frameCanvas.height = vhh; }
+  frameCtx.drawImage(video, 0, 0, vw, vhh);
+  let res;
+  const tA = performance.now();
+  try { res = cam.lm.detectForVideo(frameCanvas, nowMs); }
+  catch (e) { if (cam.delegate === 'GPU') { cam.status = 'starting'; cam.lm = null; recreateCPU(); } return; }
+  const tB = performance.now();
+  pushStat(camStats.det, tB - tA);
+  const cap = meta && (meta.captureTime || meta.presentationTime);
+  if (cap && cap < tB) pushStat(camStats.lat, tB - cap);
+  if (camStats.lastDone) pushStat(camStats.gap, tB - camStats.lastDone);
+  camStats.lastDone = tB;
+  cam.frames++;
+  const tsec = nowMs / 1000, n = res.landmarks ? res.landmarks.length : 0;
+  cam.raw = [];
+  const dets = [];
+  for (let i = 0; i < n; i++) {
+    const hd = res.handedness[i] && res.handedness[i][0];
+    // we feed the un-mirrored camera frame; verified on test photos that the label then names the real hand
+    // (a left palm photo comes back 'Left', a right-hand OK sign 'Right')
+    const img = res.landmarks[i];
+    let cx = 0; for (const j of PALM_IDX) cx += img[j].x; cx = 1 - cx / 5;
+    dets.push({ i, isRight: hd ? hd.categoryName === 'Right' : true, score: hd ? hd.score : 0, cx, label: hd ? hd.categoryName : '?' });
+  }
+  for (const d of dets) d.slot = d.isRight ? 0 : 1;
+  if (dets.length === 2 && dets[0].isRight === dets[1].isRight) {
+    // same label twice: the hand further right on screen takes the right slot; its chirality (which flips the
+    // palm-facing test) is only overridden when the model was unsure about it
+    const [r, l] = dets[0].cx > dets[1].cx ? [dets[0], dets[1]] : [dets[1], dets[0]];
+    r.slot = 0; l.slot = 1;
+    if (r.score < 0.8) r.isRight = true;
+    if (l.score < 0.8) l.isRight = false;
+  }
+  const seen = [false, false];
+  for (const d of dets) {
+    const s = cam.slots[d.slot];
+    if (seen[d.slot]) continue;
+    seen[d.slot] = true;
+    const img = res.landmarks[d.i], wl = res.worldLandmarks[d.i];
+    mapCamHand(img, wl, _wl);
+    let rx = 0, ry = 0, rz = 0;
+    for (const j of PALM_IDX) { rx += _wl[j * 3]; ry += _wl[j * 3 + 1]; rz += _wl[j * 3 + 2]; }
+    s.rawPalm.set(rx / 5, ry / 5, rz / 5);
+    // a jump of more than a quarter frame width in one frame is a re-acquisition, not motion: restart the filters
+    const jump = s.present && s.rawPalm.distanceTo(s.rawPrev) > 0.25 * 2 * L.halfW * L.camGain;
+    if (jump) s.jumps++;
+    if (tsec - s.lastT > 0.5 || jump) { for (const f of s.f) f.reset(); s.velT = -1; }
+    s.rawPrev.copy(s.rawPalm);
+    let edge = false;
+    // only the joints that make gestures count (a wrist below the frame is normal when the hand is raised)
+    for (const j of EDGE_IDX) if (img[j].x < 0.015 || img[j].x > 0.985 || img[j].y < 0.015 || img[j].y > 0.985) { edge = true; break; }
+    s.edge = edge;
+    for (let k = 0; k < 63; k++) s.lm[k] = s.f[k].filter(_wl[k], tsec);
+    // palm velocity from tracker timestamps, smoothed over ~3 frames (tau 45 ms)
+    let px = 0, py = 0, pz = 0;
+    for (const j of PALM_IDX) { px += s.lm[j * 3]; py += s.lm[j * 3 + 1]; pz += s.lm[j * 3 + 2]; }
+    s.palm.set(px / 5, py / 5, pz / 5);
+    const vdt = tsec - s.velT;
+    if (s.velT < 0 || vdt > 0.5 || !s.present) s.vel.set(0, 0, 0);
+    else if (vdt > 1e-4) { _vt.subVectors(s.palm, s.palmPrev).divideScalar(vdt); s.vel.lerp(_vt, 1 - Math.exp(-vdt / 0.045)); }
+    s.palmPrev.copy(s.palm); s.velT = tsec;
+    for (let j = 0; j < 21; j++) { s.img[j * 2] = img[j].x; s.img[j * 2 + 1] = img[j].y; }
+    s.present = true; s.lastT = tsec; s.isRight = d.isRight; s.score = d.score;
+    cam.raw.push({ label: d.label, isRight: d.isRight, score: d.score, n: img.length });
+    cam.detections++;
+  }
+  for (let k = 0; k < 2; k++) if (!seen[k] && tsec - cam.slots[k].lastT > 0.25) cam.slots[k].present = false;
+  if (n > 0) { cam.lastSeenMs = nowMs; noteInput('camera', nowMs); }
+  drawPreview(res);
+  const nh = cam.slots.filter(s => s.present).length;
+  camUI(nh ? 'Tracking ' + nh + (nh > 1 ? ' hands' : ' hand') + ' (' + cam.delegate + ')' : 'Tracking (' + cam.delegate + '). Show your hand.');
+}
+function mapCamHand(img, wl, out) {
+  let ix = 0, iy = 0, wx = 0, wy = 0, wz = 0;
+  for (const j of PALM_IDX) { ix += img[j].x; iy += img[j].y; wx += wl[j].x; wy += wl[j].y; wz += wl[j].z; }
+  ix /= 5; iy /= 5; wx /= 5; wy /= 5; wz /= 5;
+  const ar = (video.videoWidth / video.videoHeight) || 4 / 3;
+  const s = Math.hypot((img[9].x - img[0].x) * ar, img[9].y - img[0].y);
+  const z = L.handZ + clamp((s - 0.2) * 6, -1.4, 1.2);
+  const k = (L.camZ - z) / L.camZ, gain = L.camGain;
+  const ax = clamp(((1 - ix) - 0.5) * 2 * gain, -1.05, 1.05) * L.halfW * k;
+  const ay = clamp((0.5 - iy) * 2 * gain, -1.05, 1.05) * L.halfH * k;
+  // shape from metric world landmarks; (x, y, z)_mediapipe -> (-x, -y, z)_scene keeps the hand's chirality
+  const K = L.handS / 0.09;
+  for (let j = 0; j < 21; j++) {
+    out[j * 3] = ax - (wl[j].x - wx) * K;
+    out[j * 3 + 1] = ay - (wl[j].y - wy) * K;
+    out[j * 3 + 2] = z + (wl[j].z - wz) * K;
+  }
+}
+function drawPreview(res) {
+  const w = overlay.width, h = overlay.height;
+  octx.clearRect(0, 0, w, h);
+  if (!cam.preview || !res.landmarks) return;
+  // object-fit: cover crop of the 4:3 canvas matches a 4:3 camera
+  for (let i = 0; i < res.landmarks.length; i++) {
+    const img = res.landmarks[i];
+    const X = j => (1 - img[j].x) * w, Y = j => img[j].y * h;
+    octx.strokeStyle = 'rgba(155,232,255,.9)'; octx.lineWidth = 2;
+    octx.beginPath();
+    for (let b = 0; b < BONES.length; b += 2) { octx.moveTo(X(BONES[b]), Y(BONES[b])); octx.lineTo(X(BONES[b + 1]), Y(BONES[b + 1])); }
+    octx.stroke();
+    octx.fillStyle = '#E8F7FF';
+    for (let j = 0; j < 21; j++) { octx.beginPath(); octx.arc(X(j), Y(j), j % 4 === 0 && j ? 3.2 : 2.2, 0, 6.283); octx.fill(); }
+    const s = cam.slots.find(s => s.present);
+    const hs = W.hands.find(h => h.src === 'camera' && h.present);
+    if (hs) { octx.font = '500 15px "Schibsted Grotesk", sans-serif'; octx.fillStyle = '#9BE8FF'; octx.fillText(GNAME[hs.gesture] || '', 8, h - 10); }
+  }
+}
+const GNAME = { pinch: 'Pinch', palm: 'Open palm', fist: 'Fist', open: 'Open hand', none: '' };
+
+/* =====================================================================
+   Rendering
+   ===================================================================== */
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.setClearColor(0x100C2A, 1);
+const PR = () => Math.min(window.devicePixelRatio || 1, LOW ? 1 : 2);
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x100C2A, 0.034);
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 220);
+camera.position.set(0, 0, 10);
+
+/* background: indigo, darkest down the corridor, a heat glow when a volley is coming */
+const bgMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false,
+  uniforms: { uBot: { value: col('#0B0820') }, uTop: { value: col('#221C5C') }, uWarn: { value: 0 }, uWarnDir: { value: new V3(0, 0, -1) }, uHot: { value: HEAT[1] } },
+  vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `uniform vec3 uBot, uTop, uHot; uniform float uWarn; uniform vec3 uWarnDir; varying vec3 vW;
+    float h12(vec2 p){ vec3 q = fract(vec3(p.xyx) * .1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+    void main(){
+      vec3 d = normalize(vW - cameraPosition);
+      vec3 c = mix(uBot, uTop, smoothstep(-.7, .9, d.y));
+      float core = pow(max(dot(d, vec3(0., 0., -1.)), 0.), 6.);
+      c *= 1. - .55 * core;
+      c += uHot * pow(max(dot(d, uWarnDir), 0.), 120.) * uWarn * 1.4;
+      c += (h12(gl_FragCoord.xy) - .5) * .0012;
+      gl_FragColor = vec4(c, 1.);
+    }`
+});
+scene.add(new THREE.Mesh(new THREE.SphereGeometry(120, 32, 16), bgMat));
+
+/* corridor: frames that slide toward you out of the dark */
+const NFR = 10, FR_SPAN = 46;
+const tunnel = new THREE.Group(); scene.add(tunnel);
+const frameMat = new THREE.LineBasicMaterial({ color: STEEL.clone().multiplyScalar(0.95), transparent: true, opacity: 0.6, fog: true });
+const railMat = new THREE.LineBasicMaterial({ color: STEEL.clone().multiplyScalar(0.7), transparent: true, opacity: 0.5, fog: true });
+let frameGeo = null; const frames = [];
+let rails = null;
+function rrectPts(w, h, r, n = 8) {
+  const pts = [];
+  const cs = [[w - r, h - r, 0], [-w + r, h - r, Math.PI / 2], [-w + r, -h + r, Math.PI], [w - r, -h + r, Math.PI * 1.5]];
+  for (const [cx, cy, a0] of cs) for (let i = 0; i <= n; i++) { const a = a0 + i / n * Math.PI / 2; pts.push(new V3(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 0)); }
+  return pts;
+}
+function buildTunnel() {
+  if (frameGeo) frameGeo.dispose();
+  frameGeo = new THREE.BufferGeometry().setFromPoints(rrectPts(L.halfW * 1.25, L.halfH * 1.25, 0.6));
+  if (!frames.length) for (let i = 0; i < NFR; i++) { const f = new THREE.LineLoop(frameGeo, frameMat); frames.push(f); tunnel.add(f); }
+  for (const f of frames) f.geometry = frameGeo;
+  if (rails) { tunnel.remove(rails); rails.geometry.dispose(); }
+  const pts = [], X = L.halfW * 1.25, Y = L.halfH * 1.25;
+  for (const [x, y] of [[X, Y], [-X, Y], [-X, -Y], [X, -Y]]) { pts.push(new V3(x, y, -2), new V3(x, y, -2 - FR_SPAN)); }
+  for (let i = 1; i < 6; i++) { const x = -X + 2 * X * i / 6; pts.push(new V3(x, -Y, -2), new V3(x, -Y, -2 - FR_SPAN)); }
+  rails = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), railMat);
+  tunnel.add(rails);
+}
+
+/* dust drifting toward the viewer */
+const NDUST = 420;
+const dustPos = new Float32Array(NDUST * 3), dust0 = new Float32Array(NDUST * 3);
+{ const r = mulberry32(7); for (let i = 0; i < NDUST; i++) { dust0[i * 3] = (r() * 2 - 1) * 9; dust0[i * 3 + 1] = (r() * 2 - 1) * 6; dust0[i * 3 + 2] = r() * 48; } }
+const dustGeo = new THREE.BufferGeometry(); dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+function dotTex() {
+  const S = 32, data = new Uint8Array(S * S * 4);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const dx = (x + .5) / S * 2 - 1, dy = (y + .5) / S * 2 - 1, a = clamp(1 - Math.hypot(dx, dy), 0, 1);
+    const o = (y * S + x) * 4; data[o] = data[o + 1] = data[o + 2] = 255; data[o + 3] = Math.round(255 * a * a);
+  }
+  const t = new THREE.DataTexture(data, S, S); t.needsUpdate = true; return t;
+}
+const DOT = dotTex();
+scene.add(new THREE.Points(dustGeo, new THREE.PointsMaterial({ color: MIST, size: 0.07, map: DOT, transparent: true, opacity: 0.6, depthWrite: false, fog: true })));
+
+/* console group: plate, containment field, orbs (two-hand pinch scales and rotates all of it) */
+const consoleG = new THREE.Group(); scene.add(consoleG);
+consoleG.matrixAutoUpdate = false;
+const plateMat = new THREE.PointsMaterial({ color: STEEL.clone().multiplyScalar(1.1), size: 0.05, map: DOT, transparent: true, opacity: 0.75, depthWrite: false, fog: true });
+const bracketMat = new THREE.LineBasicMaterial({ color: STEEL.clone().multiplyScalar(1.3), transparent: true, opacity: 0.8, fog: true });
+let plate = null, brackets = null;
+function buildPlate() {
+  if (plate) { consoleG.remove(plate); plate.geometry.dispose(); consoleG.remove(brackets); brackets.geometry.dispose(); }
+  const x0 = L.portrait ? -L.halfW * 0.92 : L.play.cx - L.play.hw - 0.5, x1 = L.portrait ? L.halfW * 0.92 : L.field.pos.x + L.field.R + 0.6;
+  const y0 = L.portrait ? L.play.cy - L.play.hh - 0.5 : L.play.cy - L.play.hh - 0.4, y1 = L.portrait ? L.field.pos.y + L.field.R + 0.4 : L.play.cy + L.play.hh + 0.4;
+  const z = -2.7, sp = 0.42, pts = [];
+  for (let x = x0; x <= x1 + 1e-6; x += sp) for (let y = y0; y <= y1 + 1e-6; y += sp) pts.push(new V3(x, y, z));
+  plate = new THREE.Points(new THREE.BufferGeometry().setFromPoints(pts), plateMat);
+  const b = 0.55, br = [];
+  for (const [cx, cy, sx, sy] of [[x0, y0, 1, 1], [x1, y0, -1, 1], [x1, y1, -1, -1], [x0, y1, 1, -1]]) {
+    br.push(new V3(cx, cy, z), new V3(cx + sx * b, cy, z), new V3(cx, cy, z), new V3(cx, cy + sy * b, z));
+  }
+  brackets = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(br), bracketMat);
+  consoleG.add(plate, brackets);
+}
+
+/* containment field: an open cylinder with a hex lattice, frost and a flash ring on each capture */
+const fieldMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+  uniforms: { ...paletteUniforms(), uTime: { value: 0 }, uFlashT: { value: -99 }, uFlashY: { value: 0 }, uR: { value: 1 }, uH: { value: 1 }, uFull: { value: 0 } },
+  vertexShader: `varying vec3 vL; varying vec3 vVP; varying vec3 vVN;
+    void main(){ vL = position; vec4 mv = modelViewMatrix * vec4(position,1.); vVP = mv.xyz; vVN = normalMatrix * normalize(vec3(position.x, 0., position.z)); gl_Position = projectionMatrix * mv; }`,
+  fragmentShader: GLSL_COMMON + `uniform float uTime, uFlashT, uFlashY, uR, uH, uFull; varying vec3 vL; varying vec3 vVP; varying vec3 vVN;
+    void main(){
+      float th = atan(vL.z, vL.x);
+      vec2 uv = vec2(th * uR * 3.4, vL.y * uH * 3.4);
+      vec4 hc = hexCell(uv);
+      float e = hexEdge(hc.xy);
+      float line = smoothstep(.40, .47, e);
+      vec3 V = normalize(-vVP), N = normalize(vVN);
+      float ndv = abs(dot(N, V));
+      float fres = pow(1. - ndv, 2.2);
+      float band = .5 + .5 * sin(vL.y * 7. - uTime * 1.4);
+      float cellLit = step(.93, h31(vec3(hc.zw * 3.1, floor(uTime * .7))));
+      vec3 c = coldbow(.42) * .07 + coldbow(.78) * fres * .5;
+      c += coldbow(.8) * line * (.09 + .45 * fres) * (.7 + .5 * band);
+      c += coldbow(.9) * cellLit * (1. - smoothstep(.2, .45, e)) * .06;
+      float ends = pow(abs(vL.y), 14.);
+      c += coldbow(.9) * ends * .7;
+      float age = uTime - uFlashT;
+      if (age > 0. && age < 1.4){
+        float f = 1. - age / 1.4;
+        float ring = exp(-pow((abs(vL.y - uFlashY) - age * 1.5) / .07, 2.));
+        c += coldbow(1.) * ring * f * 1.1 + coldbow(.85) * f * f * .16 * (.3 + line);
+      }
+      gl_FragColor = vec4(c, 1.);
+    }`
+});
+const fieldMesh = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 2, 64, 1, true), fieldMat);
+fieldMesh.renderOrder = 4;
+consoleG.add(fieldMesh);
+const ringMat = new THREE.MeshBasicMaterial({ color: ICE.clone().multiplyScalar(1.7), fog: false });
+const fieldRings = [new THREE.Mesh(new THREE.TorusGeometry(1, 0.022, 8, 96), ringMat), new THREE.Mesh(new THREE.TorusGeometry(1, 0.022, 8, 96), ringMat)];
+consoleG.add(fieldRings[0], fieldRings[1]);
+const NSNOW = 140, snowPos = new Float32Array(NSNOW * 3), snow0 = new Float32Array(NSNOW * 3);
+{ const r = mulberry32(99); for (let i = 0; i < NSNOW; i++) { snow0[i * 3] = Math.sqrt(r()) * 0.9; snow0[i * 3 + 1] = r() * 6.283; snow0[i * 3 + 2] = r(); } }
+const snowGeo = new THREE.BufferGeometry(); snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPos, 3));
+const snow = new THREE.Points(snowGeo, new THREE.PointsMaterial({ color: ICE.clone().multiplyScalar(1.2), size: 0.045, map: DOT, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+consoleG.add(snow);
+const fieldQ = new THREE.Quaternion();
+function placeField() {
+  const f = L.field;
+  fieldQ.setFromUnitVectors(new V3(0, 1, 0), f.axis);
+  fieldMesh.position.copy(f.pos); fieldMesh.quaternion.copy(fieldQ); fieldMesh.scale.set(f.R, f.H, f.R);
+  fieldMat.uniforms.uR.value = f.R; fieldMat.uniforms.uH.value = f.H;
+  for (let k = 0; k < 2; k++) {
+    const r = fieldRings[k];
+    r.position.copy(f.pos).addScaledVector(f.axis, (k ? 1 : -1) * f.H);
+    r.quaternion.copy(fieldQ).multiply(new THREE.Quaternion().setFromAxisAngle(new V3(1, 0, 0), Math.PI / 2));
+    r.scale.setScalar(f.R);
+  }
+}
+
+/* threat orbs: ironbow plasma that morphs into a faceted ice crystal when contained */
+const orbGeo = new THREE.IcosahedronGeometry(1, 4);
+const orbBase = new THREE.ShaderMaterial({
+  uniforms: { ...paletteUniforms(), uTime: { value: 0 }, uFreeze: { value: 0 }, uSeed: { value: 0 }, uAlpha: { value: 1 }, uHover: { value: 0 }, uHeld: { value: 0 }, uVel: { value: new V3() } },
+  vertexShader: GLSL_COMMON + `uniform float uTime, uFreeze, uSeed; uniform vec3 uVel;
+    varying vec3 vObj; varying vec3 vVP; varying vec3 vVN; varying float vFz;
+    float crystalR(vec3 p){
+      float r = 1.7;
+      for (int k = 0; k < 6; k++){
+        float a = float(k) * 1.0471976 + .5236; vec2 cs = vec2(cos(a), sin(a));
+        float d1 = dot(p, normalize(vec3(cs.x, .62, cs.y))), d2 = dot(p, normalize(vec3(cs.x, -.62, cs.y)));
+        if (d1 > .001) r = min(r, .8 / d1);
+        if (d2 > .001) r = min(r, .8 / d2);
+      }
+      return r;
+    }
+    void main(){
+      vec3 p = normalize(position);
+      float wob = 1. + .055 * sin(uTime * 3.1 + uSeed * 40.) * (vnoise(p * 3. + uTime * .6 + uSeed * 9.) - .3);
+      float fz = clamp(uFreeze * 1.9 - vnoise(p * 2.3 + uSeed * 5.) * .9, 0., 1.);
+      vec3 pos = p * mix(wob, crystalR(p) * .95, fz);
+      float sp = length(uVel);
+      if (sp > .05){ vec3 vd = uVel / sp; pos += vd * max(dot(pos, vd), 0.) * min(sp * .045, .9); }
+      vObj = p; vFz = fz;
+      vec4 mv = modelViewMatrix * vec4(pos, 1.);
+      vVP = mv.xyz; vVN = normalMatrix * p;
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: GLSL_COMMON + `uniform float uTime, uSeed, uAlpha, uHover, uHeld;
+    varying vec3 vObj; varying vec3 vVP; varying vec3 vVN; varying float vFz;
+    void main(){
+      vec3 V = normalize(-vVP);
+      float ndv = clamp(dot(normalize(vVN), V), 0., 1.);
+      float pulse = .5 + .5 * sin(uTime * (2.3 + uSeed) + uSeed * 17.);
+      float sw = fbm(vObj * 2.4 + vec3(uSeed * 7., -uTime * .55, uTime * .35));
+      float heat = clamp(.18 + .48 * ndv + (sw - .5) * .85 + pulse * .1, 0., .86);
+      vec3 hot = ironbow(heat) * (.5 + .55 * heat * heat + pulse * .15);
+      hot += ironbow(.42) * pow(1. - ndv, 2.4) * (.45 + .45 * pulse);
+      vec3 Nf = normalize(cross(dFdx(vVP), dFdy(vVP)));
+      float fn = abs(dot(Nf, V));
+      float fres = pow(1. - fn, 1.5);
+      float glint = pow(max(dot(reflect(-V, Nf), normalize(vec3(.35, .85, .4))), 0.), 22.);
+      vec3 cold = coldbow(.18 + .5 * fn) * .65 + coldbow(.8) * fres * 1.05 + coldbow(1.) * glint * 1.7;
+      vec3 c = mix(hot, cold, vFz);
+      c += coldbow(1.) * smoothstep(.0, .5, vFz) * smoothstep(1., .5, vFz) * 1.6;
+      c += coldbow(.85) * uHover * pow(1. - ndv, 1.4) * 1.4;
+      c *= 1. - .38 * uHeld * (1. - vFz);     // held near the camera: keep it reading as heat, not as a white blob
+      gl_FragColor = vec4(c * uAlpha, 1.);
+    }`
+});
+const orbMeshes = [];
+for (let i = 0; i < MAX_ORB; i++) {
+  const m = new THREE.Mesh(orbGeo, orbBase.clone());
+  m.visible = false; m.frustumCulled = false;
+  consoleG.add(m); orbMeshes.push(m);
+}
+
+/* the core: a cold crystal the threats are after, with its integrity as three arcs */
+const coreMat = new THREE.ShaderMaterial({
+  uniforms: { ...paletteUniforms(), uTime: { value: 0 }, uHit: { value: 0 }, uDamage: { value: 0 } },
+  vertexShader: `varying vec3 vObj; varying vec3 vVP;
+    void main(){ vObj = position; vec4 mv = modelViewMatrix * vec4(position, 1.); vVP = mv.xyz; gl_Position = projectionMatrix * mv; }`,
+  fragmentShader: GLSL_COMMON + `uniform float uTime, uHit, uDamage; varying vec3 vObj; varying vec3 vVP;
+    void main(){
+      vec3 V = normalize(-vVP);
+      vec3 N = normalize(cross(dFdx(vVP), dFdy(vVP)));
+      float fn = abs(dot(N, V)), fres = pow(1. - fn, 1.5);
+      float pulse = .5 + .5 * sin(uTime * 1.8);
+      vec3 c = coldbow(.22 + .4 * fn) * .75 + coldbow(.85) * fres * 1.25 + coldbow(1.) * pow(fn, 10.) * (.35 + .4 * pulse);
+      float cracked = step(h31(floor(normalize(vObj) * 2.6) + 3.), uDamage * .62);
+      c = mix(c, ironbow(.22 + .18 * pulse) * .9 + ironbow(.6) * fres * .6, cracked);
+      c = mix(c, ironbow(.88) * 2.2, clamp(uHit, 0., 1.));
+      gl_FragColor = vec4(c, 1.);
+    }`
+});
+const coreG = new THREE.Group(); consoleG.add(coreG);
+const coreMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), coreMat);
+coreG.add(coreMesh);
+const coreHalo = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { ...paletteUniforms(), uA: { value: 1 }, uHot: { value: 0 } },
+  vertexShader: `varying vec2 vU; void main(){ vU = uv * 2. - 1.; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`,
+  fragmentShader: GLSL_COMMON + `uniform float uA, uHot; varying vec2 vU; void main(){ float r = length(vU); float g = exp(-r * r * 5.) * .55; gl_FragColor = vec4(mix(coldbow(.7), ironbow(.7), uHot) * g * uA, 1.); }`
+}));
+coreG.add(coreHalo);
+const arcMats = [0, 1, 2].map(() => new THREE.MeshBasicMaterial({ color: ICE.clone(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+const coreArcs = [0, 1, 2].map(k => { const m = new THREE.Mesh(new THREE.RingGeometry(1.42, 1.56, 40, 1, Math.PI / 2 + k * 2.0944 + 0.12, 2.0944 - 0.24), arcMats[k]); coreG.add(m); return m; });
+const coreOrbit = new THREE.Mesh(new THREE.TorusGeometry(1.95, 0.012, 6, 96), new THREE.MeshBasicMaterial({ color: ICE.clone().multiplyScalar(0.9), transparent: true, opacity: 0.6, fog: false }));
+coreG.add(coreOrbit);
+const tutRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 64), new THREE.MeshBasicMaterial({ color: ICE.clone().multiplyScalar(1.6), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+scene.add(tutRing);
+const snapRings = [0, 1].map(() => { const m = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 48), new THREE.MeshBasicMaterial({ color: FROST.clone().multiplyScalar(0.9), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); scene.add(m); return m; });
+
+/* aim guide from a held orb to the field */
+const aimGeo = new THREE.BufferGeometry().setFromPoints([new V3(), new V3(1, 0, 0)]);
+const aimLine = new THREE.Line(aimGeo, new THREE.LineDashedMaterial({ color: ICE.clone().multiplyScalar(1.1), dashSize: 0.16, gapSize: 0.14, transparent: true, opacity: 0.55, fog: false }));
+aimLine.visible = false; consoleG.add(aimLine);
+
+/* hands: instanced joints, bones, palm fill, fingertip trails */
+const capsule = new THREE.CapsuleGeometry(0.5, 1, 3, 8);
+function orient(arr, o, ax, ay, az, bx, by, bz, r) {
+  let dx = bx - ax, dy = by - ay, dz = bz - az;
+  const len = Math.hypot(dx, dy, dz);
+  if (len < 1e-5 || r <= 0) { for (let k = 0; k < 16; k++) arr[o + k] = 0; return; }
+  dx /= len; dy /= len; dz /= len;
+  let hx = 0, hy = 1, hz = 0; if (dy > 0.9 || dy < -0.9) { hx = 1; hy = 0; }
+  let xx = hy * dz - hz * dy, xy = hz * dx - hx * dz, xz = hx * dy - hy * dx;
+  const il = 1 / Math.hypot(xx, xy, xz); xx *= il; xy *= il; xz *= il;
+  const zx = xy * dz - xz * dy, zy = xz * dx - xx * dz, zz = xx * dy - xy * dx;
+  const sx = 2 * r, sy = len * 0.5 + r * 0.5;
+  arr[o] = xx * sx; arr[o + 1] = xy * sx; arr[o + 2] = xz * sx; arr[o + 3] = 0;
+  arr[o + 4] = dx * sy; arr[o + 5] = dy * sy; arr[o + 6] = dz * sy; arr[o + 7] = 0;
+  arr[o + 8] = zx * sx; arr[o + 9] = zy * sx; arr[o + 10] = zz * sx; arr[o + 11] = 0;
+  arr[o + 12] = (ax + bx) * 0.5; arr[o + 13] = (ay + by) * 0.5; arr[o + 14] = (az + bz) * 0.5; arr[o + 15] = 1;
+}
+function sphereAt(arr, o, x, y, z, r) {
+  for (let k = 0; k < 16; k++) arr[o + k] = 0;
+  arr[o] = arr[o + 5] = arr[o + 10] = r; arr[o + 12] = x; arr[o + 13] = y; arr[o + 14] = z; arr[o + 15] = 1;
+}
+function mkIM(geo, n, mat) {
+  const m = new THREE.InstancedMesh(geo, mat, n);
+  m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  const c = new THREE.Color(0, 0, 0); for (let i = 0; i < n; i++) m.setColorAt(i, c);
+  m.instanceColor.setUsage(THREE.DynamicDrawUsage);
+  scene.add(m); return m;
+}
+const jointsIM = mkIM(new THREE.IcosahedronGeometry(1, 1), 42, new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, depthWrite: false }));
+const bonesIM = mkIM(capsule, 42, new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, depthWrite: false }));
+jointsIM.renderOrder = 10; bonesIM.renderOrder = 9;
+const glowIM = mkIM(capsule, 42, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.62, depthWrite: false, fog: false }));
+glowIM.renderOrder = 8;
+const trailIM = mkIM(capsule, 2 * 5 * (TL - 1), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+const palmFans = [0, 1].map(() => {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(7 * 3), 3));
+  g.setIndex([0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5, 0, 5, 6, 0, 6, 1]);
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: COLD[1].clone(), transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+  m.frustumCulled = false; scene.add(m); return m;
+});
+const FAN_IDX = [0, 1, 5, 9, 13, 17];
+
+/* pinch ring, hover ring and tether per hand */
+const ringGeo = new THREE.RingGeometry(0.86, 1, 48);
+const pinchRings = [0, 1].map(() => { const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: FROST.clone(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); scene.add(m); return m; });
+const hoverRings = [0, 1].map(() => { const m = new THREE.Mesh(new THREE.RingGeometry(0.95, 1, 64), new THREE.MeshBasicMaterial({ color: ICE.clone().multiplyScalar(1.1), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); scene.add(m); return m; });
+const lockRings = [0, 1].map(() => {
+  const m = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 64, 1, 0, Math.PI * 2), new THREE.MeshBasicMaterial({ color: ICE.clone().multiplyScalar(1.1), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+  scene.add(m); return m;
+});
+const twoLink = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new V3(), new V3()]), new THREE.LineBasicMaterial({ color: ICE.clone().multiplyScalar(1.5), transparent: true, opacity: 0.9, fog: false }));
+scene.add(twoLink);
+
+/* shields: hex disc with heat-ring impacts */
+const shieldMats = [0, 1].map(() => new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+  uniforms: { ...paletteUniforms(), uTime: { value: 0 }, uReveal: { value: 0 }, uImp: { value: Array.from({ length: 12 }, () => new THREE.Vector4(0, 0, -99, 0)) } },
+  vertexShader: `varying vec2 vL; void main(){ vL = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`,
+  fragmentShader: GLSL_COMMON + `uniform float uTime, uReveal; uniform vec4 uImp[12]; varying vec2 vL;
+    void main(){
+      float r = length(vL);
+      if (r > 1.) discard;
+      float rev = uReveal;
+      float inside = 1. - smoothstep(rev - .06, rev, r);
+      vec2 g = vL * 6.5;
+      vec4 hc = hexCell(g);
+      float e = hexEdge(hc.xy);
+      float line = smoothstep(.39, .47, e);
+      vec2 cc = hc.zw / 6.5;
+      vec3 c = coldbow(.55) * .03 + coldbow(.75) * line * (.05 + .22 * r * r);
+      c += coldbow(.85) * smoothstep(.9, .995, r) * .38 + coldbow(1.) * smoothstep(.978, .995, r) * .6;
+      c += coldbow(1.) * exp(-pow((r - rev) / .03, 2.)) * 1.2 * (1. - smoothstep(.9, 1.04, rev));
+      float heat = 0., flash = 0.;
+      for (int k = 0; k < 12; k++){
+        vec4 im = uImp[k];
+        float age = uTime - im.z;
+        if (age < 0. || age > 1.5) continue;
+        float f = 1. - age / 1.5; f *= f;
+        float dc = length(cc - im.xy), dp = length(vL - im.xy);
+        float x = dc - .42 * (1. - exp(-age * 3.5));
+        heat += im.w * f * exp(-x * x / .0035) * .8;
+        flash += im.w * exp(-dp * dp / .004) * exp(-age * 9.);
+      }
+      float h = 1. - exp(-heat * 1.1);
+      c += ironbow(.2 + h * .62) * (.15 + .9 * h) * smoothstep(0., .06, h) * (.3 + .9 * line);
+      c += ironbow(.72 + .25 * min(flash, 1.)) * min(flash, 1.2) * 1.0;
+      gl_FragColor = vec4(c * inside, 1.);
+    }`
+}));
+const shields = shieldMats.map(m => { const s = new THREE.Mesh(new THREE.CircleGeometry(1, 72), m); s.renderOrder = 6; s.frustumCulled = false; scene.add(s); return s; });
+
+/* packets and sparks */
+const PSEG = 7;
+const packetIM = mkIM(capsule, MAX_P * PSEG, new THREE.MeshBasicMaterial({ color: 0xffffff, fog: true }));
+const sparkIM = mkIM(capsule, MAX_S, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+const warnGlow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { ...paletteUniforms(), uA: { value: 0 } },
+  vertexShader: `varying vec2 vU; void main(){ vU = uv * 2. - 1.; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`,
+  fragmentShader: GLSL_COMMON + `uniform float uA; varying vec2 vU; void main(){ float r = length(vU); float g = exp(-r * r * 6.) + exp(-r * r * 40.) * .6; gl_FragColor = vec4(ironbow(.22 + .28 * exp(-r * r * 30.)) * g * uA, 1.); }`
+}));
+warnGlow.frustumCulled = false; scene.add(warnGlow);
+
+/* post */
+const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: LOW ? 0 : 4 });
+const composer = new EffectComposer(renderer, rt);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.7, 0.4, 0.66);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+/* debug: ?hide=core,halo,orbs,... switches layers off (used to check what lights what in captures) */
+const HIDE = params.get('hide') ? params.get('hide').split(',') : null;
+const DBG_LAYERS = { core: coreMesh, halo: coreHalo, arcs: coreArcs, orbit: coreOrbit, orbs: orbMeshes, joints: jointsIM, bones: bonesIM, glow: glowIM, trails: trailIM,
+  palm: palmFans, pinch: pinchRings, hover: hoverRings, lock: lockRings, snap: snapRings, tut: tutRing, shield: shields, packets: packetIM, sparks: sparkIM, warn: warnGlow, field: fieldMesh };
+/* ---------- per-frame scene update from world state ---------- */
+const _c1 = new THREE.Color(), _m4 = new THREE.Matrix4(), _c2 = new V3();
+function render(W, now) {
+  const t = W.t, wt = W.wt;
+  // corridor + dust are a pure function of t
+  for (let i = 0; i < NFR; i++) {
+    const z = -2 - (((i * FR_SPAN / NFR) - t * 0.9) % FR_SPAN + FR_SPAN) % FR_SPAN;
+    frames[i].position.z = z;
+  }
+  for (let i = 0; i < NDUST; i++) {
+    dustPos[i * 3] = dust0[i * 3]; dustPos[i * 3 + 1] = dust0[i * 3 + 1];
+    dustPos[i * 3 + 2] = -42 + ((dust0[i * 3 + 2] + t * 1.6) % 48);
+  }
+  dustGeo.attributes.position.needsUpdate = true;
+  // warn glow
+  const warnAge = wt - W.warnT, warnA = warnAge >= 0 && warnAge < 2.4 ? smooth(0, 0.3, warnAge) * (1 - smooth(1.5, 2.4, warnAge)) * (0.75 + 0.25 * Math.sin(warnAge * 14)) : 0;
+  warnGlow.material.uniforms.uA.value = warnA * 0.55;
+  warnGlow.position.set(W.warnPos.x * 0.6, W.warnPos.y * 0.6, -30); warnGlow.scale.setScalar(7);
+  bgMat.uniforms.uWarn.value = warnA;
+  bgMat.uniforms.uWarnDir.value.set(W.warnPos.x * 0.6, W.warnPos.y * 0.6, -30 - camera.position.z).normalize();
+
+  // console transform
+  consoleG.matrix.copy(W.M); consoleG.matrixWorldNeedsUpdate = true;
+  fieldMat.uniforms.uTime.value = wt;
+  fieldMat.uniforms.uFlashT.value = W.containT - (W.t - W.wt);  // flash time in wt
+  fieldMat.uniforms.uFlashY.value = W.containAlong;
+  // snow inside the field
+  {
+    const f = L.field;
+    for (let i = 0; i < NSNOW; i++) {
+      const r = snow0[i * 3] * f.R, a = snow0[i * 3 + 1] + wt * 0.15, al = ((snow0[i * 3 + 2] + wt * 0.04) % 1) * 2 - 1;
+      _a.set(Math.cos(a) * r, al * f.H, Math.sin(a) * r).applyQuaternion(fieldQ).add(f.pos);
+      snowPos[i * 3] = _a.x; snowPos[i * 3 + 1] = _a.y; snowPos[i * 3 + 2] = _a.z;
+    }
+    snowGeo.attributes.position.needsUpdate = true;
+  }
+  // core
+  {
+    const g = W.game, hitAge = W.t - W.coreHitT, flashAge = W.t - W.coreFlashT;
+    coreG.position.copy(L.core.pos);
+    coreMesh.scale.setScalar(L.core.R * (1 + 0.04 * Math.sin(wt * 1.8)) * (hitAge >= 0 && hitAge < 0.4 ? 1 + 0.18 * Math.sin(hitAge * 40) * (1 - hitAge / 0.4) : 1));
+    coreMesh.rotation.set(wt * 0.21, wt * 0.33, 0);
+    coreMat.uniforms.uTime.value = wt;
+    coreMat.uniforms.uHit.value = (hitAge >= 0 ? Math.exp(-hitAge * 4.5) : 0) + (flashAge >= 0 ? 0.45 * Math.exp(-flashAge * 9) : 0);
+    coreMat.uniforms.uDamage.value = 3 - g.integrity;
+    coreHalo.quaternion.copy(camera.quaternion); coreHalo.scale.setScalar(L.core.R * 6);
+    coreHalo.material.uniforms.uHot.value = coreMat.uniforms.uHit.value;
+    for (let k = 0; k < 3; k++) {
+      const m = coreArcs[k];
+      m.quaternion.copy(camera.quaternion); m.scale.setScalar(L.core.R);
+      const alive = k < g.integrity;
+      arcMats[k].color.copy(alive ? ICE : HEAT[1]).multiplyScalar(alive ? 1.5 : 0.7);
+    }
+    coreOrbit.scale.setScalar(L.core.R); coreOrbit.rotation.set(1.1 + 0.2 * Math.sin(wt * 0.3), wt * 0.4, 0.3);
+    // tutorial: ring the orb to grab, then the core to shield
+    let tr = null, trR = 0;
+    if (g.phase === 'tutorial' && (g.tut === 1 || g.tut === 2) && g.tutOrb >= 0 && W.orbs[g.tutOrb].alive && W.orbs[g.tutOrb].state !== 'held' && W.orbs[g.tutOrb].state !== 'contained') { toWorld(W, W.orbs[g.tutOrb].pos, _c2); tr = _c2; trR = L.orbR * 1.9; }
+    else if (g.phase === 'tutorial' && g.tut === 3) { tr = W.coreW; trR = L.core.R * 2.6; }
+    if (tr) {
+      const pulse = (W.t * 1.2) % 1;
+      tutRing.visible = true; tutRing.position.copy(tr); tutRing.quaternion.copy(camera.quaternion);
+      tutRing.scale.setScalar(trR * (1 + pulse * 0.6)); tutRing.material.opacity = 0.9 * (1 - pulse);
+    } else tutRing.visible = false;
+  }
+  // orbs
+  let heldOrb = null;
+  for (let i = 0; i < MAX_ORB; i++) {
+    const o = W.orbs[i], m = orbMeshes[i];
+    if (!o.alive) { m.visible = false; continue; }
+    m.visible = true;
+    const u = m.material.uniforms;
+    m.position.copy(o.pos);
+    let s = L.orbR * (1 + 0.06 * Math.sin(wt * 2.3 + o.seed * 17));
+    if (o.state === 'contained' || o.state === 'archived') s = L.orbR * lerp(1, 0.62, smooth(0, 1, o.freeze));
+    if (o.state === 'archived') s *= clamp(o.alpha, 0, 1);
+    if (o.state === 'held') s *= 0.72;
+    m.scale.setScalar(Math.max(s, 1e-4));
+    m.rotation.set(o.seed * 6 + wt * 0.3 * o.freeze, o.seed * 3 + wt * 0.5 * o.freeze, 0);
+    u.uTime.value = wt; u.uSeed.value = o.seed; u.uFreeze.value = o.freeze;
+    toWorld(W, o.pos, _a);
+    u.uAlpha.value = smooth(-32, -16, _a.z) * (o.state === 'leaving' ? smooth(-36, -10, _a.z) : 1);
+    let hv = 0; for (const h of W.hands) if (h.hover === i) hv = Math.max(hv, 0.35 + 0.65 * h.hoverAmt);
+    u.uHover.value = hv; u.uHeld.value = o.held;
+    // motion stretch uses the velocity in the orb's own (unrotated) frame
+    if (o.state === 'thrown') { _b.copy(o.vel).divideScalar(L.orbR); _q.setFromEuler(m.rotation).invert(); u.uVel.value.copy(_b.applyQuaternion(_q)).multiplyScalar(0.12); }
+    else u.uVel.value.set(0, 0, 0);
+    if (o.state === 'held') heldOrb = o;
+  }
+  // aim guide
+  if (heldOrb) {
+    const p = aimGeo.attributes.position.array;
+    p[0] = heldOrb.pos.x; p[1] = heldOrb.pos.y; p[2] = heldOrb.pos.z;
+    p[3] = L.field.pos.x; p[4] = L.field.pos.y; p[5] = L.field.pos.z;
+    aimGeo.attributes.position.needsUpdate = true; aimLine.computeLineDistances(); aimLine.visible = true;
+  } else aimLine.visible = false;
+
+  // hands
+  const ja = jointsIM.instanceMatrix.array, ba = bonesIM.instanceMatrix.array, ga = glowIM.instanceMatrix.array, ta = trailIM.instanceMatrix.array;
+  const jc = jointsIM.instanceColor.array, bc = bonesIM.instanceColor.array, gc = glowIM.instanceColor.array, tc = trailIM.instanceColor.array;
+  for (let hi = 0; hi < 2; hi++) {
+    const h = W.hands[hi], lm = h.lm, v = h.present ? h.vis : 0, S = L.handS;
+    const lit = 1 + h.shield * 0.15;
+    for (let j = 0; j < 21; j++) {
+      const o = (hi * 21 + j) * 16, tip = j % 4 === 0 && j > 0;
+      if (v < 0.01) { sphereAt(ja, o, 0, 0, 0, 0); continue; }
+      const r = S * (tip ? 0.04 : j === 0 ? 0.045 : 0.03) * (0.4 + 0.6 * v);
+      sphereAt(ja, o, lm[j * 3], lm[j * 3 + 1], lm[j * 3 + 2], r);
+      const pinchy = (j === 4 || j === 8) ? h.pinchStr : 0;
+      if (tip) ramp(COLD, 0.92 + 0.08 * pinchy, _c1, (1.7 + 1.3 * pinchy) * v * lit); else ramp(COLD, 0.9, _c1, 1.35 * v * lit);
+      if (h.fist) ramp(COLD, 0.75, _c1, 1.4 * v);
+      jc[(hi * 21 + j) * 3] = _c1.r; jc[(hi * 21 + j) * 3 + 1] = _c1.g; jc[(hi * 21 + j) * 3 + 2] = _c1.b;
+    }
+    for (let b = 0; b < 21; b++) {
+      const o = (hi * 21 + b) * 16, A = BONES[b * 2], B = BONES[b * 2 + 1];
+      if (v < 0.01) { orient(ba, o, 0, 0, 0, 0, 0, 0, 0); orient(ga, o, 0, 0, 0, 0, 0, 0, 0); continue; }
+      orient(ba, o, lm[A * 3], lm[A * 3 + 1], lm[A * 3 + 2], lm[B * 3], lm[B * 3 + 1], lm[B * 3 + 2], S * 0.014 * (0.5 + 0.5 * v));
+      orient(ga, o, lm[A * 3], lm[A * 3 + 1], lm[A * 3 + 2], lm[B * 3], lm[B * 3 + 1], lm[B * 3 + 2], S * 0.045 * v);
+      const palmBone = (A === 0 || (A === 5 && B === 9) || (A === 9 && B === 13) || (A === 13 && B === 17));
+      ramp(COLD, palmBone ? 0.72 : 0.84, _c1, (palmBone ? 1.0 : 1.3) * v * lit);
+      bc[(hi * 21 + b) * 3] = _c1.r; bc[(hi * 21 + b) * 3 + 1] = _c1.g; bc[(hi * 21 + b) * 3 + 2] = _c1.b;
+      _c1.setRGB(0.006, 0.004, 0.022);
+      gc[(hi * 21 + b) * 3] = _c1.r; gc[(hi * 21 + b) * 3 + 1] = _c1.g; gc[(hi * 21 + b) * 3 + 2] = _c1.b;
+    }
+    // palm fill
+    {
+      const pa = palmFans[hi].geometry.attributes.position.array;
+      pa[0] = h.palmC.x; pa[1] = h.palmC.y; pa[2] = h.palmC.z;
+      for (let k = 0; k < 6; k++) { const j = FAN_IDX[k]; pa[3 + k * 3] = lm[j * 3]; pa[4 + k * 3] = lm[j * 3 + 1]; pa[5 + k * 3] = lm[j * 3 + 2]; }
+      palmFans[hi].geometry.attributes.position.needsUpdate = true;
+      palmFans[hi].visible = v > 0.01;
+      palmFans[hi].material.opacity = (0.2 + 0.12 * h.shield) * v;
+      palmFans[hi].material.color.copy(COLD[1]).lerp(COLD[2], h.shield * 0.5);
+    }
+    // trails
+    for (let f = 0; f < 5; f++) {
+      for (let k = 0; k < TL - 1; k++) {
+        const ii = (hi * 5 + f) * (TL - 1) + k, o = ii * 16;
+        if (k + 1 >= h.tCount || v < 0.01) { orient(ta, o, 0, 0, 0, 0, 0, 0, 0); continue; }
+        const i0 = ((h.tHead - k) % TL + TL) % TL, i1 = ((h.tHead - k - 1) % TL + TL) % TL;
+        const p0 = (f * TL + i0) * 3, p1 = (f * TL + i1) * 3, tr = h.trail;
+        const age = k / (TL - 1), seg = Math.hypot(tr[p0] - tr[p1], tr[p0 + 1] - tr[p1 + 1], tr[p0 + 2] - tr[p1 + 2]);
+        const fade = (1 - age) * (1 - age) * smooth(0.004, 0.06, seg / S);   // a still hand leaves no trail (no additive pile-up)
+        orient(ta, o, tr[p0], tr[p0 + 1], tr[p0 + 2], tr[p1], tr[p1 + 1], tr[p1 + 2], S * (0.034 * (1 - age) + 0.006));
+        const pinchy = (f === 0 || f === 1) ? h.pinchStr : 0;
+        ramp(COLD, 0.95 - age * 0.6, _c1, (1.3 + pinchy) * fade * v);
+        tc[ii * 3] = _c1.r; tc[ii * 3 + 1] = _c1.g; tc[ii * 3 + 2] = _c1.b;
+      }
+    }
+    // pinch ring: shrinks as thumb and index close, solid when the pinch is on
+    const pr = pinchRings[hi];
+    if (v > 0.01 && !h.palm && !h.fist && h.present && (h.pinch || h.pinchStr > 0.55)) {
+      pr.visible = true;
+      pr.position.copy(h.pinchP); pr.quaternion.copy(camera.quaternion);
+      const gap = Math.hypot(lm[12] - lm[24], lm[13] - lm[25], lm[14] - lm[26]);
+      pr.scale.setScalar(h.pinch ? S * 0.11 : Math.max(gap * 0.5, S * 0.08));
+      pr.material.color.copy(h.pinch ? FROST : ICE).multiplyScalar(h.pinch ? 1.3 : 0.4 + 0.5 * h.pinchStr);
+      pr.material.opacity = v * (h.pinch ? 0.9 : smooth(0.55, 0.95, h.pinchStr) * 0.6);
+    } else pr.visible = false;
+    // snap: a quick ring burst where a grab lands
+    {
+      const age = W.t - h.grabT, sr = snapRings[hi];
+      if (age >= 0 && age < 0.35 && v > 0.01) {
+        sr.visible = true; sr.position.copy(h.pinchP); sr.quaternion.copy(camera.quaternion);
+        sr.scale.setScalar(S * (0.14 + age * 1.8)); sr.material.opacity = 0.8 * (1 - age / 0.35);
+      } else sr.visible = false;
+    }
+    // hover ring around the orb this hand would grab
+    const hr = hoverRings[hi];
+    if (h.hover >= 0 && v > 0.01) {
+      toWorld(W, W.orbs[h.hover].pos, _a);
+      hr.visible = true; hr.position.copy(_a); hr.quaternion.copy(camera.quaternion);
+      hr.scale.setScalar(L.orbR * W.con.s * (1.55 - 0.3 * h.hoverAmt));
+      hr.material.opacity = 0.3 + 0.5 * h.hoverAmt;
+    } else hr.visible = false;
+    // fist lock progress ring
+    const lr = lockRings[hi];
+    if (h.present && h.fist && v > 0.01) {
+      const p = h.fistLatched ? 1 : clamp(h.fistHold / TH.fistHold, 0, 1);
+      lr.visible = true; lr.position.copy(h.palmC); lr.quaternion.copy(camera.quaternion);
+      lr.scale.setScalar(S * 1.05);
+      lr.geometry.dispose(); lr.geometry = new THREE.RingGeometry(0.88, 1, 64, 1, Math.PI / 2, -Math.PI * 2 * Math.max(p, 0.001));
+      lr.material.opacity = 0.75;
+    } else lr.visible = false;
+    // shield
+    const sh = shields[hi];
+    if (h.shield > 0.001 && h.present) {
+      sh.visible = true;
+      sh.position.copy(h.sc); sh.quaternion.copy(h.sq);
+      const e = h.shield, over = 1 + 0.08 * Math.sin(Math.PI * clamp(e, 0, 1));
+      sh.scale.setScalar(h.sR * over);
+      shieldMats[hi].uniforms.uReveal.value = e * 1.04;
+      shieldMats[hi].uniforms.uTime.value = wt;
+      for (let k = 0; k < 12; k++) shieldMats[hi].uniforms.uImp.value[k].copy(h.imp[k]);
+    } else sh.visible = false;
+  }
+  jointsIM.instanceMatrix.needsUpdate = bonesIM.instanceMatrix.needsUpdate = glowIM.instanceMatrix.needsUpdate = trailIM.instanceMatrix.needsUpdate = true;
+  jointsIM.instanceColor.needsUpdate = bonesIM.instanceColor.needsUpdate = glowIM.instanceColor.needsUpdate = trailIM.instanceColor.needsUpdate = true;
+  // two-hand link
+  if (W.con.two) {
+    const p = twoLink.geometry.attributes.position.array, a = W.hands[0].pinchP, b = W.hands[1].pinchP;
+    p[0] = a.x; p[1] = a.y; p[2] = a.z; p[3] = b.x; p[4] = b.y; p[5] = b.z;
+    twoLink.geometry.attributes.position.needsUpdate = true; twoLink.visible = true;
+  } else twoLink.visible = false;
+  // packets
+  {
+    const pa = packetIM.instanceMatrix.array, pc = packetIM.instanceColor.array;
+    for (let i = 0; i < MAX_P; i++) {
+      const p = W.packets[i];
+      if (!p.alive || wt < p.launchAt) { for (let k = 0; k < PSEG; k++) orient(pa, (i * PSEG + k) * 16, 0, 0, 0, 0, 0, 0, 0); continue; }
+      const u = (wt - p.launchAt) / p.dur;
+      packetAt(p, u, _a);
+      for (let k = 0; k < PSEG; k++) {
+        const ii = i * PSEG + k;
+        if (k === 0) {   // white-hot head
+          packetAt(p, Math.max(u - 0.012, 0), _b);
+          orient(pa, ii * 16, _b.x, _b.y, _b.z, _a.x, _a.y, _a.z, 0.085);
+          ramp(HEAT, 0.97, _c1, 3.6);
+        } else {
+          const u0 = Math.max(u - 0.022 * (k - 1), 0), u1 = Math.max(u - 0.022 * k, 0), f = 1 - k / PSEG;
+          packetAt(p, u0, _b); packetAt(p, u1, _c);
+          orient(pa, ii * 16, _c.x, _c.y, _c.z, _b.x, _b.y, _b.z, 0.06 * f + 0.01);
+          ramp(HEAT, 0.35 + 0.45 * f * p.heat, _c1, 0.6 + 2.0 * f);
+        }
+        pc[ii * 3] = _c1.r; pc[ii * 3 + 1] = _c1.g; pc[ii * 3 + 2] = _c1.b;
+      }
+    }
+    packetIM.instanceMatrix.needsUpdate = true; packetIM.instanceColor.needsUpdate = true;
+  }
+  // sparks
+  {
+    const sa = sparkIM.instanceMatrix.array, sc = sparkIM.instanceColor.array;
+    for (let i = 0; i < MAX_S; i++) {
+      const o = i * 16;
+      if (W.sl[i] <= 0) { orient(sa, o, 0, 0, 0, 0, 0, 0, 0); continue; }
+      const life = 1 - W.sl[i] / W.sm[i];
+      const x = W.sp[i * 3], y = W.sp[i * 3 + 1], z = W.sp[i * 3 + 2], vx = W.sv[i * 3], vy = W.sv[i * 3 + 1], vz = W.sv[i * 3 + 2];
+      const k = 0.022 + 0.0;
+      orient(sa, o, x - vx * k, y - vy * k, z - vz * k, x, y, z, 0.022 * (1 - life * 0.7));
+      if (W.sH[i] < 0) ramp(COLD, -W.sH[i] + 0.05 - 0.5 * life, _c1, 1.5 * (1 - life));
+      else ramp(HEAT, W.sH[i] - 0.7 * life, _c1, 3.2 * (1 - life));
+      sc[i * 3] = _c1.r; sc[i * 3 + 1] = _c1.g; sc[i * 3 + 2] = _c1.b;
+    }
+    sparkIM.instanceMatrix.needsUpdate = true; sparkIM.instanceColor.needsUpdate = true;
+  }
+  if (HIDE) for (const k of HIDE) { const o = DBG_LAYERS[k]; if (o) (Array.isArray(o) ? o : [o]).forEach(m => m.visible = false); }
+  const shakeAge = W.t - W.game.hitT;
+  if (shakeAge >= 0 && shakeAge < 0.5) {
+    const a = 0.16 * (1 - shakeAge / 0.5);
+    camera.position.set(Math.sin(W.t * 83) * a, Math.cos(W.t * 71) * a * 0.7, L.camZ); camera.updateMatrixWorld();
+  }
+  composer.render();
+  if (camera.position.x !== 0 || camera.position.y !== 0) { camera.position.set(0, 0, L.camZ); camera.updateMatrixWorld(); }
+  renderHUD(W, now);
+}
+
+/* ---------- sound: synthesised, only after a user gesture, toggleable ---------- */
+const SND = {
+  ctx: null, out: null, on: true, lastTick: 0,
+  init() {
+    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); this.out = this.ctx.createGain(); this.out.gain.value = 0.3; this.out.connect(this.ctx.destination); } catch (e) { this.ctx = null; }
+  },
+  tone(f0, f1, t0, dur, type, gain) {
+    const c = this.ctx, o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t0); if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(gain, t0 + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(this.out); o.start(t0); o.stop(t0 + dur + 0.02);
+  },
+  noise(t0, dur, freq, q, gain) {
+    const c = this.ctx, n = Math.ceil(c.sampleRate * dur), b = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0);
+    let x = 12345; for (let i = 0; i < n; i++) { x = (x * 1103515245 + 12345) >>> 0; d[i] = ((x >>> 8) / 8388608 - 1) * (1 - i / n); }
+    const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    s.buffer = b; f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q; g.gain.value = gain;
+    s.connect(f); f.connect(g); g.connect(this.out); s.start(t0);
+  },
+  play(kind) {
+    if (!this.ctx || !this.on || mode === 'attract') return;
+    const t = this.ctx.currentTime;
+    switch (kind) {
+      case 'grab': this.noise(t, 0.035, 2600, 2, 0.5); this.tone(880, 1320, t, 0.06, 'triangle', 0.18); break;
+      case 'flick': this.noise(t, 0.22, 1400, 0.8, 0.25); break;
+      case 'contain': this.tone(1318, 1318, t, 0.7, 'sine', 0.14); this.tone(1976, 1976, t + 0.04, 0.6, 'sine', 0.09); this.tone(2637, 2637, t + 0.08, 0.45, 'sine', 0.05); this.noise(t, 0.25, 7000, 1.5, 0.12); break;
+      case 'deflect': if (t - this.lastTick > 0.035) { this.lastTick = t; this.noise(t, 0.03, 3200, 3, 0.35); } break;
+      case 'corehit': this.tone(110, 42, t, 0.5, 'sine', 0.5); this.noise(t, 0.35, 380, 0.7, 0.6); break;
+      case 'leak': this.tone(180, 90, t, 0.18, 'sine', 0.15); break;
+      case 'step': this.tone(988, 988, t, 0.12, 'triangle', 0.15); this.tone(1480, 1480, t + 0.09, 0.22, 'triangle', 0.13); break;
+      case 'wave': this.tone(440, 440, t, 0.18, 'triangle', 0.12); this.tone(660, 660, t + 0.14, 0.3, 'triangle', 0.12); break;
+      case 'cleared': [988, 1318, 1760].forEach((f, i) => this.tone(f, f, t + i * 0.1, 0.5, 'sine', 0.12)); break;
+      case 'over': [392, 330, 262].forEach((f, i) => this.tone(f, f * 0.98, t + i * 0.22, 0.5, 'triangle', 0.14)); break;
+      case 'lock': this.tone(520, 380, t, 0.14, 'square', 0.05); break;
+    }
+  },
+};
+
+/* ---------- HTML overlay: HUD, tutorial, banner, end card, labels, legend, hint ---------- */
+const labelsEl = $('labels');
+const labelPool = Array.from({ length: MAX_ORB + 4 }, () => { const s = document.createElement('span'); s.style.opacity = 0; labelsEl.appendChild(s); return s; });
+const legendItems = [...document.querySelectorAll('.legend li')];
+const hintEl = $('hint');
+const TUT_TEXT = {
+  camera: ['Show your hand to the camera.', 'Pinch to grab the ringed orb.', 'Flick it into the containment field.', 'Raise an open palm over the core to block this volley.'],
+  mouse: ['Move the mouse over the console.', 'Press and hold on the ringed orb to grab it.', 'Flick it into the containment field: drag fast toward it and let go.', 'Hold the right mouse button (or S) over the core to block this volley.'],
+  touch: ['Touch the console.', 'Touch and hold the ringed orb to grab it.', 'Flick it into the containment field: swipe toward it and let go.', 'Hold two fingers over the core to block this volley.'],
+};
+let hudCache = {}, lastPointerType = 'mouse';
+const verbs = () => W.game.input === 'camera' ? 'camera' : lastPointerType === 'touch' ? 'touch' : 'mouse';
+const _v = new V3();
+function toScreen(v, out) { _v.copy(v).project(camera); out.x = (_v.x + 1) / 2 * L.w; out.y = (1 - _v.y) / 2 * L.h; out.z = _v.z; return out; }
+function setText(id, t) { if (hudCache[id] !== t) { hudCache[id] = t; $(id).textContent = t; } }
+function setHidden(id, h) { const k = id + ':h'; if (hudCache[k] !== h) { hudCache[k] = h; $(id).hidden = h; } }
+function bump(id) { const el = $(id); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+function renderHUD(W, now) {
+  const g = W.game, live = mode !== 'attract', v = verbs();
+  // stats
+  const wv = g.phase === 'demo' ? ['Demo', 'watch how it plays'] : g.phase === 'tutorial' ? ['Tutorial', `step ${Math.min(g.tut + 1, 4)} of 4`]
+    : g.phase === 'intro' ? ['Ready', 'wave 1 next'] : [String(g.wave), g.phase === 'cleared' ? 'wave cleared' : 'wave'];
+  setText('n-wave', wv[0]); setText('k-wave', wv[1]);
+  $('n-wave').classList.toggle('word', isNaN(+wv[0]));
+  if (hudCache.contained !== W.contained) { if (hudCache.contained !== undefined && W.contained > hudCache.contained && playing) bump('s-contained'); hudCache.contained = W.contained; $('n-contained').textContent = W.contained; }
+  if (hudCache.integ !== g.integrity) {
+    if (hudCache.integ !== undefined && g.integrity < hudCache.integ) bump('s-core');
+    hudCache.integ = g.integrity;
+    [...$('pips').children].forEach((el, k) => el.classList.toggle('lost', k >= g.integrity));
+    $('pips').setAttribute('aria-label', `Core integrity ${g.integrity} of 3`);
+  }
+  setHidden('hud-btns', !live);
+  const bodyCls = document.body.classList;
+  bodyCls.toggle('playing', live);
+  bodyCls.toggle('tutoring', live && g.phase === 'tutorial');
+  bodyCls.toggle('cam-on', cam.status !== 'off');
+  bodyCls.toggle('banner-on', $('banner').classList.contains('on'));
+  if (!live && $('legend').classList.contains('open')) { $('legend').classList.remove('open'); $('legend-toggle').setAttribute('aria-expanded', 'false'); }
+  setHidden('start', live);
+  setHidden('cam', cam.status === 'off');
+  // tutorial checklist
+  const tutOn = live && g.phase === 'tutorial';
+  setHidden('tut', !tutOn);
+  if (tutOn) {
+    setText('tut-n', `step ${Math.min(g.tut + 1, 4)} of 4`);
+    const items = $('tut-list').children;
+    for (let k = 0; k < 4; k++) {
+      const el = items[k], cls = k < g.tut ? 'done' : k === g.tut ? 'now' : '';
+      if (el.textContent !== TUT_TEXT[v][k]) el.textContent = TUT_TEXT[v][k];
+      if (el.dataset.cls !== cls) { el.className = cls + (cls === 'done' && el.dataset.cls === 'now' ? ' just' : ''); el.dataset.cls = cls; }
+    }
+  }
+  // banner: game beats, or a standing request for a hand
+  let bt = '', bs = '', bk = '';
+  if (live && g.waiting) { bt = 'Show your hand to the camera'; bs = 'The game is paused until your hand is back in view.'; bk = 'cold'; }
+  else if (g.phase !== 'over' && W.t - g.bannerT < g.bannerDur && W.t >= g.bannerT) { bt = g.banner; bs = g.bannerSub; bk = g.bannerKind; }
+  if (bt) { setText('banner-t', bt); setText('banner-s', bs); }
+  $('banner').classList.toggle('on', !!bt);
+  $('banner').classList.toggle('hot', bk === 'hot');
+  // end card
+  const over = live && g.phase === 'over';
+  setHidden('over', !over);
+  if (over) {
+    setText('over-why', g.banner === 'Core breached' ? g.bannerSub : '');
+    setText('o-contained', String(W.contained)); setText('o-wave', String(g.wave)); setText('o-best', String(Math.max(bestWave, g.wave))); setText('o-blocked', String(W.deflected));
+    setText('again-how', v === 'camera' ? 'or hold an open palm up for 1 second' : v === 'touch' ? 'or hold two fingers down for 1 second' : 'or hold the right mouse button for 1 second');
+    $('again-ring').style.strokeDashoffset = (94.25 * (1 - clamp(g.again, 0, 1))).toFixed(1);
+  }
+  // labels follow orbs
+  let li = 0;
+  for (const o of W.orbs) {
+    if (!o.alive || o.state === 'contained' || o.state === 'archived' || o.state === 'leaving') continue;
+    toWorld(W, o.pos, _a);
+    if (_a.z < -13) continue;
+    const s = labelPool[li++];
+    toScreen(_a, _b);
+    const rpx = L.orbR * W.con.s * L.camZ / (L.camZ - _a.z) / L.halfH * L.h * 0.5;
+    s.textContent = o.label;
+    s.className = o.state === 'held' ? 'held' : '';
+    s.style.transform = `translate(${(_b.x + rpx + 8).toFixed(1)}px, ${(_b.y - 6).toFixed(1)}px)`;
+    s.style.opacity = (smooth(-13, -6, _a.z) * (o.state === 'thrown' ? 0.35 : 0.92)).toFixed(2);
+  }
+  {
+    // core label
+    toScreen(W.coreW, _c);
+    const rpx = L.core.R * W.con.s * L.camZ / (L.camZ - W.coreW.z) / L.halfH * L.h * 0.5;
+    const s = labelPool[li++];
+    s.className = 'field'; s.textContent = 'Core';
+    s.style.transform = `translate(${(_c.x - 15).toFixed(1)}px, ${(_c.y + rpx * 1.75 + 4).toFixed(1)}px)`; s.style.opacity = 0.95;
+  }
+  {
+    // field label + capture toast
+    const f = L.field;
+    _a.copy(f.pos).addScaledVector(f.axis, -f.H - (L.portrait ? 0 : 0.28)); if (L.portrait) { _a.y -= f.R + 0.12; _a.x = f.pos.x - f.H; }
+    toWorld(W, _a, _b); toScreen(_b, _c);
+    const s = labelPool[li++];
+    s.className = 'field'; s.textContent = 'Containment field';
+    s.style.transform = `translate(${(_c.x - (L.portrait ? 0 : 56)).toFixed(1)}px, ${(_c.y + 4).toFixed(1)}px)`; s.style.opacity = 0.9;
+    const age = W.t - W.containT;
+    const s2 = labelPool[li++];
+    if (age >= 0 && age < 2.2 && W.lastContained) {
+      s2.className = 'toast'; s2.textContent = '+1  ' + W.lastContained + ' contained';
+      _a.copy(f.pos).addScaledVector(f.axis, -f.H - (L.portrait ? 0 : 0.28)); if (L.portrait) { _a.y -= f.R + 0.12; _a.x = f.pos.x - f.H; }
+      toWorld(W, _a, _b); toScreen(_b, _c);
+      s2.style.transform = `translate(${(_c.x - (L.portrait ? 0 : 56)).toFixed(1)}px, ${(_c.y + 26 - smooth(0, 1.2, age) * 6).toFixed(1)}px)`;
+      s2.style.opacity = (smooth(0, 0.2, age) * (1 - smooth(1.5, 2.2, age))).toFixed(2);
+    } else s2.style.opacity = 0;
+  }
+  for (; li < labelPool.length; li++) labelPool[li].style.opacity = 0;
+  // legend: highlight the gesture recognised right now
+  let gk = '';
+  if (W.con.two) gk = 'two';
+  else if (W.hands.some(h => h.present && h.shield > 0.5)) gk = 'palm';
+  else if (W.t - W.flickT < 0.7) gk = 'flick';
+  else if (W.hands.some(h => h.present && (h.pinch || h.held >= 0))) gk = 'pinch';
+  else if (W.hands.some(h => h.present && h.fist)) gk = 'fist';
+  const warnAge = W.wt - W.warnT, warning = warnAge >= 0 && warnAge < 2.6 && !W.hands.some(h => h.shield > 0.5);
+  for (const el of legendItems) {
+    const k = el.dataset.g;
+    el.classList.toggle('on', k === gk || (k === 'fist' && W.locked));
+    el.classList.toggle('hot', k === 'palm' && warning && gk !== 'palm');
+  }
+  // slim strip during play: only the gesture recognised now
+  {
+    const key = (gk || (warning ? 'palm!' : '')) + '|' + (W.hands.some(h => h.present) ? 1 : 0);
+    if (hudCache.now !== key) {
+      hudCache.now = key;
+      const el = $('legend-now'), li = legendItems.find(l => l.dataset.g === (gk || (warning ? 'palm' : '')));
+      const anyHand = W.hands.some(h => h.present);
+      el.innerHTML = li ? li.querySelector('svg').outerHTML + '<span>' + (gk ? li.querySelector('b').textContent : 'Raise an open palm') + '</span>'
+        : '<span>' + (anyHand ? 'Open hand' : W.game.input === 'camera' ? 'No hand in view' : 'No gesture') + '</span>';
+      el.className = 'now' + (gk ? ' on' : warning ? ' hot' : '');
+    }
+  }
+  setText('mode', mode === 'attract' ? 'Demo hand' : W.hands.some(h => h.present && h.src === 'camera') ? 'Your hand' : W.game.input === 'camera' ? 'Camera' : lastPointerType === 'touch' ? 'Touch' : 'Mouse');
+  // lock
+  $('lockframe').classList.toggle('on', W.locked);
+  $('locktext').classList.toggle('on', W.locked);
+  setText('lockhow', mode === 'attract' ? 'Make a fist again to resume' : cam.status === 'on' ? 'Make a fist again, or press L, to resume' : 'Press L to resume');
+  // hot flash when the core is hit
+  const ba = W.t - W.game.hitT, bl = W.t - W.breachT;
+  const vig = Math.max(ba >= 0 && ba < 0.8 ? 1 - ba / 0.8 : 0, bl >= 0 && bl < 0.4 ? 0.35 * (1 - bl / 0.4) : 0);
+  $('vignette').style.opacity = vig.toFixed(2);
+  // hint: the one thing to do now
+  let text = '', warn = false;
+  if (mode === 'attract') text = captionAt(W.t);
+  else if (g.phase === 'tutorial' || g.phase === 'over' || g.waiting) text = '';
+  else if (warning) {
+    warn = true;
+    text = v === 'camera' ? 'Volley incoming: raise an open palm over the core.' : v === 'touch' ? 'Volley incoming: hold two fingers over the core.' : 'Volley incoming: hold the right mouse button (or S) over the core.';
+  } else if (g.wave <= 1) {
+    text = v === 'camera' ? 'Pinch a threat and flick it into the field before it reaches the core.' : v === 'touch' ? 'Drag a threat and swipe it into the field before it reaches the core.' : 'Drag a threat and flick it into the field before it reaches the core.';
+  }
+  if (text) { if (hintEl.textContent !== text) hintEl.textContent = text; hintEl.classList.remove('gone'); }
+  else hintEl.classList.add('gone');
+  hintEl.classList.toggle('warn', warn);
+  // cursor
+  const h0 = W.hands[0];
+  canvas.className = live && h0.src === 'mouse' ? (h0.held >= 0 ? 'grabbing' : h0.hover >= 0 ? 'can-grab' : '') : '';
+}
+
+/* =====================================================================
+   Loop, modes, hooks
+   ===================================================================== */
+let W, mode = 'attract', playing = true, dirty = true, acc = 0, last = performance.now();
+let lastInputMs = -1e9, lastInput = 'mouse', gameInput = 'mouse', tutorialSeen = false, overMs = 0, gameStartMs = 0;
+const BEST_KEY = 'hands-on-best-wave';
+let bestWave = 0;
+try { bestWave = +localStorage.getItem(BEST_KEY) || 0; } catch (e) {}
+const pp = $('playpause');
+function setPlaying(p) {
+  playing = p; last = performance.now(); dirty = true;
+  pp.textContent = p ? 'Pause' : 'Play';
+  pp.setAttribute('aria-pressed', String(!p));
+}
+function resetAttract() {
+  W = newWorld(true); mode = 'attract'; hudCache = {};
+  if (notesAutoHidden) { notesAutoHidden = false; setNotes(true); }
+}
+let notesAutoHidden = false;
+function stepAttract() { worldStep(W, attractInputs(W)); if (W.t >= PERIOD - 1e-6) resetAttract(); }
+function seekAttract(t) {
+  resetAttract();
+  const n = Math.round((((t % PERIOD) + PERIOD) % PERIOD) / DT);
+  for (let i = 0; i < n; i++) worldStep(W, attractInputs(W));
+}
+function startGame(input, skipTutorial) {
+  SND.init();
+  gameInput = input;
+  W = newWorld(false); mode = 'live'; hudCache = {}; hadPrev[0] = hadPrev[1] = false;
+  W.game.input = input; gameStartMs = performance.now();
+  // the arena needs the room: fold the notes card into its button while a game runs
+  if (!notes.hidden) { notesAutoHidden = true; setNotes(false); }
+  if (skipTutorial || tutorialSeen) { W.game.phase = 'intro'; W.game.phaseT = 0; setBanner(W, 'Get ready', 'Wave 1 is coming', 'cold', 2.0); }
+  lastInputMs = performance.now();
+  if (!playing) setPlaying(true);
+}
+function skipTutorial() {
+  const g = W.game;
+  if (g.phase !== 'tutorial') return;
+  if (g.tutOrb >= 0 && W.orbs[g.tutOrb].alive && W.orbs[g.tutOrb].state !== 'contained') W.orbs[g.tutOrb].state = 'leaving';
+  for (const vv of W.volleys) vv.resolved = true;
+  for (const p of W.packets) p.alive = false;
+  tutorialSeen = true;
+  g.phase = 'intro'; g.phaseT = 0; setBanner(W, 'Get ready', 'Wave 1 is coming', 'cold', 2.0);
+}
+const liveIn = [null, null];
+function liveInputs(nowMs, dt) {
+  const camR = cam.status === 'on' && cam.slots[0].present ? cam.slots[0] : null;
+  const camL = cam.status === 'on' && cam.slots[1].present ? cam.slots[1] : null;
+  const m = mouseInputs(nowMs, dt);
+  liveIn[0] = camR || (m.present ? m : null);
+  liveIn[1] = camL;
+  return liveIn;
+}
+function noteInput(kind, nowMs, start) {
+  lastInputMs = nowMs; lastInput = kind;
+  if (mode === 'attract' && start) startGame(kind === 'touch' ? 'touch' : kind === 'camera' ? 'camera' : 'mouse', tutorialSeen);
+}
+
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dtReal = Math.min((now - last) / 1000, 0.1); last = now;
+  camWatchdog(now);
+  if (!HAS_RVFC) camDetect(now);
+  if (playing) {
+    if (mode === 'live') {
+      const g = W.game, idle = now - lastInputMs > IDLE_MS && !ptr.down && ptr.touches.size === 0;
+      const camAway = g.input === 'camera' && g.noHand > 20;
+      if ((g.input !== 'camera' && idle && g.phase !== 'over') || (camAway && idle) || (g.phase === 'over' && now - overMs > 25000 && idle)) { resetAttract(); acc = 0; }
+    } else if (cam.status === 'on' && cam.slots.some(s => s.present)) startGame('camera', tutorialSeen);
+    acc += dtReal;
+    let n = 0;
+    if (mode === 'attract') {
+      while (acc >= DT && n < 6) { stepAttract(); acc -= DT; n++; }
+    } else {
+      n = Math.min(Math.floor(acc / DT), 6);
+      if (n > 0) liveFrame(now, dtReal, n);
+      acc -= n * DT;
+    }
+    if (n === 6) acc = 0;
+    render(W, now);
+  } else if (dirty || (mode === 'live' && cam.status === 'on')) { render(W, now); dirty = false; }
+}
+// Live input is sampled once per display frame; the fixed steps inside that frame interpolate the landmarks,
+// so hand velocity (and with it flick detection) reflects real elapsed time even when frames are slow.
+const lmPrev = [new Float32Array(63), new Float32Array(63)], hadPrev = [false, false];
+const stepIn = [0, 1].map(() => ({ present: false, lm: new Float32Array(63), isRight: true, src: '', teleport: false, vel: null, edge: false, cosmeticFist: false }));
+const stepArr = [null, null];
+function liveFrame(now, dtFrame, n) {
+  const ins = liveInputs(now, dtFrame);
+  W.game.noHand = (ins[0] || ins[1]) ? 0 : (now - Math.max(cam.lastSeenMs, cam.onMs || 0, gameStartMs)) / 1000;
+  for (let k = 0; k < n; k++) {
+    const u = (k + 1) / n;
+    for (let i = 0; i < 2; i++) {
+      const src = ins[i], si = stepIn[i];
+      if (!src || !src.present) { stepArr[i] = null; continue; }
+      si.present = true; si.isRight = src.isRight; si.src = src.src; si.vel = src.vel || null; si.edge = src.src === 'camera' && src.edge; si.cosmeticFist = !!src.cosmeticFist;
+      si.teleport = src === mouseIn && vh.teleport && k === 0;
+      if (si.teleport) hadPrev[i] = false;
+      if (hadPrev[i]) { const a = lmPrev[i], b = src.lm; for (let j = 0; j < 63; j++) si.lm[j] = a[j] + (b[j] - a[j]) * u; }
+      else si.lm.set(src.lm);
+      stepArr[i] = si;
+    }
+    worldStep(W, stepArr);
+    if (handleEvents()) return;          // the world was replaced (play again)
+  }
+  for (let i = 0; i < 2; i++) { const src = ins[i]; hadPrev[i] = !!(src && src.present); if (hadPrev[i]) lmPrev[i].set(src.lm); }
+  vh.teleport = false;
+}
+function handleEvents() {
+  if (!W.events.length) return false;
+  const vib = navigator.vibrate ? (p) => { try { navigator.vibrate(p); } catch (e) {} } : () => {};
+  for (const e of W.events) {
+    SND.play(e);
+    if (e === 'grab') vib(10);
+    else if (e === 'contain') vib(25);
+    else if (e === 'corehit') vib([30, 40, 60]);
+    else if (e === 'lock') vib([10, 40, 10]);
+    else if (e === 'step' && W.game.tut >= 4) tutorialSeen = true;
+    else if (e === 'over') { overMs = performance.now(); if (W.game.wave > bestWave) { bestWave = W.game.wave; try { localStorage.setItem(BEST_KEY, String(bestWave)); } catch (err) {} } }
+    else if (e === 'again') { startGame(gameInput, true); return true; }
+  }
+  return false;
+}
+
+window.__seek = (tt) => {
+  setPlaying(false);
+  seekAttract(Number(tt) || 0);
+  acc = 0;
+  render(W, performance.now());
+};
+window.__play = () => setPlaying(true);
+// test / debug surface (read-only snapshot of the simulation)
+window.__hands = {
+  state() {
+    const sc = new V3(), g = W.game;
+    return {
+      mode, t: +W.t.toFixed(3), wt: +W.wt.toFixed(3), locked: W.locked, contained: W.contained, deflected: W.deflected, breaches: W.breaches,
+      game: { phase: g.phase, input: g.input, tut: g.tut, wave: g.wave, integrity: g.integrity, waiting: g.waiting, banner: W.t - g.bannerT < g.bannerDur ? g.banner : '', again: +g.again.toFixed(2), spawned: g.spawned, total: g.total },
+      console: { s: +W.con.s.toFixed(3), roll: +W.con.roll.toFixed(3), yaw: +W.con.yaw.toFixed(3) },
+      hvel: W.hands.map(h => [h.vel.x, h.vel.y, h.vel.z].map(v => +v.toFixed(2))),
+      ovel: W.orbs.filter(o => o.alive && (o.state === 'held' || o.state === 'thrown')).map(o => ({ i: o.i, st: o.state, homing: o.homing, v: [o.vel.x, o.vel.y, o.vel.z].map(v => +v.toFixed(2)) })),
+      hands: W.hands.map(h => ({ present: h.present, src: h.src, isRight: h.isRight, gesture: h.gesture, pinch: h.pinch, palm: h.palm, fist: h.fist, shield: +h.shield.toFixed(2), held: h.held, speed: +h.speed.toFixed(2),
+        x: +h.palmC.x.toFixed(2), y: +h.palmC.y.toFixed(2), pinchD: +(h.F.pinchD || 0).toFixed(3), tip: +(h.F.tipRatio || 0).toFixed(2), edge: !!h.edge, ext: h.F.ext.map(e => +e.toFixed(3)), facing: +(h.F.facing || 0).toFixed(3) })),
+      orbs: W.orbs.filter(o => o.alive).map(o => { toWorld(W, o.pos, _a); toScreen(_a, sc); return { i: o.i, label: o.label, state: o.state, sid: o.sid, wave: o.wave, x: Math.round(sc.x), y: Math.round(sc.y), z: +_a.z.toFixed(2) }; }),
+      field: (() => { toWorld(W, L.field.pos, _a); toScreen(_a, sc); return { x: Math.round(sc.x), y: Math.round(sc.y) }; })(),
+      core: (() => { toScreen(W.coreW, sc); return { x: Math.round(sc.x), y: Math.round(sc.y) }; })(),
+      flickV: +L.flickV.toFixed(2),
+      cam: { status: cam.status, delegate: cam.delegate, frames: cam.frames, vt: +video.currentTime.toFixed(2), kicks: cam.kicks || 0, detections: cam.detections, raw: cam.raw, err: cam.err, rvfc: HAS_RVFC,
+        oe: ONE_EURO, slots: cam.slots.map(s => ({ present: s.present, edge: s.edge, jumps: s.jumps, isRight: s.isRight, score: +(s.score || 0).toFixed(3), palm: [s.palm.x, s.palm.y, s.palm.z].map(v => +v.toFixed(4)), raw: [s.rawPalm.x, s.rawPalm.y, s.rawPalm.z].map(v => +v.toFixed(4)), vel: +s.vel.length().toFixed(2) })),
+        stats: (() => { const q = (a, p) => { if (!a.length) return 0; const b = [...a].sort((x, y) => x - y); return +b[Math.min(b.length - 1, Math.floor(p * b.length))].toFixed(1); }; return { detMed: q(camStats.det, 0.5), detP95: q(camStats.det, 0.95), latMed: q(camStats.lat, 0.5), latP95: q(camStats.lat, 0.95), gapMed: q(camStats.gap, 0.5), n: camStats.det.length }; })() },
+      rel: W.rel, flickVcam: +L.flickVcam.toFixed(2),
+    };
+  },
+  features(lm, isRight, zw) { return features(Float32Array.from(lm), isRight, { ext: [0, 0, 0, 0] }, zw); },
+  setTH(k, v) { TH[k] = v; },
+  // screen-space targets for layout checks: core, containment field and threats (circles), in CSS px
+  targets() {
+    const out = [], sc = new V3(), pxPerUnit = z => L.camZ / (L.camZ - z) / L.halfH * L.h * 0.5;
+    toScreen(W.coreW, sc); out.push({ kind: 'core', x: sc.x, y: sc.y, r: L.core.R * W.con.s * 1.6 * pxPerUnit(W.coreW.z) });
+    const f = L.field;
+    for (let k = -4; k <= 4; k++) { _a.copy(f.pos).addScaledVector(f.axis, f.H * k / 4); toWorld(W, _a, _b); toScreen(_b, sc); out.push({ kind: 'field', x: sc.x, y: sc.y, r: f.R * W.con.s * pxPerUnit(_b.z) }); }
+    for (const o of W.orbs) {
+      if (!o.alive || !(o.state === 'free' || o.state === 'drift' || o.state === 'held' || o.state === 'thrown')) continue;
+      toWorld(W, o.pos, _b); if (_b.z < -8) continue;
+      toScreen(_b, sc); out.push({ kind: 'threat', x: sc.x, y: sc.y, r: L.orbR * W.con.s * pxPerUnit(_b.z) });
+    }
+    return out;
+  },
+  synth(p) { const o = new Float32Array(63); buildHand(Object.assign({ right: true, x: 0, y: 0, z: 1, pinch: 0, palm: 0, fist: 0, scale: 0.7 }, p), o); return Array.from(o); },
+};
+
+/* ---------- input wiring ---------- */
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => {
+  const now = performance.now();
+  ptr.type = e.pointerType; lastPointerType = e.pointerType === 'touch' ? 'touch' : 'mouse';
+  if (e.pointerType === 'touch') {
+    ptr.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptr.touches.size >= 2) ptr.down = false;
+    else { ptr.down = true; ptr.x = e.clientX; ptr.y = e.clientY; }
+  } else {
+    ptr.x = e.clientX; ptr.y = e.clientY;
+    if (e.button === 2) ptr.shield = true;
+    else if (e.button === 0) ptr.down = true;
+  }
+  // a touch lands wherever the finger goes: the virtual hand jumps there without that jump counting as motion
+  if (e.pointerType === 'touch' || Math.hypot(e.clientX - ptr.lastDownX, e.clientY - ptr.lastDownY) > 40 && !ptr.inside) vh.teleport = true;
+  ptr.lastDownX = e.clientX; ptr.lastDownY = e.clientY;
+  ptr.inside = true; ptr.moved = now; vh.home = true;
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  noteInput(lastPointerType, now, true);
+  SND.init();
+  if (!playing) setPlaying(true);
+  // run a step now so the grab lands on this frame
+  if (mode === 'live' && playing) { liveFrame(now, DT, 1); acc = Math.max(acc - DT, -DT); }
+});
+canvas.addEventListener('pointermove', e => {
+  const now = performance.now();
+  if (e.pointerType === 'touch') { if (ptr.touches.has(e.pointerId)) ptr.touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (ptr.touches.size > 1) { ptr.moved = now; noteInput('touch', now); return; } }
+  const dx = e.clientX - ptr.x, dy = e.clientY - ptr.y;
+  ptr.x = e.clientX; ptr.y = e.clientY; ptr.inside = true;
+  if (Math.abs(dx) + Math.abs(dy) > 1.5 || ptr.down) { ptr.moved = now; vh.home = true; if (mode === 'live') noteInput(e.pointerType === 'touch' ? 'touch' : 'mouse', now); }
+});
+const endPtr = e => {
+  const now = performance.now();
+  if (e.pointerType === 'touch') {
+    ptr.touches.delete(e.pointerId);
+    if (ptr.touches.size === 0) ptr.down = false;     // the hand stays where the finger lifted for a moment
+  } else {
+    if (e.button === 2) ptr.shield = false;
+    else ptr.down = false;
+    if (e.type === 'pointercancel') { ptr.down = false; ptr.shield = false; }
+  }
+  ptr.moved = now; lastInputMs = now;
+};
+canvas.addEventListener('pointerup', endPtr);
+canvas.addEventListener('pointercancel', endPtr);
+canvas.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch' && !ptr.down) ptr.inside = false; });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (mode === 'attract') return;
+  const now = performance.now(); noteInput('mouse', now);
+  if (e.shiftKey) W.con.roll = clamp(W.con.roll - e.deltaY * 0.002, -0.9, 0.9);
+  else W.con.s = clamp(W.con.s * Math.exp(-e.deltaY * 0.0012), 0.6, 1.7);
+  updateConsole(W); dirty = true;
+}, { passive: false });
+$('reset').addEventListener('click', () => startGame(gameInput, true));
+$('sound').addEventListener('click', () => { SND.on = !SND.on; SND.init(); $('sound').textContent = SND.on ? 'Sound on' : 'Sound off'; $('sound').setAttribute('aria-pressed', String(SND.on)); });
+$('cam-go').addEventListener('click', () => { lastInput = 'camera'; startGame('camera', tutorialSeen); startCamera(); });
+$('mouse-go').addEventListener('click', () => { lastInput = 'mouse'; startGame(lastPointerType === 'touch' ? 'touch' : 'mouse', tutorialSeen); });
+$('mouse-go').addEventListener('pointerdown', e => { lastPointerType = e.pointerType === 'touch' ? 'touch' : 'mouse'; });
+$('tut-skip').addEventListener('click', skipTutorial);
+$('legend-toggle').addEventListener('click', () => {
+  const open = !$('legend').classList.contains('open');
+  $('legend').classList.toggle('open', open);
+  $('legend-toggle').setAttribute('aria-expanded', String(open));
+  $('legend-toggle').setAttribute('aria-label', open ? 'Hide the gesture list' : 'Show all gestures');
+  $('legend-toggle').textContent = open ? '×' : '?';
+});
+$('again').addEventListener('click', () => startGame(gameInput, true));
+// the end card covers the middle of the screen, so a right-button hold on it also counts as the open palm
+$('over').addEventListener('contextmenu', e => e.preventDefault());
+$('over').addEventListener('pointerdown', e => { if (e.button === 2 || (e.pointerType === 'touch' && e.isPrimary === false)) { ptr.shield = true; ptr.x = e.clientX; ptr.y = e.clientY; ptr.inside = true; ptr.moved = performance.now(); lastInputMs = ptr.moved; } });
+$('over').addEventListener('pointerup', e => { if (e.button === 2 || e.pointerType === 'touch') ptr.shield = false; });
+$('cam-stop').addEventListener('click', stopCamera);
+$('cam-preview').addEventListener('click', () => {
+  cam.preview = !cam.preview;
+  $('preview').classList.toggle('off', !cam.preview);
+  $('cam-preview').textContent = cam.preview ? 'Hide preview' : 'Show preview';
+  if (!cam.preview) octx.clearRect(0, 0, overlay.width, overlay.height);
+});
+
+/* ---------- notes UI + keys ---------- */
+const notes = $('notes'), showBtn = $('show-notes');
+function setNotes(v) { notes.hidden = !v; showBtn.hidden = v; syncNotesH(); }
+function syncNotesH() { document.documentElement.style.setProperty('--notes-h', (notes.hidden ? showBtn.offsetHeight : notes.offsetHeight) + 'px'); }
+if (window.ResizeObserver) new ResizeObserver(syncNotesH).observe(notes);
+syncNotesH();
+$('hide-notes').addEventListener('click', () => { setNotes(false); showBtn.focus(); });
+showBtn.addEventListener('click', () => { setNotes(true); notesAutoHidden = false; $('hide-notes').focus(); });
+pp.addEventListener('click', () => setPlaying(!playing));
+window.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const now = performance.now(), k = e.key.toLowerCase();
+  if (k === 'h') { setNotes(notes.hidden); return; }
+  if (e.code === 'Space' || e.key === ' ') {
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'BUTTON' || ae.tagName === 'A')) return;
+    e.preventDefault(); setPlaying(!playing); return;
+  }
+  if (e.repeat && k !== 's') return;
+  const onButton = document.activeElement && (document.activeElement.tagName === 'BUTTON' || document.activeElement.tagName === 'A');
+  if (!['l', 's', 'r', 'enter', 'g', '+', '=', '-', '_', '[', ']'].includes(k) || (k === 'enter' && onButton)) return;
+  SND.init();
+  noteInput('keyboard', now, true);
+  if (k === 'l') { toggleLock(W); vh.fistUntil = now + 380; handleEvents(); }
+  else if (k === 's') ptr.kbShield = true;
+  else if (k === 'r') startGame(gameInput, true);
+  else if (k === 'enter' || k === 'g') { if (W.game.phase === 'over') startGame(gameInput, true); else startCatchMacro(now); }
+  else if (k === '+' || k === '=') { W.con.s = clamp(W.con.s * 1.1, 0.6, 1.7); updateConsole(W); }
+  else if (k === '-' || k === '_') { W.con.s = clamp(W.con.s / 1.1, 0.6, 1.7); updateConsole(W); }
+  else if (k === '[') { W.con.roll = clamp(W.con.roll + 0.1, -0.9, 0.9); updateConsole(W); }
+  else if (k === ']') { W.con.roll = clamp(W.con.roll - 0.1, -0.9, 0.9); updateConsole(W); }
+  lastInputMs = now;
+});
+window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 's') { ptr.kbShield = false; lastInputMs = performance.now(); } });
+window.addEventListener('blur', () => { ptr.down = false; ptr.shield = false; ptr.kbShield = false; ptr.touches.clear(); });
+
+/* ---------- layout / resize ---------- */
+function applyLayout() {
+  computeLayout();
+  camera.fov = L.fov; camera.aspect = L.aspect; camera.position.set(0, 0, L.camZ); camera.lookAt(0, 0, 0);
+  camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+  renderer.setPixelRatio(PR()); renderer.setSize(L.w, L.h, false);
+  composer.setPixelRatio(PR()); composer.setSize(L.w, L.h);
+  if (LOW) bloom.setSize(Math.round(L.w * 0.5), Math.round(L.h * 0.5));
+  buildTunnel(); buildPlate(); placeField();
+  vh.lastX = vh.x; vh.lastY = vh.y;
+}
+window.addEventListener('resize', () => {
+  applyLayout();
+  if (W) {
+    if (mode === 'attract') { const t = W.t; seekAttract(t); }
+    else updateConsole(W);
+  }
+  dirty = true;
+});
+
+/* ---------- start ---------- */
+applyLayout();
+if (Number.isFinite(T_PARAM)) { seekAttract(T_PARAM); setPlaying(false); }
+else if (REDUCED) { seekAttract(HERO_T); setPlaying(false); }
+else { resetAttract(); setPlaying(true); }
+render(W, performance.now());
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

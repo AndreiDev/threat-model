@@ -1,0 +1,2271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zero day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--void)}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;background:var(--void)}
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+
+/* start gate: browsers block autoplay, so sound starts from a click */
+.start{position:fixed;inset:0;z-index:5;display:grid;place-items:center;pointer-events:none;
+  background:radial-gradient(ellipse at 50% 45%,rgba(16,12,42,.1),rgba(16,12,42,.5) 75%)}
+.start.top{place-items:start center;padding-top:20px;background:none}
+.start[hidden]{display:none}
+.start-inner{display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px 24px 14px;text-align:center;pointer-events:auto;
+  background:rgba(16,12,42,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid rgba(140,147,196,.18);border-radius:20px;max-width:calc(100vw - 32px)}
+.play-sound{position:relative;overflow:hidden;font:600 18px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--void);background:var(--ice);border:0;border-radius:999px;padding:17px 28px 17px 24px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:12px;box-shadow:0 0 0 1px rgba(232,247,255,.5),0 10px 40px rgba(155,232,255,.28)}
+.play-sound svg{width:18px;height:18px;flex:none}
+.play-sound:hover{background:var(--frost)}
+.play-silent{font:500 14px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost);background:rgba(78,90,140,.25);
+  border:1px solid rgba(140,147,196,.35);border-radius:999px;padding:9px 14px;cursor:pointer}
+.play-silent:hover{background:rgba(155,232,255,.16)}
+.start-status{min-height:1.4em;margin:2px 0 0;font:400 13px/1.4 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist)}
+.meter{width:180px;height:3px;border-radius:3px;background:rgba(140,147,196,.25);overflow:hidden}
+.meter[hidden]{display:none}
+.meter i{display:block;height:100%;width:0;background:var(--ice);transition:width .2s}
+.clean .notes,.clean .show-notes,.clean .start{display:none!important}
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="A demoscene intro: a security scanner boots on a curved monitor, flies down a hexagonal tunnel of code, watches hot traces crawl into a fractal firewall, slams a hexagonal patch over the breach as everything freezes to ice, then scrolls greetings over copper bars"></canvas>
+
+<div class="start" id="start">
+  <div class="start-inner">
+    <button type="button" class="play-sound" id="play-sound">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 9v6h4l5 4V5L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>
+      Play with sound
+    </button>
+    <button type="button" class="play-silent" id="play-silent">Play silently</button>
+    <div class="meter" id="meter-wrap" aria-hidden="true"><i id="meter"></i></div>
+    <p class="start-status" id="start-status" aria-live="polite">Synthesising the soundtrack</p>
+  </div>
+</div>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Zero day</h1>
+  <p>A 64-second demoscene intro: a security scanner boots, flies through its own code, watches an exploit crawl into the firewall, slams a patch shut and sends greetings. Every pixel and every sound comes from this one file.</p>
+  <ul class="tech">
+    <li>Soundtrack synthesised at load in an OfflineAudioContext: oscillators, filtered noise, a resonant acid bass and a convolution reverb whose impulse is seeded noise</li>
+    <li>One pattern sequencer drives both the audio graph and the shader uniforms, so kicks punch the camera and arpeggio notes become glints</li>
+    <li>Raw WebGL2 effects: a hexagonal tunnel of code, a raymarched kaleidoscopic fractal, copper bars and a sine scroller</li>
+    <li>Datamosh glitch from a ping-pong framebuffer chain replayed from each cut, so every frame stays a pure function of time</li>
+    <li>Glyph atlases rasterised from Martian Mono at runtime; no images and no audio files</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="true">Play</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<!-- ===================================================================== shaders -->
+<script id="vs" type="x-shader/x-vertex">#version 300 es
+void main(){
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}
+</script>
+
+<script id="common" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+precision highp int;
+#define PI 3.14159265359
+#define TAU 6.28318530718
+const vec3 C_VOID  = vec3( 16., 12., 42.)/255.;
+const vec3 C_DEEP  = vec3( 27., 23., 71.)/255.;
+const vec3 C_STEEL = vec3( 78., 90.,140.)/255.;
+const vec3 C_MIST  = vec3(140.,147.,196.)/255.;
+const vec3 C_ICE   = vec3(155.,232.,255.)/255.;
+const vec3 C_FROST = vec3(232.,247.,255.)/255.;
+// ironbow heat ramp (heat-0 .. heat-5), sRGB
+vec3 ironbow(float x){
+  x = clamp(x, 0.0, 1.0) * 5.0;
+  vec3 c = mix(vec3( 58., 15.,107.), vec3(155., 29.,143.), clamp(x, 0.0, 1.0));
+  c = mix(c, vec3(240., 48.,106.), clamp(x - 1.0, 0.0, 1.0));
+  c = mix(c, vec3(255.,122., 47.), clamp(x - 2.0, 0.0, 1.0));
+  c = mix(c, vec3(255.,211.,107.), clamp(x - 3.0, 0.0, 1.0));
+  c = mix(c, vec3(255.,246.,224.), clamp(x - 4.0, 0.0, 1.0));
+  return c / 255.0;
+}
+// cold trust ramp #1B1747 > #2F4FA8 > #4FA3E0 > #9BE8FF > #E8F7FF, sRGB
+vec3 coldbow(float x){
+  x = clamp(x, 0.0, 1.0) * 4.0;
+  vec3 c = mix(vec3( 27., 23., 71.), vec3( 47., 79.,168.), clamp(x, 0.0, 1.0));
+  c = mix(c, vec3( 79.,163.,224.), clamp(x - 1.0, 0.0, 1.0));
+  c = mix(c, vec3(155.,232.,255.), clamp(x - 2.0, 0.0, 1.0));
+  c = mix(c, vec3(232.,247.,255.), clamp(x - 3.0, 0.0, 1.0));
+  return c / 255.0;
+}
+float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float hash11(float p){ p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
+vec2 hash22(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.xx + p3.yz) * p3.zy); }
+vec3 hash31(float p){ vec3 p3 = fract(vec3(p) * vec3(0.1031, 0.1030, 0.0973)); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.xxy + p3.yzz) * p3.zyx); }
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash12(i), hash12(i + vec2(1, 0)), f.x), mix(hash12(i + vec2(0, 1)), hash12(i + vec2(1, 1)), f.x), f.y);
+}
+mat2 rot(float a){ float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
+float sdHex(vec2 p, float r){   // flat top and bottom, r = apothem
+  const vec3 k = vec3(-0.866025404, 0.5, 0.577350269);
+  p = abs(p); p -= 2.0 * min(dot(k.xy, p), 0.0) * k.xy;
+  p -= vec2(clamp(p.x, -k.z * r, k.z * r), r);
+  return length(p) * sign(p.y);
+}
+// glyph atlases: 16 x 6 cells holding ASCII 32..127; a = (cellW, cellH, pad, 0), ai = (advance, lineH, atlasW, atlasH)
+// dx, dy: screen derivatives of the continuous glyph coordinate, so cell edges do not pick a blurry mip
+float glyph(sampler2D atl, vec4 a, vec4 ai, float code, vec2 luv, vec2 dx, vec2 dy){
+  float idx = clamp(code - 32.0, 0.0, 95.0);
+  vec2 cell = vec2(mod(idx, 16.0), floor(idx / 16.0));
+  vec2 pix = cell * a.xy + a.z + vec2(luv.x, 1.0 - luv.y) * ai.xy;
+  vec2 k = ai.xy / ai.zw;
+  return textureGrad(atl, pix / ai.zw, vec2(dx.x, -dx.y) * k, vec2(dy.x, -dy.y) * k).r;
+}
+</script>
+
+<!-- boot: a curved CRT console -->
+<script id="fs-boot" type="x-shader/x-fragment">
+uniform sampler2D uCon;
+uniform vec2 uRes;
+uniform float uT;
+uniform float uRoll;
+out vec4 o;
+vec2 barrel(vec2 uv, float k){ vec2 c = uv * 2.0 - 1.0; c *= 1.0 + k * dot(c, c); return c * 0.5 + 0.5; }
+float rrect(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }
+void main(){
+  vec2 fc = gl_FragCoord.xy;
+  vec2 uv = fc / uRes;
+  float asp = uRes.x / uRes.y;
+  float k = mix(0.035, 0.07, smoothstep(0.6, 1.4, asp));
+  // the glass never moves; the picture powers on and off inside it
+  vec2 guv = barrel(uv, k);
+  vec2 gp = (guv - 0.5) * vec2(asp, 1.0);
+  float gEdge = rrect(gp, vec2(0.5 * asp, 0.5) - 0.012, 0.07);
+  float glass = 1.0 - smoothstep(-0.003, 0.003, gEdge);
+
+  float on   = smoothstep(0.08, 0.42, uT);
+  float offV = smoothstep(7.55, 7.80, uT);
+  float offH = smoothstep(7.78, 7.95, uT);
+  float sy = mix(0.006, 1.0, on) * mix(1.0, 0.006, offV);
+  float sx = mix(0.15, 1.0, smoothstep(0.0, 0.12, uT)) * mix(1.0, 0.003, offH);
+  vec2 c = uv - 0.5;
+  vec2 puv = barrel(vec2(c.x / sx, c.y / sy) + 0.5, k);
+  float pic = step(0.0, puv.x) * step(puv.x, 1.0) * step(0.0, puv.y) * step(puv.y, 1.0);
+
+  // shake from the snare roll
+  vec2 tuv = vec2(puv.x, 1.0 - puv.y);
+  tuv.x += (hash11(floor(uT * 30.0)) - 0.5) * 0.004 * uRoll;
+  float px = 1.0 / uRes.x;
+  vec3 tx;
+  tx.r = texture(uCon, tuv + vec2(0.8 * px, 0.0)).r;
+  tx.g = texture(uCon, tuv).g;
+  tx.b = texture(uCon, tuv - vec2(0.8 * px, 0.0)).b;
+  vec3 glow = textureLod(uCon, tuv, 2.0).rgb * 0.35 + textureLod(uCon, tuv, 4.0).rgb * 0.9 + textureLod(uCon, tuv, 6.0).rgb * 1.1;
+
+  vec3 col = mix(C_VOID, C_DEEP, 0.45) * (0.75 + 0.45 * (1.0 - length(c) * 1.3));
+  col += tx * 1.02 + glow * 0.32;
+  // scanlines, a slot mask and a slow refresh band
+  float N = 300.0;
+  float sl = sin(puv.y * N * PI);
+  col *= 0.74 + 0.26 * sl * sl;
+  float mask = 0.93 + 0.07 * sin(fc.x * PI * 0.666);
+  col *= mask;
+  float band = fract(puv.y * 0.8 - uT * 0.32);
+  col += C_ICE * 0.045 * smoothstep(0.0, 0.1, band) * smoothstep(0.24, 0.1, band);
+  col *= 0.965 + 0.035 * hash11(floor(uT * 60.0) + 7.0);
+  col *= 1.0 - 0.5 * pow(clamp(length(c * vec2(1.0, 1.15)) * 1.3, 0.0, 1.0), 3.0);
+
+  // power-on line and the final collapse to a dot
+  float lineB = (1.0 - on) * step(0.02, uT) + offV * (1.0 - offH) * 0.9;
+  col = mix(col, C_FROST * 1.3, clamp(lineB, 0.0, 1.0) * 0.85);
+  col = mix(col, C_FROST * 1.5, offH);
+  col *= pic;
+
+  // glass: dark tube, a soft reflection, the lit picture
+  vec3 tube = C_VOID * 0.75 + C_STEEL * 0.07 * smoothstep(0.7, -0.4, gp.y + gp.x * 0.3);
+  vec3 g = tube + col;
+  float refl = smoothstep(0.42, 0.0, length(gp - vec2(-0.32 * asp, 0.28)) - 0.05);
+  g += C_MIST * 0.05 * refl;
+  float dotG = exp(-length(c * vec2(asp, 1.0)) * 22.0) * offH;
+  g += C_ICE * dotG * 1.4 + C_FROST * exp(-length(c * vec2(asp, 1.0)) * 70.0) * offH;
+  vec3 outC = mix(C_VOID * 0.6, g, glass);
+  outC += C_STEEL * 0.12 * exp(-abs(gEdge) * 260.0);   // bezel lip
+  o = vec4(outC, 1.0);
+}
+</script>
+
+<!-- tunnel: hexagonal corridor textured with real code -->
+<script id="fs-tunnel" type="x-shader/x-fragment">
+uniform sampler2D uCode;
+uniform vec2 uRes;
+uniform float uT, uKick, uClap, uHot, uTravel, uBeatPh, uRingRate, uLines, uIn, uOut;
+out vec4 o;
+void main(){
+  vec2 fc = gl_FragCoord.xy;
+  float m = min(uRes.x, uRes.y);
+  vec2 p = (fc - 0.5 * uRes) / m;
+  p *= 1.0 - 0.13 * uKick;                              // FOV punch on every kick
+  p *= mix(2.6, 1.0, uIn);                              // the boot dot opens into the tunnel
+  p = rot(0.11 * uT + 0.35 * sin(uT * 0.31)) * p;
+  p -= vec2(sin(uT * 0.61), sin(uT * 0.47 + 1.3)) * 0.05;
+  float a = atan(p.y, p.x);
+  float sec = floor(a / (PI / 3.0));
+  float ca = (sec + 0.5) * (PI / 3.0);
+  vec2 n = vec2(cos(ca), sin(ca));
+  float d = max(dot(p, n), 1e-4);
+  float z = 0.42 / d;
+  float s = dot(p, vec2(-n.y, n.x)) / d;                // across the wall, -0.577..0.577
+  float u = clamp(s / 1.1547 + 0.5, 0.0, 1.0);
+  float pair = mod(sec + 6.0, 2.0);
+  float v = -z * 30.0 + uTravel + floor((sec + 6.0) * 0.5) * 29.0;
+  vec2 tuv = vec2((pair + u) * 0.5, v / uLines);
+  vec3 tx = texture(uCode, tuv).rgb;
+  float cov = tx.r;
+  float hot = tx.g / max(tx.r, 0.02);
+  float cls = tx.b / max(tx.r, 0.02);
+  float fog = exp(-z * 0.32);
+  float nearB = smoothstep(0.0, 0.9, fog);
+
+  vec3 wall = coldbow(0.02 + 0.07 * fog) * (0.3 + 0.55 * fog);
+  float rowLine = 1.0 - smoothstep(0.0, 0.06, abs(fract(v) - 0.5) - 0.44);
+  wall += C_STEEL * 0.05 * rowLine * fog;
+  // rings that arrive on the beat
+  float rc = (z - 0.3) / 1.15 + uBeatPh * uRingRate;
+  float ringD = abs(fract(rc + 0.5) - 0.5) * 1.15;
+  float ring = exp(-ringD * ringD * 900.0) * smoothstep(9.0, 1.0, z);
+  vec3 glyphC = coldbow(0.4 + 0.52 * cls) * (0.5 + 1.1 * fog + 1.3 * uKick * fog);
+  float hotOn = step(0.01, uHot) * smoothstep(0.5, 0.9, hot);
+  vec3 hotC = ironbow(0.52 + 0.14 * uHot) * (1.1 + 0.5 * uHot);
+  vec3 col = wall + mix(glyphC, hotC, hotOn) * cov * (0.3 + fog);
+  float halo = textureLod(uCode, tuv, 3.5).g * 1.6;
+  col += ironbow(0.4) * halo * uHot * 1.2 * (0.3 + fog);
+  col += (C_ICE * 0.9 + C_FROST * 0.4 * uKick) * ring * (0.6 + uKick);
+  // panel seams
+  float seam = (0.5774 - abs(s)) * d * m;
+  col += C_ICE * 0.55 * exp(-seam * 0.9) * (0.4 + fog);
+  // the light at the end of the tunnel
+  float r = length(p);
+  col += C_ICE * exp(-r * 10.0) * (0.55 + 0.6 * uKick) + C_FROST * exp(-r * 38.0) * 0.8;
+  col = mix(col, C_VOID, smoothstep(0.75, 1.0, 1.0 - fog) * 0.6);
+  col += C_ICE * 0.07 * uKick * nearB + C_FROST * 0.05 * uClap * nearB;
+  col *= uOut;
+  o = vec4(col, 1.0);
+}
+</script>
+
+<!-- firewall: raymarched kaleidoscopic IFS shell around a core -->
+<script id="fs-fire" type="x-shader/x-fragment">
+uniform vec2 uRes;
+uniform float uT, uPad, uKick, uArpEnv, uArpIdx, uFront, uSpread, uCoreHeat, uDrop, uQ, uIn, uHeatAll, uDist, uWarm;
+out vec4 o;
+mat2 gR1, gR2;
+// Menger-style kaleidoscopic IFS: fold, sort, twist, scale by 3
+float deK(vec3 p){
+  float s = 1.0;
+  for (int i = 0; i < 4; i++){
+    p = abs(p);
+    if (p.x < p.y) p.xy = p.yx;
+    if (p.x < p.z) p.xz = p.zx;
+    if (p.y < p.z) p.yz = p.zy;
+    p.xy = gR1 * p.xy;
+    p.yz = gR2 * p.yz;
+    p = p * 3.0 - vec3(2.0);
+    if (p.z < -1.0) p.z += 2.0;
+    s *= 3.0;
+  }
+  vec3 q = abs(p) - vec3(1.0);
+  return (length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0)) / s;
+}
+float gCore;
+const float CUBE = 1.95;
+float map(vec3 p){
+  float r = length(p);
+  float k = deK(p / CUBE) * CUBE;
+  // two onion layers of the same kaleidoscopic lattice
+  float outer = abs(r - 1.98 - 0.03 * uPad) - 0.17;
+  float inner = abs(r - 1.3 + 0.02 * uPad) - 0.14;
+  float d = max(k, min(outer, inner));
+  gCore = r - 0.56 - 0.04 * uKick * uDrop;
+  return min(d, gCore);
+}
+vec3 calcN(vec3 p, float e){
+  const vec2 k = vec2(1.0, -1.0);
+  return normalize(k.xyy * map(p + k.xyy * e) + k.yyx * map(p + k.yyx * e) + k.yxy * map(p + k.yxy * e) + k.xxx * map(p + k.xxx * e));
+}
+float vnoise3(vec3 p){
+  vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  float n = i.x + i.y * 57.0 + i.z * 113.0;
+  return mix(mix(mix(hash11(n), hash11(n + 1.0), f.x), mix(hash11(n + 57.0), hash11(n + 58.0), f.x), f.y),
+             mix(mix(hash11(n + 113.0), hash11(n + 114.0), f.x), mix(hash11(n + 170.0), hash11(n + 171.0), f.x), f.y), f.z);
+}
+// circuit traces printed on every face (triplanar): x = line mask, y = coordinate along the line
+vec2 traces(vec3 p, vec3 n, float px){
+  vec3 an = abs(n);
+  vec2 fp = an.x > an.y && an.x > an.z ? p.yz : (an.y > an.z ? p.xz : p.xy);
+  fp *= 7.0;
+  vec2 cell = floor(fp), f = fract(fp) - 0.5;
+  float hc = hash12(cell + 0.5);
+  float w = 0.07, aa = px * 7.0;
+  float lh = (1.0 - smoothstep(w, w + aa, abs(f.y))) * step(0.42, hc);
+  float lv = (1.0 - smoothstep(w, w + aa, abs(f.x))) * step(hc, 0.3);
+  float pad = (1.0 - smoothstep(0.16, 0.16 + aa, length(f))) * step(0.86, hash12(cell + 7.1));
+  float along = lh > lv ? fp.x : fp.y;
+  return vec2(max(max(lh, lv), pad), along + hc * 5.0);
+}
+void main(){
+  vec2 fc = gl_FragCoord.xy;
+  vec2 uv = (fc - 0.5 * uRes) / uRes.y;
+  float asp = uRes.x / uRes.y;
+  float port = 1.0 - smoothstep(0.6, 1.2, asp);
+  gR1 = rot(0.13 + 0.05 * uPad);
+  gR2 = rot(0.09 - 0.03 * uPad);
+
+  float ang = uT * 0.11 + 0.9;
+  float dist = uDist * mix(1.0, 1.9, port) * mix(1.5, 1.0, uIn);
+  vec3 ro = vec3(sin(ang) * dist, 1.6 * sin(uT * 0.07) + 1.2, cos(ang) * dist);
+  vec2 shake = (vec2(hash11(floor(uT * 30.0)), hash11(floor(uT * 30.0) + 3.1)) - 0.5) * 0.05 * uKick * uDrop;
+  vec3 ta = vec3(shake, 0.0);
+  vec3 fw = normalize(ta - ro);
+  vec3 rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+  vec3 up = cross(rt, fw);
+  float fl = 1.8 - 0.14 * uKick * uDrop;
+  vec3 rd = normalize(uv.x * rt + uv.y * up + fl * fw);
+
+  float b = dot(ro, rd), cc = dot(ro, ro) - 2.2 * 2.2, disc = b * b - cc;
+  float coreGlow = 0.0, edgeGlow = 0.0;
+  float hitT = -1.0;
+  int steps = uQ > 0.5 ? 120 : 70;
+  float tt = 0.0;
+  if (disc > 0.0){
+    float sq = sqrt(disc);
+    tt = max(-b - sq, 0.0);
+    float tFar = -b + sq;
+    for (int i = 0; i < 120; i++){
+      if (i >= steps) break;
+      vec3 p = ro + rd * tt;
+      float d = map(p);
+      coreGlow += exp(-max(gCore, 0.0) * 4.0) * min(d, 0.06);
+      edgeGlow += exp(-d * 90.0) * 0.01;
+      if (d < 0.0005 * tt){ hitT = tt; break; }
+      tt += d * 0.9;
+      if (tt > tFar) break;
+    }
+  }
+  // background: void, a faint halo, slow rings
+  float rr = length(uv);
+  vec3 bg = mix(mix(C_DEEP * 0.6, ironbow(0.0) * 0.55, uWarm), C_VOID * 0.9, smoothstep(0.0, 0.9, rr));
+  float ring = abs(fract(rr * 5.0 - uT * 0.18) - 0.5);
+  bg += C_STEEL * 0.05 * smoothstep(0.03, 0.0, ring - 0.47) * smoothstep(1.0, 0.25, rr);
+  vec3 col = bg;
+  if (hitT > 0.0){
+    vec3 p = ro + rd * hitT;
+    float e = 0.0006 * hitT;
+    vec3 n = calcN(p, e);
+    bool isCore = gCore < 0.003;
+    float ao = 0.0, sca = 1.0;
+    for (int k = 1; k <= 4; k++){ float h = 0.015 + 0.035 * float(k * k); ao += (h - map(p + n * h)) * sca; sca *= 0.65; }
+    ao = clamp(1.0 - 2.6 * ao, 0.0, 1.0);
+    vec3 L = normalize(vec3(0.5, 0.8, 0.3));
+    float dif = max(dot(n, L), 0.0);
+    float ndv = max(dot(n, -rd), 0.0);
+    float fres = pow(1.0 - ndv, 4.0);
+    float r = length(p);
+    vec3 dir = p / r;
+    float px = hitT / (fl * uRes.y);
+    if (isCore){
+      vec3 coldC = coldbow(0.6 + 0.4 * fres) * (1.1 + 0.6 * uKick * uDrop) + C_FROST * pow(ndv, 4.0) * 0.5;
+      float sw = vnoise3(p * 8.0 + uT * 3.0);
+      vec3 hotC = ironbow(0.55 + 0.4 * pow(ndv, 2.0) + 0.15 * sw) * 1.35;
+      col = mix(coldC, hotC, uCoreHeat);
+    } else {
+      vec2 trv = traces(p, n, px);
+      float tr = trv.x;
+      float pulse = pow(fract(trv.y * 0.25 - uT * 0.9), 10.0);
+      float crawl = pow(fract(trv.y * 0.5 + uT * 2.2), 4.0);
+      float sky = 0.5 + 0.5 * n.y;
+      vec3 base = coldbow(0.1 + 0.42 * dif + 0.1 * sky) * (0.3 + 0.7 * ao);
+      base += C_STEEL * 0.18 * (1.0 - dif) * ao;
+      base += C_ICE * fres * 0.6 * ao;
+      base += coldbow(0.8) * tr * (0.18 + 0.12 * uPad + 0.9 * pulse) * ao;
+      // the core lights the faces that look inward
+      float inward = max(dot(n, -dir), 0.0) * exp(-(r - 0.56) * 2.2);
+      base += mix(C_ICE * 0.65, ironbow(0.6) * 0.9, uCoreHeat) * inward * (0.6 + 0.4 * ao);
+      // the exploit: hot traces spread from three entry points and burrow inward
+      float wob = (vnoise3(dir * 6.0) - 0.5) * 0.45 + (vnoise3(dir * 17.0) - 0.5) * 0.15;
+      float inf = 0.0, head = 0.0;
+      vec3 S0 = normalize(vec3(0.75, 0.45, 0.5)), S1 = normalize(vec3(-0.8, 0.2, -0.3)), S2 = normalize(vec3(0.1, -0.6, -0.8));
+      vec3 sp = vec3(uSpread, uSpread * 0.82 - 0.15, uSpread * 0.7 - 0.3);
+      for (int k = 0; k < 3; k++){
+        vec3 S = k == 0 ? S0 : (k == 1 ? S1 : S2);
+        float a = acos(clamp(dot(dir, S), -1.0, 1.0)) + wob;
+        float R = k == 0 ? sp.x : (k == 1 ? sp.y : sp.z);
+        inf = max(inf, smoothstep(R + 0.02, R - 0.12, a));
+        head = max(head, exp(-abs(a - R) * 26.0) * step(0.0, R));
+      }
+      float depth = smoothstep(uFront - 0.05, uFront + 0.12, r);
+      inf *= depth; head *= depth;
+      float trace = max(inf, uHeatAll) * tr;
+      float hh = head * (0.35 + 0.65 * tr);
+      vec3 hotC = ironbow(0.46 + 0.22 * crawl + 0.4 * hh) * (0.8 + 0.7 * crawl + 1.2 * hh);
+      col = mix(base, hotC, clamp(trace + hh, 0.0, 1.0));
+      col = mix(col, col * 0.3 + ironbow(0.08) * 0.22, max(inf, uHeatAll) * (1.0 - tr) * 0.9);
+      // arpeggio notes catch facets as glints
+      vec3 Lg = normalize(hash31(uArpIdx * 1.37 + 0.5) * 2.0 - 1.0);
+      float gl = pow(max(dot(reflect(rd, n), Lg), 0.0), 120.0) * uArpEnv;
+      col += C_FROST * gl * 1.8 * ao;
+      col += C_FROST * pow(max(dot(reflect(rd, n), L), 0.0), 32.0) * 0.18 * ao;
+    }
+    float fog = smoothstep(4.0, 11.0, hitT);
+    col = mix(col, bg, fog * 0.5);
+  }
+  col += mix(C_ICE, ironbow(0.65), uCoreHeat) * coreGlow * (1.0 + 0.8 * uKick * uDrop);
+  // atmosphere: a cold halo hugging the silhouette (it warms as the core falls)
+  float dmin = length(cross(ro, rd));
+  float halo = exp(-max(dmin - 2.12, 0.0) * 5.0) * step(2.1, dmin) + exp(-max(dmin - 2.12, 0.0) * 1.4) * 0.25;
+  col += mix(C_ICE * 0.55, ironbow(0.42) * 0.85, uWarm) * halo * (0.55 + 0.25 * uPad + 0.4 * uKick * uDrop) * uIn;
+  col += C_ICE * edgeGlow * 0.25;
+  col *= uIn;
+  col = col / (1.0 + max(col - 0.85, 0.0));
+  o = vec4(col, 1.0);
+}
+</script>
+
+<!-- datamosh: one step of the motion-vector smear -->
+<script id="fs-mosh" type="x-shader/x-fragment">
+uniform sampler2D uPrev, uLive;
+uniform vec2 uRes;
+uniform float uSeed, uStep;
+out vec4 o;
+void main(){
+  vec2 fc = gl_FragCoord.xy;
+  float bsz = max(10.0, floor(uRes.y / 26.0));
+  vec2 blk = floor(fc / bsz);
+  float h1 = hash12(blk * 1.37 + uSeed);
+  float h2 = hash12(blk * 0.71 + uSeed * 1.9 + uStep * 0.37 + 4.0);
+  vec2 c = fc / uRes - 0.5;
+  c.x *= uRes.x / uRes.y;
+  vec2 flow = vec2(-c.y, c.x) * 0.45 + c * 0.55;
+  float row = hash12(vec2(floor(fc.y / (bsz * 3.0)), uSeed));
+  vec2 mv = flow * uRes.y * 0.0055 * (0.3 + h1);
+  mv.x += (row - 0.5) * uRes.y * 0.022 * step(0.78, row);
+  mv.y -= uRes.y * 0.011 * step(0.9, h1);
+  mv = floor(mv + 0.5);
+  vec3 prev = texture(uPrev, (fc - mv) / uRes).rgb;
+  vec3 live = texture(uLive, fc / uRes).rgb;
+  float refresh = step(0.94, h2);
+  vec3 col = mix(prev, live, refresh);
+  // chroma bleeds from the stale frame, luma from the live one, in some blocks
+  float lumL = dot(live, vec3(0.3, 0.55, 0.15)), lumP = dot(prev, vec3(0.3, 0.55, 0.15));
+  col = mix(col, prev * (lumL / max(lumP, 0.03)), step(0.86, h1) * step(h2, 0.5) * 0.7);
+  o = vec4(clamp(col, 0.0, 1.0), 1.0);
+}
+</script>
+
+<!-- freeze: the patch slams shut and the frame turns to ice -->
+<script id="fs-freeze" type="x-shader/x-fragment">
+uniform sampler2D uImg, uAtlA, uAtlB, uStr;
+uniform vec4 uAA, uAAi, uAB, uABi;
+uniform float uLen[24];
+uniform vec2 uRes;
+uniform float uFt, uHexS, uHexRot, uGap, uOut;
+out vec4 o;
+float lum(vec3 c){ return dot(c, vec3(0.3, 0.55, 0.15)); }
+float code(int row, int i){ return texelFetch(uStr, ivec2(i, row), 0).r * 255.0; }
+float strA(vec2 fc, int row, vec2 ctr, float h){
+  float len = uLen[row];
+  float w = h * uAAi.x / uAAi.y;
+  vec2 q = (fc - (ctr - vec2(len * w * 0.5, h * 0.5))) / vec2(w, h);
+  vec2 dx = dFdx(q), dy = dFdy(q);
+  float inside = step(0.0, q.y) * step(q.y, 1.0) * step(0.0, q.x) * step(q.x, len - 1e-3);
+  float g = glyph(uAtlA, uAA, uAAi, code(row, int(clamp(q.x, 0.0, len - 1.0))), vec2(fract(q.x), clamp(q.y, 0.0, 1.0)), dx, dy);
+  return g * inside;
+}
+float strB(vec2 fc, int row, vec2 ctr, float h){
+  float len = uLen[row];
+  float w = h * uABi.x / uABi.y;
+  vec2 q = (fc - (ctr - vec2(len * w * 0.5, h * 0.5))) / vec2(w, h);
+  vec2 dx = dFdx(q), dy = dFdy(q);
+  float inside = step(0.0, q.y) * step(q.y, 1.0) * step(0.0, q.x) * step(q.x, len - 1e-3);
+  float g = glyph(uAtlB, uAB, uABi, code(row, int(clamp(q.x, 0.0, len - 1.0))), vec2(fract(q.x), clamp(q.y, 0.0, 1.0)), dx, dy);
+  return g * inside;
+}
+// crystalline frost: distance to voronoi cell borders
+float frostCells(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  float d1 = 8.0, d2 = 8.0;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++){
+    vec2 g = vec2(x, y);
+    vec2 r = g + hash22(i + g) - f;
+    float d = dot(r, r);
+    if (d < d1){ d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+  }
+  return sqrt(d2) - sqrt(d1);
+}
+void main(){
+  vec2 fc = gl_FragCoord.xy;
+  float m = min(uRes.x, uRes.y);
+  vec2 p = (fc - 0.5 * uRes) / m;
+  float ft = uFt;
+  float frozen = step(0.0, ft);
+  float A = mix(0.30, 0.36, smoothstep(0.75, 1.3, uRes.x / uRes.y));   // hex apothem
+  vec2 hp = rot(uHexRot) * p;
+  float dh = sdHex(hp, A * uHexS);
+
+  // the frozen frame drifts closer; a shockwave rolls out from the patch
+  float zoom = 1.0 + 0.04 * smoothstep(0.0, 4.0, ft);
+  vec2 uv = ((fc - 0.5 * uRes) / zoom + 0.5 * uRes) / uRes;
+  float swR = ft * 1.25;
+  float sw = frozen * exp(-pow((dh - swR) * 11.0, 2.0)) * exp(-ft * 1.1);
+  uv -= normalize(p + 1e-5) * sw * 0.018;
+  vec3 img = texture(uImg, uv).rgb;
+  vec2 tpx = 1.5 / vec2(textureSize(uImg, 0));
+  float lx = lum(texture(uImg, uv + vec2(tpx.x, 0.0)).rgb) - lum(texture(uImg, uv - vec2(tpx.x, 0.0)).rgb);
+  float ly = lum(texture(uImg, uv + vec2(0.0, tpx.y)).rgb) - lum(texture(uImg, uv - vec2(0.0, tpx.y)).rgb);
+  float edge = length(vec2(lx, ly));
+  float l = lum(img);
+  float heatness = clamp((img.r - img.b) * 1.6 + 0.2, 0.0, 1.0);
+
+  // everything turns to ice: brightness keeps, heat becomes cold
+  vec3 ice = coldbow(clamp(pow(l, 0.85) * 1.15 + heatness * 0.12, 0.0, 0.93)) * 0.9;
+  ice += C_FROST * smoothstep(0.05, 0.35, edge) * 0.55;
+  // frost spreading out from the patch
+  float front = ft * 0.42 + 0.02 - max(dh, 0.0) + (vnoise(p * 9.0) - 0.5) * 0.06;
+  float frostAmt = smoothstep(0.0, 0.08, front) * frozen;
+  float fc1 = frostCells(p * 17.0 + 3.0);
+  float fc2 = frostCells(p * 46.0);
+  float crack = (1.0 - smoothstep(0.0, 0.05, fc1)) * 0.6 + (1.0 - smoothstep(0.0, 0.06, fc2)) * 0.3;
+  crack *= smoothstep(1.1, 0.2, max(dh, 0.0));
+  ice = mix(ice, ice * 0.85 + C_FROST * 0.14, frostAmt * 0.45);
+  ice += C_ICE * crack * frostAmt * 0.32;
+  float frontLine = exp(-abs(front) * 60.0) * frozen * smoothstep(3.6, 1.5, ft);
+  ice += C_FROST * frontLine * 0.45;
+  // sparkles
+  vec2 sg = floor(fc / 3.0);
+  float sh = hash12(sg + 17.0);
+  float tw = pow(max(0.0, sin(ft * (3.0 + sh * 6.0) + sh * 40.0)), 24.0);
+  ice += C_FROST * step(0.996, sh) * tw * frostAmt * 1.5;
+  ice += C_FROST * sw * 1.2;
+
+  vec3 col = mix(img * mix(1.0, 0.16, uGap), ice, frozen);
+  // white flash of the slam fades to ice
+  col = mix(col, C_FROST, frozen * exp(-ft * 7.0) * 0.85);
+
+  // the hexagonal patch
+  float S = uHexS;
+  float inner = dh + 0.075 * S;
+  float hexIn = 1.0 - smoothstep(-0.0015, 0.0015, dh);
+  float panel = 1.0 - smoothstep(-0.0015, 0.0015, inner);
+  float bev = clamp(-dh / (0.075 * S), 0.0, 1.0);
+  // shadow cast on the frozen frame
+  float shadow = smoothstep(0.08, 0.0, dh - 0.01) * (1.0 - hexIn);
+  col *= 1.0 - 0.45 * shadow * frozen;
+  // frame: bevelled cold metal; light from the upper left
+  vec2 eps = vec2(0.002, 0.0);
+  vec2 g = vec2(sdHex(rot(uHexRot) * (p + eps.xy), A * S) - sdHex(rot(uHexRot) * (p - eps.xy), A * S),
+                sdHex(rot(uHexRot) * (p + eps.yx), A * S) - sdHex(rot(uHexRot) * (p - eps.yx), A * S));
+  vec2 gn = normalize(g + 1e-6);
+  // machined profile: outer chamfer, flat face with an engraved groove, inner chamfer
+  float pw = 1.5 / (m * 0.075 * S);                      // one pixel in bevel units
+  float outerB = 1.0 - smoothstep(0.2 - pw, 0.2 + pw, bev);
+  float innerB = smoothstep(0.8 - pw, 0.8 + pw, bev);
+  float tilt = outerB - innerB;
+  vec3 nrm = normalize(vec3(gn * tilt * 1.1, 1.0));
+  vec3 Lh = normalize(vec3(-0.5, 0.62, 0.6));
+  float lit = clamp(dot(nrm, Lh), 0.0, 1.0);
+  float spec = pow(clamp(dot(reflect(-Lh, nrm), vec3(0.0, 0.0, 1.0)), 0.0, 1.0), 18.0);
+  vec3 face = mix(C_DEEP * 1.1, C_STEEL * 0.9, 0.35 + 0.25 * (hp.y / (A * S)));
+  vec3 metal = mix(C_VOID * 0.6, face * 1.05, lit * 1.2) + C_FROST * spec * 0.9 * abs(tilt) + C_ICE * 0.12 * (1.0 - abs(tilt));
+  float groove = abs(bev - 0.5);
+  metal *= 1.0 - 0.55 * (1.0 - smoothstep(0.0, 0.03 + pw, groove - 0.012));
+  metal += C_ICE * 0.22 * (1.0 - smoothstep(0.0, pw * 1.5, abs(bev - 0.535)));
+  metal += C_ICE * 0.9 * exp(-abs(dh) * 320.0) + C_ICE * 0.6 * exp(-abs(inner) * 320.0);
+  // hex bolts at the six corners, on the flat face
+  float bolts = 0.0;
+  for (int i = 0; i < 6; i++){
+    float an = float(i) * PI / 3.0;
+    vec2 bc = vec2(cos(an), sin(an)) * (A * S - 0.0375 * S) * 1.1547;
+    vec2 bp = rot(0.5) * (hp - bc);
+    float bd = sdHex(bp, 0.0115 * S);
+    float bin = 1.0 - smoothstep(-0.0008, 0.0008, bd);
+    bolts = max(bolts, bin);
+    float bl = clamp(dot(normalize(bp + 1e-5), normalize(vec2(-0.5, 0.62))), -1.0, 1.0);
+    vec3 boltC = mix(C_STEEL, C_FROST, 0.35 + 0.45 * bl * smoothstep(-0.006 * S, 0.0, bd)) ;
+    metal = mix(metal, boltC, bin);
+    metal = mix(metal, C_VOID * 0.6, (1.0 - smoothstep(0.0, 0.003, abs(bd - 0.0015))) * (1.0 - bin) * 0.6);
+  }
+  vec3 frame = metal;
+  // inner panel: frosted glass over the frozen frame, with the fix
+  vec3 glassC = mix(C_DEEP, ice, 0.22) * 0.85 + C_ICE * 0.06 * (1.0 - smoothstep(0.0, A * S, length(hp)));
+  glassC += C_ICE * 0.25 * exp(-abs(inner) * 200.0);
+  float h1 = A * S * 0.11, h2 = A * S * 0.30, h3 = A * S * 0.115;
+  vec2 ctr = 0.5 * uRes + rot(-uHexRot) * vec2(0.0, 0.0) * m;
+  vec2 tq = rot(uHexRot) * (fc - 0.5 * uRes) + 0.5 * uRes;
+  float t1 = strA(tq, 4, ctr + vec2(0.0, A * S * 0.40) * m, h1 * m);
+  float t2 = strB(tq, 3, ctr + vec2(0.0, A * S * 0.03) * m, h2 * m);
+  float t3 = strA(tq, 5, ctr - vec2(0.0, A * S * 0.36) * m, h3 * m);
+  float txtOn = smoothstep(0.05, 0.35, ft);
+  glassC = mix(glassC, C_MIST, t1 * txtOn);
+  glassC = mix(glassC, C_FROST, t2 * smoothstep(0.0, 0.2, ft));
+  glassC = mix(glassC, C_ICE, t3 * txtOn);
+  vec3 hexC = mix(frame, glassC, panel);
+  // before impact the patch is a dark silhouette rushing in
+  vec3 preC = mix(C_VOID, C_STEEL * 0.6, lit * (1.0 - panel)) + C_ICE * 0.5 * exp(-abs(dh) * 90.0);
+  hexC = mix(preC, hexC, frozen);
+  col = mix(col, hexC, hexIn);
+  col *= uOut;
+  o = vec4(col, 1.0);
+}
+</script>
+
+<!-- greetings: plasma, copper bars, a sine scroller and the title card -->
+<script id="fs-greet" type="x-shader/x-fragment">
+uniform sampler2D uAtlA, uAtlB, uAtlC, uStr;
+uniform vec4 uAA, uAAi, uAB, uABi;
+uniform float uLen[24];
+uniform vec2 uRes;
+uniform float uT, uKick, uClap, uScroll, uCard, uCardT, uTitle, uIn;
+out vec4 o;
+float code(int row, int i){ return texelFetch(uStr, ivec2(i, row), 0).r * 255.0; }
+// the title: each letter drops in heavy and condensed, then settles light and expanded (x = light, y = heavy)
+vec2 titleCov(vec2 fc, vec2 ctr, float h, out float ci){
+  float len = uLen[1];
+  float w = h * uABi.x / uABi.y;
+  vec2 q0 = (fc - (ctr - vec2(len * w * 0.5, h * 0.5))) / vec2(w, h);
+  vec2 dx = dFdx(q0), dy = dFdy(q0);
+  ci = floor(q0.x);
+  float age = uTitle - ci * 0.125;
+  float k = clamp(age / 0.45, 0.0, 1.0) - 1.0;
+  float yo = 0.5 * (1.0 - (1.0 + 2.70158 * k * k * k + 1.70158 * k * k));
+  vec2 q = vec2(q0.x, q0.y - yo);
+  float inside = step(0.0, q.y) * step(q.y, 1.0) * step(0.0, q.x) * step(q.x, len - 1e-3);
+  float cd = code(1, int(clamp(q.x, 0.0, len - 1.0)));
+  vec2 luv = vec2(fract(q.x), clamp(q.y, 0.0, 1.0));
+  return vec2(glyph(uAtlB, uAB, uABi, cd, luv, dx, dy), glyph(uAtlC, uAB, uABi, cd, luv, dx, dy)) * inside;
+}
+// coverage of a centred string; per-char reveal r (chars revealed, fractional) and age output
+float strB(vec2 fc, int row, vec2 ctr, float h, out float ci){
+  float len = uLen[row];
+  float w = h * uABi.x / uABi.y;
+  vec2 q = (fc - (ctr - vec2(len * w * 0.5, h * 0.5))) / vec2(w, h);
+  vec2 dx = dFdx(q), dy = dFdy(q);
+  ci = floor(q.x);
+  float inside = step(0.0, q.y) * step(q.y, 1.0) * step(0.0, q.x) * step(q.x, len - 1e-3);
+  float g = glyph(uAtlB, uAB, uABi, code(row, int(clamp(q.x, 0.0, len - 1.0))), vec2(fract(q.x), clamp(q.y, 0.0, 1.0)), dx, dy);
+  return g * inside;
+}
+float scrollerH(){ return min(uRes.y * 0.115, uRes.x * 0.11); }
+// the sine scroller: returns coverage, writes vertical position inside the glyph
+float scroller(vec2 q, out float gy){
+  float ch = scrollerH();
+  float cw = ch * uAAi.x / uAAi.y;
+  float X = q.x / cw + uScroll;
+  float idx = floor(X);
+  float baseY = uRes.y * mix(0.47, 0.5, step(uRes.x, uRes.y));
+  float yoff = ch * 0.62 * sin(q.x / uRes.x * TAU * 0.9 - uT * 2.6) + ch * 0.12 * sin(q.x / uRes.x * TAU * 3.1 + uT * 4.3);
+  gy = (q.y - (baseY + yoff - ch * 0.5)) / ch;
+  vec2 g = vec2(X, gy), dx = dFdx(g), dy = dFdy(g);
+  float inside = step(0.0, idx) * step(idx, uLen[0] - 1.0) * step(0.0, gy) * step(gy, 1.0);
+  return inside * glyph(uAtlA, uAA, uAAi, code(0, int(clamp(idx, 0.0, uLen[0] - 1.0))), vec2(fract(X), clamp(gy, 0.0, 1.0)), dx, dy);
+}
+vec3 bars(vec2 q, vec3 col, float amt){
+  // copper bars on a rotating drum: back half first, then the front half
+  for (int pass = 0; pass < 2; pass++){
+    for (int i = 0; i < 9; i++){
+      float fi = float(i);
+      float ph = uT * 1.45 + fi * 0.698;
+      float zz = cos(ph);
+      if ((pass == 0) != (zz < 0.0)) continue;
+      float y = uRes.y * (0.5 + 0.23 * sin(ph) * amt + 0.025 * sin(uT * 0.9 + fi * 2.1));
+      float hw = uRes.y * (0.02 + 0.007 * zz) * (1.0 + 0.25 * uKick) * amt;
+      float dy = (q.y - y) / max(hw, 1.0);
+      if (abs(dy) < 1.0){
+        float prof = 1.0 - dy * dy;
+        float lit = prof * (0.6 + 0.4 * zz);
+        vec3 c = mod(fi, 3.0) < 0.5 ? mix(C_DEEP, C_MIST, lit) + C_FROST * pow(prof, 10.0) * 0.35
+                                    : coldbow(0.1 + 0.85 * lit) + C_FROST * pow(prof, 16.0) * 0.4 * (0.5 + 0.5 * zz);
+        c *= 0.92 + 0.08 * step(0.5, fract(q.y * 0.5));
+        col = mix(col, c, smoothstep(1.0, 0.8, abs(dy)) * amt);
+      }
+    }
+  }
+  return col;
+}
+void main(){
+  vec2 fc = gl_FragCoord.xy;
+  float m = min(uRes.x, uRes.y);
+  float horizon = uRes.y * 0.18 * (1.0 - smoothstep(0.0, 0.6, uTitle));
+  vec2 q = fc;
+  float refl = step(fc.y, horizon);
+  if (refl > 0.5){
+    float dd = (horizon - fc.y) / horizon;
+    q.y = 2.0 * horizon - fc.y + sin(fc.y * 0.09 + uT * 6.0) * 4.0 * dd;
+    q.x += sin(fc.y * 0.05 - uT * 3.0) * 6.0 * dd;
+  }
+  float titleA = smoothstep(0.0, 1.0, uTitle);
+  // backdrop: a dark copper gradient with a low plasma
+  vec2 pp = q / m;
+  float pl = sin(pp.x * 4.1 + uT * 0.8) + sin(pp.y * 5.3 - uT * 1.1) + sin((pp.x + pp.y) * 3.6 + uT * 0.6)
+           + sin(length(pp - vec2(0.9, 0.6)) * 9.0 - uT * 1.6);
+  float vy = q.y / uRes.y;
+  vec3 col = mix(C_VOID, C_DEEP, smoothstep(0.1, 0.95, vy) * 0.8);
+  col += coldbow(0.3) * (0.5 + 0.5 * sin(pl * 2.0)) * 0.07 * (1.0 - 0.6 * titleA);
+  col += C_ICE * 0.035 * uKick;
+  float barAmt = smoothstep(0.0, 0.7, uIn) * (1.0 - 0.8 * titleA);
+  col = bars(q, col, barAmt);
+
+  // sine scroller with a drop shadow and an ice rim
+  float ch = scrollerH();
+  float gy, gy2;
+  float sc = scroller(q, gy);
+  float shd = scroller(q + vec2(-0.05, 0.075) * ch, gy2);
+  col = mix(col, C_VOID * 0.5, shd * 0.9);
+  vec3 tcol = mix(coldbow(0.62), C_FROST, smoothstep(0.2, 0.8, gy));
+  col = mix(col, tcol * (1.0 + 0.2 * uKick), sc);
+
+  // greeting cards, two lines each, characters settle from frost-white into ice
+  if (uCard >= 0.0 && refl < 0.5){
+    float h = min(uRes.y * 0.052, uRes.x / 17.0);
+    float cy = uRes.y * 0.84;
+    for (int ln = 0; ln < 2; ln++){
+      int row = 6 + int(uCard) * 2 + ln;
+      float ci, ci2;
+      vec2 ctr = vec2(0.5 * uRes.x, cy - float(ln) * h * 1.2);
+      float cov = strB(fc, row, ctr, h, ci);
+      float age = uCardT - 0.06 - (ci + float(ln) * 6.0) * 0.022;
+      float vis = smoothstep(0.0, 0.05, age) * (1.0 - smoothstep(1.75, 1.97, uCardT));
+      float settle = smoothstep(0.0, 0.43, age);
+      vec3 cc = mix(C_FROST * 1.3, ln == 0 ? C_MIST : C_FROST, settle);
+      col = mix(col, C_VOID * 0.5, strB(fc + vec2(-0.04, 0.06) * h, row, ctr, h, ci2) * vis * 0.85);
+      col = mix(col, cc, cov * vis);
+    }
+  }
+
+  // title card: letters arrive white-hot, heavy and condensed, and cool to light, expanded frost
+  if (uTitle > 0.0 && refl < 0.5){
+    float h = min(uRes.y * 0.24, uRes.x / (8.0 * uABi.x / uABi.y) * 0.9);
+    vec2 ctr = vec2(0.5 * uRes.x, uRes.y * 0.58);
+    vec2 pc = (fc - ctr) / m;
+    // the patch, remembered: two thin hexagons turning behind the name
+    float hr = 0.3 * (1.0 - exp(-uTitle * 3.0));
+    float hx1 = abs(sdHex(rot(0.08 * uTitle) * pc, hr * 1.12));
+    float hx2 = abs(sdHex(rot(-0.05 * uTitle + 0.2) * pc, hr * 1.22));
+    col += C_ICE * (exp(-hx1 * m * 0.9) * 0.45 + exp(-hx2 * m * 1.2) * 0.18) * smoothstep(0.0, 0.8, uTitle);
+    col += C_ICE * 0.16 * exp(-dot(pc, pc) * 9.0) * titleA;
+    float ci;
+    vec2 cv = titleCov(fc, ctr, h, ci);
+    float age = uTitle - ci * 0.125;
+    float k = clamp(age / 0.6, 0.0, 1.0);
+    float cov0 = mix(cv.y, cv.x, smoothstep(0.1, 0.75, k));
+    vec3 cc = k < 0.72 ? ironbow(1.0 - k / 0.72 * 0.88) : mix(C_ICE, C_FROST, (k - 0.72) / 0.28);
+    float vis = smoothstep(0.0, 0.02, age);
+    col = mix(col, cc, cov0 * vis);
+    float sh2 = min(h * 0.2, uRes.x / 21.0);
+    float ci2;
+    float cov2 = strB(fc, 2, vec2(0.5 * uRes.x, ctr.y - h * 0.7), sh2, ci2);
+    float age2 = uTitle - 1.1 - ci2 * 0.03;
+    col = mix(col, mix(C_FROST, mix(C_MIST, C_FROST, 0.35), smoothstep(0.0, 0.43, age2)), cov2 * smoothstep(0.0, 0.03, age2));
+  }
+
+  if (refl > 0.5){
+    float dd = (horizon - fc.y) / horizon;
+    col = mix(col, C_VOID, 0.5 + 0.4 * dd);
+  }
+  col += C_ICE * 0.35 * exp(-abs(fc.y - horizon) * 0.6) * barAmt;
+  col *= smoothstep(0.0, 0.25, uIn);
+  o = vec4(col, 1.0);
+}
+</script>
+
+<!-- post: glitch, crush, chroma split, the injected payload, flash, vignette, grain -->
+<script id="fs-post" type="x-shader/x-fragment">
+uniform sampler2D uScene, uAtlA, uStr;
+uniform vec4 uAA, uAAi;
+uniform float uLen[24];
+uniform vec2 uRes;
+uniform float uT, uTear, uCrush, uSplit, uSeed, uFlash, uGrain, uVig, uFade, uPay, uPayFlip;
+uniform vec3 uFlashCol;
+uniform vec2 uShake, uPayOff;
+out vec4 o;
+float code(int row, int i){ return texelFetch(uStr, ivec2(i, row), 0).r * 255.0; }
+// a string drawn on a dark slab: x = glyph coverage, y = slab mask
+vec2 payload(vec2 fc, int row, vec2 ctr, float h){
+  float len = uLen[row];
+  float w = h * uAAi.x / uAAi.y;
+  vec2 q = (fc - (ctr - vec2(len * w * 0.5, h * 0.5))) / vec2(w, h);
+  vec2 dx = dFdx(q), dy = dFdy(q);
+  float slab = step(-0.6, q.x) * step(q.x, len + 0.6) * step(-0.18, q.y) * step(q.y, 1.18);
+  float inside = step(0.0, q.y) * step(q.y, 1.0) * step(0.0, q.x) * step(q.x, len - 1e-3);
+  float g = glyph(uAtlA, uAA, uAAi, code(row, int(clamp(q.x, 0.0, len - 1.0))), vec2(fract(q.x), clamp(q.y, 0.0, 1.0)), dx, dy);
+  return vec2(g * inside, slab);
+}
+void main(){
+  vec2 uv = gl_FragCoord.xy / uRes + uShake;
+  if (uTear > 0.0){
+    float rows = 18.0 + floor(hash11(uSeed) * 22.0);
+    float band = floor(uv.y * rows);
+    float hb = hash12(vec2(band, uSeed));
+    uv.x += (hb - 0.5) * 0.3 * uTear * step(0.62, hb);
+    vec2 grid = vec2(12.0, 7.0) * (1.0 + floor(hash11(uSeed + 3.0) * 3.0));
+    vec2 blk = floor(uv * grid);
+    float hk = hash12(blk + uSeed * 1.7);
+    uv += (hash22(blk + uSeed) - 0.5) * 0.16 * uTear * step(0.8, hk);
+  }
+  if (uCrush > 0.0){
+    float cs = mix(1.0, 18.0, uCrush);
+    uv = (floor(uv * uRes / cs) + 0.5) * cs / uRes;
+  }
+  vec2 suv = clamp(uv, 0.0, 1.0);
+  vec2 sp = vec2(uSplit, uSplit * 0.25);
+  vec3 col = texture(uScene, suv).rgb;
+  // additive split: red ghosts one way, blue the other, so it never invents green
+  col.r = max(col.r, texture(uScene, clamp(suv + sp, 0.0, 1.0)).r);
+  col.b = max(col.b, texture(uScene, clamp(suv - sp, 0.0, 1.0)).b);
+  if (uCrush > 0.0){
+    float l = dot(col, vec3(0.3, 0.55, 0.15));
+    vec3 q = ironbow(floor(l * 6.0 + 0.5) / 6.0);
+    col = mix(col, q, uCrush);
+  }
+  // the exploit itself, torn by the same glitch as the picture
+  if (uPay > 0.0){
+    vec2 fc = uv * uRes;
+    if (uPayFlip > 0.5) fc.x = uRes.x - fc.x;
+    float h = min(uRes.y * 0.075, uRes.x / 25.0);
+    vec2 c1 = vec2(0.5 * uRes.x, 0.54 * uRes.y) + uPayOff * uRes;
+    vec2 a = payload(fc, 18, c1, h);
+    vec2 b = payload(fc, 19, c1 - vec2(0.0, h * 1.55), h * 0.62);
+    float slab = max(a.y, b.y);
+    col = mix(col, C_VOID * 0.85, slab * 0.88 * uPay);
+    float flick = hash11(floor(uT * 30.0) + 5.0);
+    col = mix(col, ironbow(0.62 + 0.3 * flick), a.x * uPay);
+    col = mix(col, ironbow(0.45), b.x * uPay);
+  }
+  col = mix(col, uFlashCol, clamp(uFlash, 0.0, 1.0));
+  vec2 c = gl_FragCoord.xy / uRes - 0.5;
+  c.x *= mix(1.0, uRes.x / uRes.y, 0.5);
+  col *= 1.0 - uVig * dot(c, c) * 1.3;
+  col += (hash12(gl_FragCoord.xy + fract(uT * 7.13) * 311.0) - 0.5) * uGrain;
+  col = mix(col, C_VOID, uFade);
+  o = vec4(col, 1.0);
+}
+</script>
+
+<script>
+(() => {
+'use strict';
+// =====================================================================
+// 1. Song grid: 120 BPM, 4/4, 16 steps per bar, 32 bars = 64 s
+//    Everything (audio and visuals) keys off this one table.
+// =====================================================================
+const BPM = 120, BEAT = 60 / BPM, BAR = BEAT * 4, STEP = BAR / 16, BARS = 32, LEN = BARS * BAR;
+const SR = 44100;
+const SECTIONS = [
+  { name: 'boot', from: 0, to: 4 },
+  { name: 'tunnel', from: 4, to: 12 },
+  { name: 'firewall', from: 12, to: 20 },
+  { name: 'twist', from: 20, to: 24 },
+  { name: 'greetings', from: 24, to: 32 },
+];
+const IMPACT_T = 44.0, GAP_T = 43.8, FREEZE_SRC_T = 43.5, TITLE_T = 60.0;
+const CHORDS = {
+  Am: [57, 60, 64], F: [53, 57, 60], Dm: [50, 53, 57], E: [52, 56, 59],
+  G: [55, 59, 62], C: [48, 52, 55], Bb: [50, 53, 58],
+};
+const ROOT = { Am: 33, F: 29, Dm: 38, E: 40, G: 31, C: 36, Bb: 34 };
+const B = o => Object.assign({ ch: 'Am', kick: 0, clap: 0, hat: 0, ohat: 0, bass: 0, cut: 0, arp: 0, pad: 0, lead: 0, fill: 0, crash: 0, riser: 0 }, o);
+const DRUMS = { kick: 1, clap: 1, hat: 1, ohat: 1 };
+const ARR = [
+  // boot (bars 1-4)
+  B({ pad: .7 }), B({ pad: .8 }), B({ pad: .85, arp: .35 }), B({ pad: .9, arp: .5, hat: .45, riser: 1, fill: 'roll' }),
+  // tunnel (5-12)
+  B({ ...DRUMS, clap: 0, bass: 'acid', cut: .12, pad: .3, crash: 1 }),
+  B({ ...DRUMS, clap: 0, bass: 'acid', cut: .22, pad: .3 }),
+  B({ ...DRUMS, ch: 'F', bass: 'acid', cut: .32, pad: .3 }),
+  B({ ...DRUMS, ch: 'G', bass: 'acid', cut: .42, pad: .3 }),
+  B({ ...DRUMS, bass: 'acid', cut: .52, pad: .35, arp: .6, crash: 1 }),
+  B({ ...DRUMS, bass: 'acid', cut: .62, pad: .35, arp: .65 }),
+  B({ ...DRUMS, ch: 'F', bass: 'acid', cut: .74, pad: .35, arp: .7 }),
+  B({ ...DRUMS, ch: 'E', bass: 'acid', cut: .88, pad: .35, arp: .75, fill: 'roll', riser: 1 }),
+  // firewall breakdown (13-16)
+  B({ pad: 1.1, arp: 1.2, bass: 'sub', ohat: .45, crash: 1 }),
+  B({ ch: 'F', pad: 1.1, arp: 1.2, bass: 'sub', ohat: .45 }),
+  B({ ch: 'Dm', pad: 1.15, arp: 1.25, bass: 'sub', ohat: .55, hat: .4 }),
+  B({ ch: 'E', pad: 1.2, arp: 1.25, bass: 'sub', ohat: .6, hat: .6, riser: 1, fill: 'roll' }),
+  // firewall drop (17-20): the exploit crawls in
+  B({ ...DRUMS, bass: 'acid', cut: .8, pad: .75, arp: .8, lead: 'drop', crash: 1 }),
+  B({ ...DRUMS, ch: 'F', bass: 'acid', cut: .82, pad: .75, arp: .8, lead: 'drop' }),
+  B({ ...DRUMS, ch: 'Dm', bass: 'acid', cut: .86, pad: .75, arp: .8, lead: 'drop' }),
+  B({ ...DRUMS, ch: 'E', bass: 'acid', cut: .9, pad: .75, arp: .8, lead: 'drop' }),
+  // the twist (21-24): glitch, impact, ice
+  B({ ...DRUMS, bass: 'acid', cut: 1, pad: .8, arp: .9, lead: 'drop', riser: 1 }),
+  B({ ...DRUMS, ch: 'Bb', bass: 'acid', cut: 1, pad: .8, arp: .9, lead: 'drop', riser: 1 }),
+  B({ impact: 1 }),
+  B({ swell: 1 }),
+  // greetings (25-32)
+  B({ ...DRUMS, ch: 'F', bass: 'synth', pad: .8, lead: 'greet', crash: 1 }),
+  B({ ...DRUMS, ch: 'G', bass: 'synth', pad: .8, lead: 'greet' }),
+  B({ ...DRUMS, ch: 'C', bass: 'synth', pad: .8, arp: .5, lead: 'greet' }),
+  B({ ...DRUMS, bass: 'synth', pad: .8, arp: .55, lead: 'greet' }),
+  B({ ...DRUMS, ch: 'F', bass: 'synth', pad: .85, arp: .6, lead: 'greet', crash: 1 }),
+  B({ ...DRUMS, ch: 'G', bass: 'synth', pad: .85, arp: .6, lead: 'greet', fill: 'roll' }),
+  B({ ...DRUMS, ch: 'C', clap: 0, bass: 'synth', pad: .9, arp: .5, lead: 'greet', crash: 1 }),
+  B({ pad: 1, lead: 'greet', end: 1 }),
+];
+const PAT = {
+  kick: 'x...x...x...x...',
+  clap: '....x.......x...',
+  hat:  'xoxoxoxoxoxoxoxo',
+  ohat: '..x...x...x...x.',
+};
+// acid line: [semitones over root | null, accent, slide]
+const ACID = [[0, 1, 0], [0, 0, 0], [12, 0, 1], [0, 1, 0], null, [0, 0, 0], [12, 1, 0], [3, 0, 1],
+              [0, 1, 0], null, [0, 0, 0], [7, 1, 0], [0, 0, 0], [12, 1, 1], null, [10, 0, 0]];
+const ARP_PAT = [0, 2, 4, 1, 3, 5, 2, 4, 0, 2, 4, 1, 3, 5, 4, 3];
+// lead melodies: [step within bar, midi, length in steps]
+const LEAD = {
+  drop: [
+    [[0, 69, 2], [2, 72, 2], [4, 76, 4], [8, 74, 2], [10, 72, 2], [12, 71, 2], [14, 72, 2]],
+    [[0, 72, 3], [3, 69, 3], [6, 77, 6], [12, 76, 4]],
+    [[0, 74, 2], [2, 77, 2], [4, 81, 4], [8, 79, 2], [10, 77, 2], [12, 76, 2], [14, 74, 2]],
+    [[0, 76, 3], [3, 80, 3], [6, 83, 4], [10, 80, 2], [12, 76, 4]],
+    [[0, 81, 6], [6, 84, 2], [8, 83, 4], [12, 81, 4]],
+    [[0, 82, 6], [6, 81, 2], [8, 77, 4], [12, 74, 4]],
+  ],
+  greet: [
+    [[0, 81, 6], [6, 79, 2], [8, 77, 4], [12, 76, 4]],
+    [[0, 74, 6], [6, 76, 2], [8, 79, 6], [14, 81, 2]],
+    [[0, 79, 4], [4, 76, 4], [8, 72, 4], [12, 76, 2], [14, 79, 2]],
+    [[0, 81, 10], [10, 83, 2], [12, 84, 4]],
+    [[0, 84, 4], [4, 81, 4], [8, 77, 4], [12, 81, 4]],
+    [[0, 83, 4], [4, 79, 4], [8, 74, 4], [12, 79, 2], [14, 83, 2]],
+    [[0, 84, 6], [6, 83, 2], [8, 79, 4], [12, 76, 4]],
+    [[0, 81, 16]],
+  ],
+};
+const leadBarIndex = bar => ARR[bar].lead === 'drop' ? bar - 16 : bar - 24;
+// the glitch edit: the same table bends audio (sample edits) and picture (scene time + datamosh)
+const GLITCH = [
+  { t0: 40.00, t1: 40.50, kind: 'repeat', slice: 0.125 },
+  { t0: 40.50, t1: 41.00, kind: 'crush' },
+  { t0: 41.00, t1: 41.50, kind: 'repeat', slice: 0.0625 },
+  { t0: 41.50, t1: 42.00, kind: 'reverse' },
+  { t0: 42.00, t1: 42.50, kind: 'mosh' },
+  { t0: 42.50, t1: 42.75, kind: 'repeat', slice: 0.0625 },
+  { t0: 42.75, t1: 43.00, kind: 'repeat', slice: 0.03125 },
+  { t0: 43.00, t1: 43.80, kind: 'tapestop' },
+  { t0: 43.80, t1: 44.00, kind: 'gap' },
+];
+const glitchAt = t => { for (const e of GLITCH) if (t >= e.t0 && t < e.t1) return e; return null; };
+function srcTime(t){
+  const e = glitchAt(t);
+  if (!e) return t;
+  const u = t - e.t0;
+  if (e.kind === 'repeat') return e.t0 + (u % e.slice);
+  if (e.kind === 'reverse') return e.t1 - u;
+  if (e.kind === 'tapestop'){ const D = e.t1 - e.t0, x = u / D; return e.t0 + D * (1 - Math.pow(1 - x, 3)) / 3; }
+  if (e.kind === 'gap') return e.t0;
+  return t;
+}
+const sectionAt = t => { const bar = Math.floor(t / BAR); for (const s of SECTIONS) if (bar >= s.from && bar < s.to) return s.name; return 'greetings'; };
+
+// the boot console: what the scanner prints and when (seconds)
+const CON = [
+  { at: 0.42, text: 'zd-scan 5.5, a security scanner', col: '#E8F7FF', cps: 0 },
+  { at: 0.80, text: '$ zd-scan --boot ./payments-api', col: '#9BE8FF', cps: 26 },
+  { at: 2.00, left: 'loading payload', right: 'signatures' },
+  { at: 2.50, left: 'injecting', right: 'unit tests' },
+  { at: 3.00, left: 'escalating privileges', right: 'denied' },
+  { at: 3.50, left: 'exfiltrating', right: 'nothing' },
+  { at: 4.00, left: 'reading .env', right: 'refused' },
+  { at: 4.50, left: 'hashing lockfile', right: '1,204 ok' },
+  { at: 5.00, left: 'rotating stale keys', right: '3 retired' },
+  { at: 5.50, left: 'watching the network', right: 'quietly' },
+  { at: 6.30, text: 'ready. nothing is on fire. yet.', col: '#E8F7FF', cps: 22, hot: 'yet.', gap: true },
+];
+const LEADER_COL = 25, LEFT_CPS = 70, DOT_CPS = 90, RES_DELAY = 0.375;
+// typed characters as events (for blips) and per-line state at time t
+function conEvents(){
+  const ev = [];
+  for (const L of CON){
+    if (L.left){
+      for (let i = 0; i < L.left.length; i++) ev.push({ t: L.at + i / LEFT_CPS, kind: 'key', c: L.left.charCodeAt(i) });
+      const dots = LEADER_COL - L.left.length - 1;
+      for (let i = 0; i < dots; i += 3) ev.push({ t: L.at + L.left.length / LEFT_CPS + i / DOT_CPS, kind: 'dot' });
+      ev.push({ t: L.at + RES_DELAY, kind: 'result' });
+    } else if (L.cps > 0){
+      for (let i = 0; i < L.text.length; i++) ev.push({ t: L.at + i / L.cps, kind: 'key', c: L.text.charCodeAt(i) });
+    }
+  }
+  return ev;
+}
+
+// =====================================================================
+// 2. Seeded randomness (Math.random is never used)
+// =====================================================================
+function mulberry32(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+// =====================================================================
+// 3. The soundtrack: a pure function rendered once in an OfflineAudioContext
+// =====================================================================
+const PAD_LFO_HZ = 0.25;   // the pad filter breathes once every two bars; the firewall breathes with it
+const padLFO = t => Math.sin(2 * Math.PI * PAD_LFO_HZ * t);
+// pad filter cutoff per bar (Hz), interpolated linearly across each bar
+const PADCUT = [480, 640, 860, 1100, 700, 700, 760, 820, 900, 950, 1000, 1100, 1300, 1700, 2100, 2600, 2300, 2300, 2400, 2500, 2700, 2900, 900, 1200, 1700, 1800, 1900, 2000, 2100, 2200, 2300, 1600];
+
+async function renderSoundtrack(onProgress){
+  const ctx = new OfflineAudioContext(2, Math.round(SR * LEN), SR);
+  const rng = mulberry32(0x7a3d17);
+  // shared noise
+  const noise = ctx.createBuffer(1, SR * 2, SR);
+  { const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = rng() * 2 - 1; }
+  // convolution reverb from a seeded, exponentially decaying noise impulse
+  const irLen = Math.round(SR * 2.8);
+  const ir = ctx.createBuffer(2, irLen, SR);
+  for (let ch = 0; ch < 2; ch++){
+    const d = ir.getChannelData(ch);
+    for (let i = 0; i < irLen; i++){
+      const x = i / irLen;
+      const env = Math.pow(1 - x, 3.4) * Math.min(1, i / (SR * 0.004));
+      d[i] = (rng() * 2 - 1) * env * (1 - 0.6 * x);
+    }
+    for (let k = 0; k < 9; k++){ const at = Math.round(SR * (0.011 + rng() * 0.07)); d[at] += (rng() < 0.5 ? -1 : 1) * (0.5 - k * 0.04); }
+  }
+
+  const master = ctx.createGain(); master.gain.value = 0.72;
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -16; comp.knee.value = 10; comp.ratio.value = 3.2; comp.attack.value = 0.006; comp.release.value = 0.16;
+  master.connect(comp); comp.connect(ctx.destination);
+  master.gain.setValueAtTime(0.72, 63.0); master.gain.linearRampToValueAtTime(0.0, 63.97);
+
+  const verb = ctx.createConvolver(); verb.normalize = true; verb.buffer = ir;
+  const verbSend = ctx.createGain(); verbSend.gain.value = 1;
+  const verbRet = ctx.createGain(); verbRet.gain.value = 0.42;
+  verbSend.connect(verb); verb.connect(verbRet); verbRet.connect(master);
+  const dly = ctx.createDelay(1.5); dly.delayTime.value = BEAT * 0.75;
+  const dlyFb = ctx.createGain(); dlyFb.gain.value = 0.38;
+  const dlyLp = ctx.createBiquadFilter(); dlyLp.type = 'lowpass'; dlyLp.frequency.value = 2600;
+  const dlySend = ctx.createGain();
+  const dlyRet = ctx.createGain(); dlyRet.gain.value = 0.32;
+  const dlyPan = ctx.createStereoPanner(); dlyPan.pan.value = 0.35;
+  dlySend.connect(dly); dly.connect(dlyLp); dlyLp.connect(dlyFb); dlyFb.connect(dly); dlyLp.connect(dlyPan); dlyPan.connect(dlyRet); dlyRet.connect(master);
+  dlyLp.connect(verbSend);
+
+  const bus = (gain, verbAmt = 0, dlyAmt = 0) => {
+    const g = ctx.createGain(); g.gain.value = gain; g.connect(master);
+    if (verbAmt){ const s = ctx.createGain(); s.gain.value = verbAmt; g.connect(s); s.connect(verbSend); }
+    if (dlyAmt){ const s = ctx.createGain(); s.gain.value = dlyAmt; g.connect(s); s.connect(dlySend); }
+    return g;
+  };
+  const drumBus = bus(1.0, 0.06);
+  const hatHP = ctx.createBiquadFilter(); hatHP.type = 'highpass'; hatHP.frequency.value = 7200;
+  const hatBus = bus(0.55, 0.08); hatHP.connect(hatBus);
+  const clapBP = ctx.createBiquadFilter(); clapBP.type = 'bandpass'; clapBP.frequency.value = 1450; clapBP.Q.value = 0.9;
+  const clapBus = bus(0.9, 0.35); clapBP.connect(clapBus);
+  const duck = ctx.createGain();                 // sidechain pump for bass and pads
+  duck.connect(master);
+  const bassShape = ctx.createWaveShaper();
+  { const n = 1024, c = new Float32Array(n); for (let i = 0; i < n; i++){ const x = i / (n - 1) * 2 - 1; c[i] = Math.tanh(x * 2.2) / Math.tanh(2.2); } bassShape.curve = c; }
+  const bassBus = ctx.createGain(); bassBus.gain.value = 0.42; bassShape.connect(bassBus); bassBus.connect(duck);
+  const padFilter = ctx.createBiquadFilter(); padFilter.type = 'lowpass'; padFilter.Q.value = 3;
+  const padBus = ctx.createGain(); padBus.gain.value = 0.85;
+  padFilter.connect(padBus); padBus.connect(duck);
+  { const s = ctx.createGain(); s.gain.value = 0.55; padBus.connect(s); s.connect(verbSend); }
+  const lfo = ctx.createOscillator(); lfo.frequency.value = PAD_LFO_HZ;
+  const lfoAmt = ctx.createGain(); lfo.connect(lfoAmt); lfoAmt.connect(padFilter.frequency);
+  lfo.start(0);
+  for (let b = 0; b < BARS; b++){
+    const c = PADCUT[b], cn = PADCUT[Math.min(b + 1, BARS - 1)];
+    padFilter.frequency.setValueAtTime(c, b * BAR);
+    padFilter.frequency.linearRampToValueAtTime(cn, (b + 1) * BAR - 0.001);
+    lfoAmt.gain.setValueAtTime(c * 0.42, b * BAR);
+  }
+  const arpLP = ctx.createBiquadFilter(); arpLP.type = 'lowpass'; arpLP.frequency.value = 3200; arpLP.Q.value = 2;
+  const arpBus = bus(0.85, 0.2, 0.45); arpLP.connect(arpBus);
+  const leadBus = bus(1.05, 0.3, 0.38);
+  const fxBus = bus(0.9, 0.5);
+  const bellBus = bus(0.5, 0.7, 0.5);
+
+  // pulse wave (25% duty) for the arpeggio
+  const NH = 48, re = new Float32Array(NH), im = new Float32Array(NH);
+  for (let n = 1; n < NH; n++) re[n] = 2 / (n * Math.PI) * Math.sin(n * Math.PI * 0.25);
+  const pulse = ctx.createPeriodicWave(re, im);
+
+  const noiseSrc = (t, dur, dest, rate = 1) => {
+    const s = ctx.createBufferSource(); s.buffer = noise; s.playbackRate.value = rate;
+    s.connect(dest); s.start(t, rng() * 1.5, dur + 0.05); return s;
+  };
+  const env = (g, t, a, peak, d, sustain = 0.0001) => {
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(Math.max(sustain, 0.0001), t + a + d);
+  };
+
+  function kick(t, v = 1){
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(165, t); o.frequency.exponentialRampToValueAtTime(52, t + 0.09); o.frequency.exponentialRampToValueAtTime(42, t + 0.4);
+    const g = ctx.createGain(); env(g, t, 0.002, 0.85 * v, 0.42);
+    o.connect(g); g.connect(drumBus); o.start(t); o.stop(t + 0.5);
+    const cg = ctx.createGain(); env(cg, t, 0.0015, 0.26 * v, 0.012);
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
+    noiseSrc(t, 0.02, hp); hp.connect(cg); cg.connect(drumBus);
+    // sidechain duck
+    duck.gain.setValueAtTime(0.32, t); duck.gain.setTargetAtTime(1, t + 0.02, 0.09);
+  }
+  function clap(t, v = 1){
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    for (let k = 0; k < 3; k++){ const tk = t + k * 0.011; g.gain.setValueAtTime(0.9 * v, tk); g.gain.exponentialRampToValueAtTime(0.08 * v, tk + 0.009); }
+    g.gain.setValueAtTime(0.75 * v, t + 0.034); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
+    noiseSrc(t, 0.3, g); g.connect(clapBP);
+  }
+  function snare(t, v = 1){
+    const g = ctx.createGain(); env(g, t, 0.001, 0.7 * v, 0.14);
+    noiseSrc(t, 0.18, g); g.connect(clapBP);
+    const o = ctx.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(240, t); o.frequency.exponentialRampToValueAtTime(160, t + 0.06);
+    const og = ctx.createGain(); env(og, t, 0.001, 0.45 * v, 0.08);
+    o.connect(og); og.connect(drumBus); o.start(t); o.stop(t + 0.12);
+  }
+  function hat(t, v, open){
+    const g = ctx.createGain(); env(g, t, 0.001, 0.32 * v, open ? 0.24 : 0.035);
+    noiseSrc(t, open ? 0.3 : 0.06, g, 1.0); g.connect(hatHP);
+  }
+  function crash(t, v = 1){
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3800;
+    const g = ctx.createGain(); env(g, t, 0.012, 0.42 * v, 2.2);
+    noiseSrc(t, 2.3, hp, 0.9); hp.connect(g); g.connect(fxBus);
+  }
+  function riser(t0, t1, v = 1){
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2.5;
+    bp.frequency.setValueAtTime(300, t0); bp.frequency.exponentialRampToValueAtTime(9000, t1);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.5 * v, t1 - 0.02); g.gain.linearRampToValueAtTime(0.0001, t1);
+    const s = ctx.createBufferSource(); s.buffer = noise; s.loop = true; s.connect(bp); s.start(t0); s.stop(t1 + 0.01);
+    bp.connect(g); g.connect(fxBus);
+  }
+  function acid(t, midi, dur, acc, slideFrom, cut){
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    const f = mtof(midi);
+    if (slideFrom != null){ o.frequency.setValueAtTime(mtof(slideFrom), t); o.frequency.exponentialRampToValueAtTime(f, t + 0.055); }
+    else o.frequency.setValueAtTime(f, t);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 13 + acc * 5;
+    const base = 140 + cut * 520, peak = base + (700 + cut * 2900) * (acc ? 1.6 : 1);
+    lp.frequency.setValueAtTime(peak, t); lp.frequency.exponentialRampToValueAtTime(base, t + 0.16 + acc * 0.08);
+    const g = ctx.createGain();
+    const lv = acc ? 0.5 : 0.36;
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(lv, t + 0.004);
+    g.gain.setValueAtTime(lv * 0.85, t + dur - 0.012); g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    o.connect(lp); lp.connect(g); g.connect(bassShape); o.start(t); o.stop(t + dur + 0.02);
+  }
+  function subBass(t, midi, dur){
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = mtof(midi + 12);
+    const o2 = ctx.createOscillator(); o2.type = 'triangle'; o2.frequency.value = mtof(midi + 24);
+    // legato: each bar's note overlaps the next so the sub never gaps
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.24, t + 0.08); g.gain.setValueAtTime(0.24, t + dur - 0.02); g.gain.linearRampToValueAtTime(0.0001, t + dur + 0.12);
+    const g2 = ctx.createGain(); g2.gain.value = 0.18;
+    o.connect(g); o2.connect(g2); g2.connect(g); g.connect(bassBus); o.start(t); o2.start(t); o.stop(t + dur + 0.15); o2.stop(t + dur + 0.15);
+  }
+  function synthBass(t, midi, dur){
+    const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mtof(midi);
+    const o2 = ctx.createOscillator(); o2.type = 'square'; o2.frequency.value = mtof(midi) * 0.5; o2.detune.value = 4;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 4;
+    lp.frequency.setValueAtTime(1400, t); lp.frequency.exponentialRampToValueAtTime(420, t + 0.14);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.42, t + 0.005); g.gain.setValueAtTime(0.36, t + dur - 0.02); g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    const g2 = ctx.createGain(); g2.gain.value = 0.35;
+    o.connect(lp); o2.connect(g2); g2.connect(lp); lp.connect(g); g.connect(bassShape); o.start(t); o2.start(t); o.stop(t + dur + 0.01); o2.stop(t + dur + 0.01);
+  }
+  function padChord(t, dur, notes, level){
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(level, t + 0.35);
+    g.gain.setValueAtTime(level, t + dur - 0.05); g.gain.linearRampToValueAtTime(0.0001, t + dur + 0.6);
+    g.connect(padFilter);
+    const det = [-17, -8, 0, 8, 17];
+    for (const nn of notes){
+      for (let k = 0; k < det.length; k++){
+        const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mtof(nn); o.detune.value = det[k] + (rng() - 0.5) * 3;
+        const pn = ctx.createStereoPanner(); pn.pan.value = (k / (det.length - 1) * 2 - 1) * 0.7;
+        const vg = ctx.createGain(); vg.gain.value = 0.1;
+        o.connect(vg); vg.connect(pn); pn.connect(g); o.start(t, 0); o.stop(t + dur + 0.7);
+      }
+    }
+  }
+  function arpNote(t, midi, v){
+    const o = ctx.createOscillator(); o.setPeriodicWave(pulse); o.frequency.value = mtof(midi);
+    const g = ctx.createGain(); env(g, t, 0.002, 0.2 * v, 0.13);
+    o.connect(g); g.connect(arpLP); o.start(t); o.stop(t + 0.18);
+  }
+  function leadNote(t, midi, dur, slideFrom){
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 5;
+    lp.frequency.setValueAtTime(700, t); lp.frequency.exponentialRampToValueAtTime(3600, t + 0.04); lp.frequency.exponentialRampToValueAtTime(1700, t + 0.4);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.3, t + 0.012); g.gain.setTargetAtTime(0.22, t + 0.02, 0.2);
+    g.gain.setValueAtTime(0.22, t + dur - 0.03); g.gain.linearRampToValueAtTime(0.0001, t + dur + 0.04);
+    const vib = ctx.createOscillator(); vib.frequency.value = 5.6;
+    const vibG = ctx.createGain(); vibG.gain.setValueAtTime(0, t); vibG.gain.linearRampToValueAtTime(0, t + 0.22); vibG.gain.linearRampToValueAtTime(14, t + 0.6);
+    vib.connect(vibG); vib.start(t); vib.stop(t + dur + 0.1);
+    for (const [type, det, lv, mul] of [['sawtooth', -9, 0.45, 1], ['sawtooth', 9, 0.45, 1], ['square', 0, 0.22, 0.5]]){
+      const o = ctx.createOscillator(); o.type = type; o.detune.value = det;
+      const f = mtof(midi) * mul;
+      if (slideFrom != null){ o.frequency.setValueAtTime(mtof(slideFrom) * mul, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.06); }
+      else o.frequency.setValueAtTime(f, t);
+      vibG.connect(o.detune);
+      const og = ctx.createGain(); og.gain.value = lv;
+      o.connect(og); og.connect(lp); o.start(t); o.stop(t + dur + 0.08);
+    }
+    lp.connect(g); g.connect(leadBus);
+  }
+  function blip(t, f, v, dur = 0.012){
+    const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = f;
+    const g = ctx.createGain(); env(g, t, 0.0008, v, dur);
+    o.connect(g); g.connect(fxBus); o.start(t); o.stop(t + dur + 0.02);
+  }
+  function bell(t, midi, v){
+    const f = mtof(midi);
+    for (const [mul, lv, d] of [[1, 1, 2.2], [2.76, 0.35, 0.9], [5.4, 0.12, 0.4]]){
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f * mul;
+      const g = ctx.createGain(); env(g, t, 0.002, 0.16 * v * lv, d);
+      o.connect(g); g.connect(bellBus); o.start(t); o.stop(t + d + 0.1);
+    }
+  }
+  function impact(t){
+    // sub drop
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(92, t); o.frequency.exponentialRampToValueAtTime(34, t + 0.5); o.frequency.exponentialRampToValueAtTime(26, t + 3.5);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(1.25, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 3.8);
+    o.connect(g); g.connect(drumBus); o.start(t); o.stop(t + 3.9);
+    // body noise sweeping down
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(9000, t); lp.frequency.exponentialRampToValueAtTime(180, t + 2.6);
+    const ng = ctx.createGain(); env(ng, t, 0.003, 0.7, 2.8);
+    noiseSrc(t, 3.0, lp, 0.7); lp.connect(ng); ng.connect(fxBus);
+    // the hatch: inharmonic metal partials
+    for (const [f, lv, d] of [[118, 0.4, 1.6], [287, 0.3, 1.3], [611, 0.2, 0.9], [1347, 0.12, 0.7], [2897, 0.06, 0.5]]){
+      const m = ctx.createOscillator(); m.type = 'sine'; m.frequency.value = f;
+      const mg = ctx.createGain(); env(mg, t, 0.001, lv, d);
+      m.connect(mg); mg.connect(fxBus); m.start(t); m.stop(t + d + 0.1);
+    }
+    kick(t, 1.0);
+    crash(t, 1.2);
+  }
+
+  // ---- schedule the arrangement ----
+  // Events are queued as thunks and their nodes are created just in time at each suspend(),
+  // so the live graph only holds what is sounding now (thousands of idle nodes slow every render quantum).
+  const Q = [];
+  const at = (t, fn) => Q.push([t, fn]);
+  let prevBass = null;
+  for (let bar = 0; bar < BARS; bar++){
+    const A = ARR[bar], t0 = bar * BAR, ch = CHORDS[A.ch], root = ROOT[A.ch];
+    if (A.pad){ const notes = A.ch === 'Am' && bar < 4 ? [45, 52, 57, 60] : ch.map(n => n - 12).concat([ch[0]]); at(t0, () => padChord(t0, BAR, notes, A.pad * 0.5)); }
+    if (A.crash) at(t0, () => crash(t0, 1));
+    if (A.riser) at(t0, () => riser(t0, t0 + BAR, bar === 3 ? 0.6 : 1));
+    if (A.bass === 'sub') at(t0, () => subBass(t0, root, BAR));
+    for (let s = 0; s < 16; s++){
+      const t = t0 + s * STEP;
+      if (A.kick && PAT.kick[s] === 'x') at(t, () => kick(t, 1));
+      if (A.clap && PAT.clap[s] === 'x') at(t, () => clap(t, 1));
+      if (A.hat && PAT.hat[s] !== '.'){ const v = A.hat * (PAT.hat[s] === 'x' ? 0.75 : 0.42); at(t, () => hat(t, v, false)); }
+      if (A.ohat && PAT.ohat[s] === 'x') at(t, () => hat(t, A.ohat * 0.6, true));
+      if (A.fill === 'roll' && s >= 8){
+        const n = s >= 12 ? 2 : 1;
+        for (let k = 0; k < n; k++){ const tk = t + k * STEP / n, v = 0.35 + 0.55 * (s - 8) / 8; at(tk, () => snare(tk, v)); }
+      }
+      if (A.bass === 'acid'){
+        let st = ACID[s];
+        if (bar % 2 === 1 && s >= 12) st = [[0, 1, 0], [15, 0, 1], [12, 1, 0], [7, 0, 1]][s - 12];
+        if (st){
+          const midi = root + st[0];
+          const next = ACID[(s + 1) % 16];
+          const dur = next && next[2] ? STEP + 0.01 : STEP * 0.62;
+          const from = st[2] && prevBass != null ? prevBass : null;
+          at(t, () => acid(t, midi, dur, st[1], from, A.cut));
+          prevBass = midi;
+        }
+      }
+      if (A.bass === 'synth' && s % 2 === 0){
+        const midi = root + 12 + (s % 4 === 2 ? 12 : 0);
+        at(t, () => synthBass(t, midi, STEP * 1.6));
+      }
+      if (A.arp){
+        const tones = ch.concat(ch.map(n => n + 12));
+        const midi = tones[ARP_PAT[s]] + 12, v = A.arp * (s % 4 === 0 ? 1 : 0.75);
+        at(t, () => arpNote(t, midi, v));
+      }
+    }
+    if (A.lead){
+      const mel = LEAD[A.lead][leadBarIndex(bar)];
+      let prev = null;
+      for (const [s, midi, len] of mel){
+        const t = t0 + s * STEP, from = prev != null && Math.abs(prev - midi) <= 3 ? prev : null;
+        at(t, () => leadNote(t, midi, len * STEP - 0.01, from));
+        prev = midi;
+      }
+    }
+    if (A.impact){
+      at(IMPACT_T, () => impact(IMPACT_T));
+      // ice: a high sustained cluster and scattered bells
+      at(IMPACT_T + 0.15, () => padChord(IMPACT_T + 0.15, BAR * 2 - 0.9, [69, 71, 72, 76, 81], 0.12));
+      const bellNotes = [81, 83, 84, 88, 91, 93, 95, 96];
+      const br = mulberry32(9001);
+      for (let k = 0; k < 16; k++){ const tb = IMPACT_T + 0.25 + k * 0.22 + br() * 0.12, nb = bellNotes[Math.floor(br() * bellNotes.length)], vb = 0.55 + br() * 0.45; at(tb, () => bell(tb, nb, vb)); }
+    }
+    if (A.swell){
+      at(t0 + BEAT * 2, () => riser(t0 + BEAT * 2, t0 + BAR, 0.8));
+      at(t0 + BEAT * 2, () => padChord(t0 + BEAT * 2, BEAT * 2, [53, 57, 60, 65], 0.35));
+    }
+    if (A.end){ at(t0, () => kick(t0, 0.9)); at(t0, () => crash(t0, 0.8)); }
+  }
+  // boot: CRT power-on thump, typing blips, result ticks, power-off zip
+  at(0.08, () => blip(0.08, 70, 0.3, 0.25));
+  at(0.1, () => {
+    const crtWhine = ctx.createOscillator(); crtWhine.frequency.value = 7800;
+    const cwg = ctx.createGain(); cwg.gain.setValueAtTime(0.0001, 0.1); cwg.gain.linearRampToValueAtTime(0.004, 0.4); cwg.gain.setValueAtTime(0.004, 7.5); cwg.gain.linearRampToValueAtTime(0.0001, 7.8);
+    crtWhine.connect(cwg); cwg.connect(fxBus); crtWhine.start(0.1); crtWhine.stop(7.9);
+  });
+  const resNotes = [69, 72, 76, 81, 76, 72, 79, 84];
+  let ri = 0;
+  for (const e of conEvents()){
+    if (e.kind === 'key'){ const f = 1800 + (e.c * 37 % 900); at(e.t, () => blip(e.t, f, 0.05)); }
+    else if (e.kind === 'dot') at(e.t, () => blip(e.t, 3400, 0.025, 0.006));
+    else if (e.kind === 'result'){ const nb = resNotes[ri % resNotes.length]; at(e.t, () => bell(e.t, nb, 0.7)); ri++; }
+  }
+  at(7.55, () => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(2400, 7.55); o.frequency.exponentialRampToValueAtTime(50, 7.97);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, 7.55); g.gain.linearRampToValueAtTime(0.22, 7.6); g.gain.linearRampToValueAtTime(0.0001, 7.98);
+    o.connect(g); g.connect(fxBus); o.start(7.55); o.stop(8.0); });
+
+  Q.sort((x, y) => x[0] - y[0]);   // stable: same order every run
+  let qi = 0;
+  const WIN = 1.0;
+  const flush = until => { while (qi < Q.length && Q[qi][0] < until) Q[qi++][1](); };
+  flush(WIN);
+  for (let k = 1; k * WIN < LEN; k++){
+    const ts = k * WIN;
+    ctx.suspend(ts).then(() => { flush(ts + WIN); onProgress && onProgress(ts / LEN); ctx.resume(); });
+  }
+  const buf = await ctx.startRendering();
+  onProgress && onProgress(1);
+  glitchEdit(buf);
+  master2(buf);
+  return buf;
+}
+
+// the twist, applied to samples: stutters, reverse, bit crush and a tape stop, from the GLITCH table
+function glitchEdit(buf){
+  for (let ch = 0; ch < buf.numberOfChannels; ch++){
+    const d = buf.getChannelData(ch);
+    const src = d.slice();
+    const read = x => { const i = Math.floor(x), f = x - i; return (src[i] || 0) * (1 - f) + (src[i + 1] || 0) * f; };
+    for (const e of GLITCH){
+      const i0 = Math.round(e.t0 * SR), i1 = Math.round(e.t1 * SR);
+      for (let i = i0; i < i1; i++){
+        const t = i / SR;
+        let v;
+        if (e.kind === 'gap') v = 0;
+        else if (e.kind === 'crush'){ const hold = Math.floor(i / 7) * 7; v = Math.round(src[hold] * 14) / 14; }
+        else v = read(srcTime(t) * SR);
+        // micro fades at slice and event edges so the edits do not click
+        let fade = 1;
+        const local = e.kind === 'repeat' ? ((t - e.t0) % e.slice) : (t - e.t0);
+        const span = e.kind === 'repeat' ? e.slice : (e.t1 - e.t0);
+        fade = Math.min(1, local / 0.002, (span - local) / 0.002);
+        if (e.kind === 'tapestop') fade *= 1 - smooth(0.6, 1.0, (t - e.t0) / (e.t1 - e.t0));
+        d[i] = v * Math.max(0, fade);
+      }
+    }
+  }
+}
+// final master: drive into a soft knee limiter, then normalise to -1.5 dBFS
+function master2(buf){
+  let peak = 0;
+  const chans = [];
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) chans.push(buf.getChannelData(ch));
+  const knee = 0.6, drive = 1.55;
+  for (const d of chans) for (let i = 0; i < d.length; i++){
+    const x = d[i] * drive, a = Math.abs(x);
+    if (a > knee) d[i] = Math.sign(x) * (knee + (1 - knee) * Math.tanh((a - knee) / (1 - knee)));
+    peak = Math.max(peak, Math.abs(d[i]));
+  }
+  const g = peak > 0 ? 0.84 / peak : 1;   // -1.5 dBFS leaves room for AAC overshoot
+  for (const d of chans) for (let i = 0; i < d.length; i++) d[i] *= g;
+}
+
+// =====================================================================
+// 4. Visual sync: envelopes from the same patterns the audio plays
+// =====================================================================
+function hitEnv(t, test, decay, look = 32){
+  const s0 = Math.floor(t / STEP + 1e-9);
+  for (let s = s0; s > s0 - look && s >= 0; s--){
+    const bar = Math.floor(s / 16), st = s % 16;
+    const v = test(ARR[bar], st, bar);
+    if (v > 0) return v * Math.exp(-(t - s * STEP) * decay);
+  }
+  return 0;
+}
+const kickTest = (A, st) => (A.kick && PAT.kick[st] === 'x') ? 1 : (A.end && st === 0 ? 1 : 0);
+const clapTest = (A, st) => (A.clap && PAT.clap[st] === 'x') ? 1 : (A.fill === 'roll' && st >= 8 ? 0.5 : 0);
+const arpTest = (A, st) => A.arp ? A.arp : 0;
+function sync(t){
+  const ts = srcTime(t);
+  const s0 = Math.floor(ts / STEP + 1e-9);
+  return {
+    ts,
+    kick: hitEnv(ts, kickTest, 9),
+    clap: hitEnv(ts, clapTest, 12),
+    arpEnv: hitEnv(ts, arpTest, 16, 2),
+    arpIdx: s0,
+    pad: padLFO(ts),
+    beatPh: (ts / BEAT) % 1,
+    beat: Math.floor(ts / BEAT),
+  };
+}
+
+// =====================================================================
+// 5. Page, WebGL setup
+// =====================================================================
+const params = new URLSearchParams(location.search);
+const LOW = params.get('q') === 'low' || params.has('low');
+const CLEAN = params.has('clean');
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const HERO_T = 45.6;
+if (CLEAN) document.documentElement.classList.add('clean');
+
+const canvas = document.getElementById('c');
+const notes = document.getElementById('notes');
+const showNotes = document.getElementById('show-notes');
+const hideNotes = document.getElementById('hide-notes');
+const playBtn = document.getElementById('playpause');
+const startGate = document.getElementById('start');
+const soundBtn = document.getElementById('play-sound');
+const silentBtn = document.getElementById('play-silent');
+const statusEl = document.getElementById('start-status');
+const meterEl = document.getElementById('meter');
+
+let t = 0, playing = false;
+if (params.has('t') && isFinite(parseFloat(params.get('t')))) t = parseFloat(params.get('t'));
+else if (reduced) t = HERO_T;
+
+const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
+if (!gl){
+  notes.querySelector('p').textContent = 'This piece needs WebGL2, which this browser does not provide.';
+  window.__seek = () => {}; window.__play = () => {};
+  return;
+}
+const anisoExt = gl.getExtension('EXT_texture_filter_anisotropic');
+const COMMON = document.getElementById('common').textContent.trim();
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const VS = compile(gl.VERTEX_SHADER, document.getElementById('vs').textContent.trim());
+function program(fsId){
+  const p = gl.createProgram();
+  gl.attachShader(p, VS);
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, COMMON + '\n' + document.getElementById(fsId).textContent));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(fsId + ': ' + gl.getProgramInfoLog(p));
+  const u = {};
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++){ const a = gl.getActiveUniform(p, i); u[a.name.replace('[0]', '')] = gl.getUniformLocation(p, a.name); }
+  return { p, u };
+}
+const P = {
+  boot: program('fs-boot'), tunnel: program('fs-tunnel'), fire: program('fs-fire'),
+  mosh: program('fs-mosh'), freeze: program('fs-freeze'), greet: program('fs-greet'), post: program('fs-post'),
+};
+const vao = gl.createVertexArray();
+
+function makeTex(w, h, opts = {}){
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return tex;
+}
+// render targets, reallocated when their size changes
+const RT = {};
+function rt(name, w, h){
+  let r = RT[name];
+  if (r && r.w === w && r.h === h) return r;
+  if (r){ gl.deleteTexture(r.tex); gl.deleteFramebuffer(r.fbo); }
+  const tex = makeTex(w, h);
+  const fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  r = RT[name] = { tex, fbo, w, h, key: null };
+  return r;
+}
+function uploadCanvas(tex, cvs, { mip = true, repeat = false } = {}){
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, cvs);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mip ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+  if (anisoExt && mip) gl.texParameterf(gl.TEXTURE_2D, anisoExt.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(anisoExt.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+  if (mip) gl.generateMipmap(gl.TEXTURE_2D);
+}
+
+// =====================================================================
+// 6. Glyphs, rasterised at runtime from Martian Mono
+// =====================================================================
+const MONO = '"Martian Mono", ui-monospace, monospace';
+function setFont(ctx, weight, size, stretch){
+  ctx.font = `${weight} ${size}px ${MONO}`;
+  if ('fontStretch' in ctx) ctx.fontStretch = stretch || 'normal';
+}
+function makeAtlas(weight, size, stretch, like){
+  const c = document.createElement('canvas');
+  const x = c.getContext('2d');
+  setFont(x, weight, size, stretch);
+  const ownAdv = Math.ceil(x.measureText('M').width);
+  const adv = like ? like.ai[0] : ownAdv;               // a matching atlas shares the cell grid
+  const lineH = Math.ceil(size * 1.3), pad = Math.ceil(size * 0.12);
+  const cw = adv + pad * 2, ch = lineH + pad * 2;
+  const xo = (adv - ownAdv) / 2;
+  c.width = cw * 16; c.height = ch * 6;
+  setFont(x, weight, size, stretch);
+  x.fillStyle = '#000'; x.fillRect(0, 0, c.width, c.height);
+  x.fillStyle = '#fff'; x.textBaseline = 'alphabetic';
+  for (let code = 32; code < 128; code++){
+    const i = code - 32, col = i % 16, row = Math.floor(i / 16);
+    x.fillText(String.fromCharCode(code), col * cw + pad + xo, row * ch + pad + size * 1.0);
+  }
+  const tex = gl.createTexture();
+  uploadCanvas(tex, c);
+  return { tex, a: [cw, ch, pad, 0], ai: [adv, lineH, c.width, c.height] };
+}
+const STR = [
+  'Greetings to the blue team, the red team, and everyone who rotates their keys.   This intro is one HTML file, sound included.',
+  'Zero day',
+  'Patched before it had a name',
+  'Patched',
+  'auth.py, line 32',
+  'where name = $1',
+  'To the on-call who acked', 'the page at 3:12 am',
+  'To the maintainer answering', 'security email on a Sunday',
+  'To whoever pinned', 'the lockfile',
+  'To the reviewer who asked', 'where that input comes from',
+  'To everyone who', 'parameterises their queries',
+  'Patch early,', 'then get some sleep',
+  "name = '' or '1'='1' --",
+  "' union select pw_hash from users --",
+];
+const STRW = 256;
+const strLen = new Float32Array(24);
+const strTex = gl.createTexture();
+{
+  const data = new Uint8Array(STRW * STR.length);
+  STR.forEach((s, r) => { strLen[r] = s.length; for (let i = 0; i < s.length && i < STRW; i++) data[r * STRW + i] = s.charCodeAt(i); });
+  gl.bindTexture(gl.TEXTURE_2D, strTex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, STRW, STR.length, 0, gl.RED, gl.UNSIGNED_BYTE, data);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+}
+
+// the tunnel's code: real Python and TypeScript, one hot vulnerable query
+const CODE = `import secrets
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+from fastapi import APIRouter, Depends, HTTPException
+
+router = APIRouter(prefix="/auth")
+hasher = PasswordHasher(time_cost=3, memory_cost=65536)
+MAX_ATTEMPTS = 5
+
+@router.post("/login")
+async def login(body: LoginBody, db=Depends(get_db)):
+    if await limiter.hit(body.email) > MAX_ATTEMPTS:
+        raise HTTPException(429, "slow down")
+    row = await db.fetchrow(
+        "select id, pw_hash from users where email = $1",
+        body.email,
+    )
+    if row is None:
+        hasher.verify(DUMMY_HASH, body.password)
+        raise HTTPException(401, "invalid credentials")
+    try:
+        hasher.verify(row["pw_hash"], body.password)
+    except VerifyMismatchError:
+        raise HTTPException(401, "invalid credentials")
+    token = secrets.token_urlsafe(32)
+    await sessions.put(token, row["id"], ttl=3600)
+    return {"token": token}
+
+@router.get("/users/search")
+async def search(name: str, db=Depends(get_db)):
+    # fast path for the admin page
+!!    sql = f"select * from users where name = '{name}'"
+!!    return await db.fetch(sql)
+
+def rotate_signing_key(store: KeyStore) -> str:
+    new_key = secrets.token_bytes(32)
+    kid = store.add(new_key, not_after=days(90))
+    store.retire_older_than(days(7))
+    return kid
+
+import { z } from "zod";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import type { Request, Response, NextFunction } from "express";
+
+const Upload = z.object({
+  name: z.string().max(128).regex(/^[\\w.-]+$/),
+  size: z.number().int().positive().max(10_000_000),
+});
+
+export function securityHeaders(
+  _req: Request, res: Response, next: NextFunction,
+) {
+  res.setHeader("Content-Security-Policy", "default-src 'self'");
+  res.setHeader("Strict-Transport-Security", "max-age=63072000");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  next();
+}
+
+export function verifyWebhook(req: Request): boolean {
+  const sig = Buffer.from(req.header("x-signature") ?? "", "hex");
+  const mac = createHmac("sha256", process.env.WEBHOOK_SECRET!)
+    .update(req.rawBody)
+    .digest();
+  return sig.length === mac.length && timingSafeEqual(sig, mac);
+}
+
+export async function upload(req: Request, res: Response) {
+  const parsed = Upload.safeParse(req.body);
+  if (!parsed.success) return res.status(400).end();
+  const key = \`uploads/\${crypto.randomUUID()}\`;
+  await bucket.put(key, req.body.data, { acl: "private" });
+  res.status(201).json({ key });
+}`;
+const KW = new Set('import from as def async await return if try except raise with for in not is None True False class const export function type let new await of'.split(' '));
+let codeLines = 0;
+function makeCodeTexture(){
+  const W = 1024, H = 4096, COLS = 56;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  setFont(x, 400, 100, 'normal');
+  const advR = x.measureText('M').width / 100;
+  const size = Math.floor((W - 16) / COLS / advR);
+  setFont(x, 400, size, 'normal');
+  const adv = x.measureText('M').width;
+  const lh = Math.round(size * 1.48);
+  const lines = CODE.split('\n');
+  const n = Math.floor(H / lh);
+  codeLines = n;
+  x.fillStyle = '#000'; x.fillRect(0, 0, W, H);
+  x.textBaseline = 'alphabetic';
+  // channels: R = glyph coverage, G = hot (vulnerable line), B = token brightness
+  for (let i = 0; i < n; i++){
+    let line = lines[i % lines.length];
+    let hot = false;
+    if (line.startsWith('!!')){ hot = true; line = line.slice(2); }
+    const y = i * lh + Math.round(size * 1.06);
+    const toks = line.match(/(#.*$|\/\/.*$|"[^"]*"|'[^']*'|`[^`]*`|f"[^"]*"|\w+|\s+|[^\w\s])/g) || [];
+    let col = 0;
+    for (const tk of toks){
+      let b = 150;
+      if (/^(#|\/\/)/.test(tk)) b = 70;
+      else if (/^(f?"|'|`)/.test(tk)) b = 255;
+      else if (KW.has(tk)) b = 215;
+      else if (/^\d/.test(tk)) b = 235;
+      else if (/^[A-Z]/.test(tk)) b = 190;
+      x.fillStyle = `rgb(255,${hot ? 255 : 0},${b})`;
+      x.fillText(tk, 8 + col * adv, y);
+      col += tk.length;
+    }
+  }
+  const tex = gl.createTexture();
+  uploadCanvas(tex, c, { repeat: true });
+  return tex;
+}
+
+// the console canvas for the boot section
+const conCanvas = document.createElement('canvas');
+const conCtx = conCanvas.getContext('2d');
+const conTex = gl.createTexture();
+let conKey = '';
+function conState(tt){
+  // returns the visible text as [{segments:[{text,col}]}], plus cursor position
+  const rows = [];
+  let cursor = null;
+  for (const L of CON){
+    if (tt < L.at) break;
+    if (L.left){
+      const nl = Math.min(L.left.length, Math.floor((tt - L.at) * LEFT_CPS) + 1);
+      const segs = [{ text: L.left.slice(0, nl), col: '#8C93C4' }];
+      if (nl >= L.left.length){
+        const tDots = tt - L.at - L.left.length / LEFT_CPS;
+        const total = LEADER_COL - L.left.length - 1;
+        const nd = clamp(Math.floor(tDots * DOT_CPS), 0, total);
+        segs.push({ text: ' ' + '.'.repeat(nd), col: '#4E5A8C' });
+        if (tt >= L.at + RES_DELAY){
+          segs.push({ text: ' '.repeat(total - nd + 1) + L.right, col: '#9BE8FF', flash: tt - L.at - RES_DELAY });
+        }
+      }
+      rows.push(segs);
+      cursor = tt < L.at + RES_DELAY ? rows.length - 1 : null;
+    } else {
+      if (L.gap) rows.push([]);
+      const n = L.cps > 0 ? Math.min(L.text.length, Math.floor((tt - L.at) * L.cps) + 1) : L.text.length;
+      let txt = L.text.slice(0, n);
+      const segs = [];
+      if (L.hot && txt.endsWith(L.hot)){ segs.push({ text: txt.slice(0, -L.hot.length), col: L.col }); segs.push({ text: L.hot, col: '#F0306A' }); }
+      else segs.push({ text: txt, col: L.col });
+      rows.push(segs);
+      cursor = rows.length - 1;
+      if (L.text === CON[1].text) rows.push([]);
+    }
+  }
+  return { rows, cursor };
+}
+function drawConsole(tt, W, H){
+  const st = conState(tt);
+  const blink = Math.floor(tt * 2.5) % 2;
+  const prog = smooth(2.0, 6.1, tt);
+  const key = `${W}x${H}|${JSON.stringify(st.rows)}|${blink}|${Math.round(prog * 60)}|${Math.min(10, Math.floor(tt * 30))}`;
+  if (key === conKey) return;
+  conKey = key;
+  if (conCanvas.width !== W || conCanvas.height !== H){ conCanvas.width = W; conCanvas.height = H; }
+  const x = conCtx;
+  x.fillStyle = '#000'; x.fillRect(0, 0, W, H);
+  const cols = 37, rowsN = 14;   // longest line is 36 columns; 12 text rows, a gap and the progress bar
+  setFont(x, 400, 100, 'normal');
+  const advR = x.measureText('M').width / 100;
+  const size = Math.max(9, Math.floor(Math.min(H * 0.74 / (rowsN * 1.5), (W * (W < H ? 0.9 : 0.8)) / (cols * advR))));
+  setFont(x, 400, size, 'normal');
+  const adv = x.measureText('M').width, lh = size * 1.5;
+  const bw = cols * adv, bh = rowsN * lh;
+  const x0 = Math.round((W - bw) / 2), y0 = Math.round((H - bh) / 2);
+  x.textBaseline = 'alphabetic';
+  st.rows.forEach((segs, r) => {
+    let col = 0;
+    for (const s of segs){
+      x.fillStyle = s.col;
+      if (s.flash != null && s.flash < 0.15){ x.fillStyle = '#E8F7FF'; }
+      x.fillText(s.text, x0 + col * adv, y0 + r * lh + size);
+      col += s.text.length;
+    }
+    if (st.cursor === r && blink){
+      x.fillStyle = '#9BE8FF';
+      x.fillRect(x0 + col * adv + 2, y0 + r * lh + size * 0.12, adv * 0.8, size * 1.05);
+    }
+  });
+  // scan progress bar under the text
+  if (tt > 1.95){
+    const py = y0 + (rowsN - 0.6) * lh;
+    x.fillStyle = '#4E5A8C'; x.fillRect(x0, py, bw, Math.max(2, size * 0.18));
+    x.fillStyle = '#9BE8FF'; x.fillRect(x0, py, bw * prog, Math.max(2, size * 0.18));
+  }
+  uploadCanvas(conTex, conCanvas);
+}
+
+let atlasA = null, atlasB = null, atlasC = null, codeTex = null, texReady = false;
+async function buildTextures(){
+  const fontsP = Promise.all([
+    document.fonts.load(`400 40px ${MONO}`, 'Aa{}'),
+    document.fonts.load(`600 40px ${MONO}`, 'Aa'),
+    document.fonts.load(`250 40px ${MONO}`, 'Zero day'),
+    document.fonts.load(`800 40px ${MONO}`, 'Zero day'),
+  ]).then(() => document.fonts.ready).catch(() => {});
+  await Promise.race([fontsP, new Promise(r => setTimeout(r, 4000))]);
+  atlasA = makeAtlas(560, 96, 'normal');
+  atlasB = makeAtlas(250, 128, 'semi-expanded');
+  atlasC = makeAtlas(800, 128, 'condensed', atlasB);
+  codeTex = makeCodeTexture();
+  conKey = '';
+  texReady = true;
+}
+
+// =====================================================================
+// 7. Rendering
+// =====================================================================
+let scale = LOW ? 0.5 : 0.85;
+const MIN_S = 0.45, MAX_S = 1.0;
+function sizes(heavy, still){
+  const W = canvas.width, H = canvas.height;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let s = still ? (LOW ? 0.5 : 1.0) : scale;
+  if (heavy) s *= LOW ? 0.8 : (dpr > 1.4 ? 0.62 : 0.85) * (still ? 1.18 : 1.0);
+  s = Math.min(s, 1.0);
+  return [Math.max(2, Math.round(W * s)), Math.max(2, Math.round(H * s))];
+}
+function bindTex(unit, tex, loc){ gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(loc, unit); }
+function drawTo(target, prog){
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fbo : null);
+  gl.viewport(0, 0, target ? target.w : canvas.width, target ? target.h : canvas.height);
+  gl.useProgram(prog.p);
+}
+function quad(){ gl.drawArrays(gl.TRIANGLES, 0, 3); }
+function atlasUniforms(pr){
+  bindTex(1, atlasA.tex, pr.u.uAtlA); bindTex(2, atlasB.tex, pr.u.uAtlB); bindTex(3, strTex, pr.u.uStr);
+  gl.uniform4fv(pr.u.uAA, atlasA.a); gl.uniform4fv(pr.u.uAAi, atlasA.ai);
+  gl.uniform4fv(pr.u.uAB, atlasB.a); gl.uniform4fv(pr.u.uABi, atlasB.ai);
+  gl.uniform1fv(pr.u.uLen, strLen);
+}
+
+// firewall uniforms: the exploit spreads over the shell (bars 13-20) and burrows to the core (21-22)
+function fireState(ts){
+  return {
+    spread: -0.3 + 2.3 * smooth(26.5, 39.5, ts) + 1.5 * smooth(39.5, 42.4, ts),
+    front: 2.3 - 0.75 * smooth(30, 40, ts) - 0.95 * smooth(40, 43.3, ts),
+    coreHeat: smooth(42.4, 43.4, ts),
+    drop: smooth(31.9, 32.1, ts),
+    heatAll: smooth(41.5, 43.4, ts) * 0.55,
+    warm: smooth(38, 42.5, ts),
+    dist: 10.0 - 2.0 * smooth(24, 32, ts) - 1.5 * smooth(32, 43.5, ts),
+  };
+}
+function renderFire(target, ts, sy, introT){
+  const pr = P.fire, f = fireState(ts);
+  drawTo(target, pr);
+  gl.uniform2f(pr.u.uRes, target.w, target.h);
+  gl.uniform1f(pr.u.uT, ts);
+  gl.uniform1f(pr.u.uPad, sy.pad);
+  gl.uniform1f(pr.u.uKick, sy.kick);
+  gl.uniform1f(pr.u.uArpEnv, sy.arpEnv);
+  gl.uniform1f(pr.u.uArpIdx, sy.arpIdx % 977);
+  gl.uniform1f(pr.u.uFront, f.front);
+  gl.uniform1f(pr.u.uSpread, f.spread);
+  gl.uniform1f(pr.u.uCoreHeat, f.coreHeat);
+  gl.uniform1f(pr.u.uDrop, f.drop);
+  gl.uniform1f(pr.u.uHeatAll, f.heatAll);
+  gl.uniform1f(pr.u.uWarm, f.warm);
+  gl.uniform1f(pr.u.uDist, f.dist);
+  gl.uniform1f(pr.u.uQ, LOW ? 0 : 1);
+  gl.uniform1f(pr.u.uIn, introT);
+  quad();
+}
+// datamosh chain: the frame at the last cut, smeared by K motion-vector steps (1/30 s each), replayed every frame
+const MOSH_FPS = 30, MOSH_MAX = 24;
+function cutTime(t, e){
+  if (!e) return t;
+  if (e.kind === 'repeat') return e.t0 + Math.floor((t - e.t0) / e.slice + 1e-9) * e.slice;
+  return e.t0;
+}
+function moshImage(t, w, h){
+  const e = glitchAt(t);
+  const cut = cutTime(t, e);
+  const K = Math.min(MOSH_MAX, Math.floor((t - cut) * MOSH_FPS + 1e-6));
+  const reset = rt('reset', w, h);
+  const key = `${srcTime(cut).toFixed(5)}|${w}x${h}`;
+  if (reset.key !== key){ renderFire(reset, srcTime(cut), sync(cut), 1); reset.key = key; }
+  const live = rt('scene', w, h);
+  renderFire(live, srcTime(t), sync(t), 1);
+  let src = reset;
+  const seed = Math.floor(cut * 64) % 997;
+  for (let k = 1; k <= K; k++){
+    const dst = rt(k % 2 ? 'moshA' : 'moshB', w, h);
+    const pr = P.mosh;
+    drawTo(dst, pr);
+    bindTex(0, src.tex, pr.u.uPrev); bindTex(1, live.tex, pr.u.uLive);
+    gl.uniform2f(pr.u.uRes, w, h);
+    gl.uniform1f(pr.u.uSeed, seed);
+    gl.uniform1f(pr.u.uStep, k);
+    quad();
+    src = dst;
+  }
+  return src;
+}
+function freezeImage(w, h){
+  const fz = rt('freeze', w, h);
+  const key = `${w}x${h}`;
+  if (fz.key !== key){
+    const img = moshImage(FREEZE_SRC_T, w, h);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, img.fbo);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, fz.fbo);
+    gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    fz.key = key;
+  }
+  return fz;
+}
+
+function render(time, still){
+  if (!texReady) { drawPlaceholder(); return; }
+  const T = ((time % LEN) + LEN) % LEN;
+  const sec = sectionAt(T);
+  const sy = sync(T);
+  const post = { tear: 0, crush: 0, split: 0, seed: 0, flash: 0, flashCol: [0.91, 0.97, 1.0], shake: [0, 0], grain: 0.035, vig: 0.55, fade: 0, pay: 0, payFlip: 0, payOff: [0, 0] };
+  let img;
+  gl.bindVertexArray(vao);
+  if (sec === 'boot'){
+    const [w, h] = sizes(false, still);
+    const cw = Math.min(w, 1800), ch = Math.round(h * cw / w);
+    drawConsole(T, cw, ch);
+    img = rt('scene', w, h);
+    const pr = P.boot;
+    drawTo(img, pr);
+    bindTex(0, conTex, pr.u.uCon);
+    gl.uniform2f(pr.u.uRes, w, h);
+    gl.uniform1f(pr.u.uT, T);
+    gl.uniform1f(pr.u.uRoll, smooth(7.0, 7.9, T));
+    quad();
+    post.vig = 0.25; post.grain = 0.03;
+  } else if (sec === 'tunnel'){
+    const [w, h] = sizes(false, still);
+    img = rt('scene', w, h);
+    const pr = P.tunnel, tl = T - 8;
+    drawTo(img, pr);
+    bindTex(0, codeTex, pr.u.uCode);
+    gl.uniform2f(pr.u.uRes, w, h);
+    gl.uniform1f(pr.u.uT, tl);
+    gl.uniform1f(pr.u.uKick, sy.kick);
+    gl.uniform1f(pr.u.uClap, sy.clap);
+    gl.uniform1f(pr.u.uHot, smooth(15.5, 17, T) * (0.75 + 0.25 * Math.sin(T * 9)));
+    // forward travel in code lines, with a lurch on every kick
+    const beatF = tl / BEAT, bi = Math.floor(beatF), bp = beatF - bi;
+    const speed = 8 + 6 * smooth(16, 23, T);
+    gl.uniform1f(pr.u.uTravel, -(tl * speed + 2.2 * (bi + 1 - Math.exp(-bp * 7))));
+    gl.uniform1f(pr.u.uBeatPh, sy.beatPh);
+    gl.uniform1f(pr.u.uRingRate, T >= 22 ? 2 : 1);
+    gl.uniform1f(pr.u.uLines, codeLines);
+    gl.uniform1f(pr.u.uIn, smooth(8.0, 8.35, T));
+    gl.uniform1f(pr.u.uOut, 1);
+    quad();
+    post.flash = Math.max(0, 1 - (T - 8) * 5) * 0.9 + (T >= 16 && T < 16.25 ? (1 - (T - 16) * 4) * 0.35 : 0);
+  } else if (sec === 'firewall' || (sec === 'twist' && T < 40)){
+    const [w, h] = sizes(true, still);
+    img = rt('scene', w, h);
+    renderFire(img, T, sy, smooth(24, 25.2, T));
+    post.flash = Math.max(0, 1 - (T - 24) * 4) * 0.85 + (T >= 32 && T < 32.3 ? (1 - (T - 32) / 0.3) * 0.5 : 0) + sy.kick * 0.06 * smooth(31.9, 32.1, T);
+    post.flashCol = [0.91, 0.97, 1.0];
+  } else if (sec === 'twist'){
+    const [w, h] = sizes(true, still);
+    const e = glitchAt(T);
+    if (T < GAP_T){
+      img = moshImage(T, w, h);
+      const u = (T - e.t0) / (e.t1 - e.t0);
+      const cut = cutTime(T, e);
+      post.seed = Math.floor(T * MOSH_FPS) % 1000 + 1;
+      post.tear = (e.kind === 'repeat' ? 0.45 : e.kind === 'reverse' ? 0.6 : e.kind === 'crush' ? 0.25 : e.kind === 'mosh' ? 0.15 : 0.15 + 0.6 * u) * (0.5 + 0.5 * Math.exp(-(T - cut) * 10));
+      post.crush = e.kind === 'crush' ? 0.75 : 0;
+      post.split = (e.kind === 'tapestop' ? 0.003 + 0.012 * u : 0.0035) * (1 + sy.kick);
+      post.flash = (T - cut < 0.034 ? 0.18 : 0);
+      post.flashCol = [1.0, 0.48, 0.18];
+      post.shake = [(hashJS(T * 30) - 0.5) * 0.01, (hashJS(T * 30 + 7) - 0.5) * 0.01];
+      // the injected payload flashes with the stutter, runs backwards with the reverse, sags with the tape stop
+      const slicePh = e.kind === 'repeat' ? ((T - e.t0) % e.slice) / e.slice : 0;
+      post.pay = e.kind === 'repeat' ? (slicePh < 0.6 ? 1 : 0) : e.kind === 'reverse' ? 1 : e.kind === 'crush' ? 0.85 : e.kind === 'tapestop' ? 1 - smooth(0.55, 0.95, u) : 0;
+      post.payFlip = e.kind === 'reverse' ? 1 : 0;
+      post.payOff = e.kind === 'tapestop' ? [0, -0.25 * u * u] : [(hashJS(Math.floor(cut * 32)) - 0.5) * 0.12, (hashJS(Math.floor(cut * 32) + 9) - 0.5) * 0.3];
+    } else {
+      const fz = freezeImage(w, h);
+      img = rt('scene2', w, h);
+      const pr = P.freeze;
+      drawTo(img, pr);
+      bindTex(0, fz.tex, pr.u.uImg);
+      atlasUniforms(pr);
+      gl.uniform2f(pr.u.uRes, w, h);
+      const ft = T - IMPACT_T;
+      gl.uniform1f(pr.u.uFt, ft);
+      // the patch rushes in and lands on the impact, then settles with a small bounce
+      let S, R;
+      if (ft < 0){ const x = clamp((T - GAP_T) / (IMPACT_T - GAP_T), 0, 1); S = 1 + 3.2 * Math.pow(1 - x, 2.2); R = -0.55 * Math.pow(1 - x, 1.6); }
+      else { S = 1 - 0.035 * Math.exp(-ft * 9) * Math.sin(ft * 38); R = 0.012 * Math.exp(-ft * 6) * Math.sin(ft * 30); }
+      if (T > 47.55){ const x = smooth(47.55, 48.0, T); S *= 1 - 0.85 * x * x; R += x * 1.2; }
+      gl.uniform1f(pr.u.uHexS, S);
+      gl.uniform1f(pr.u.uHexRot, R);
+      gl.uniform1f(pr.u.uGap, clamp((T - GAP_T) / 0.06, 0, 1));
+      gl.uniform1f(pr.u.uOut, 1);
+      quad();
+      if (ft >= 0){
+        const sk = Math.exp(-ft * 5) * 0.018;
+        post.shake = [(hashJS(T * 60) - 0.5) * sk, (hashJS(T * 60 + 3) - 0.5) * sk];
+        post.flash = Math.exp(-ft * 9) * 0.6;
+        post.split = 0.004 * Math.exp(-ft * 6);
+      }
+      if (T > 47.7) { post.flash = smooth(47.7, 48.0, T) * 0.9; }
+    }
+  } else {
+    const [w, h] = sizes(false, still);
+    img = rt('scene', w, h);
+    const pr = P.greet, tl = T - 48;
+    drawTo(img, pr);
+    atlasUniforms(pr);
+    bindTex(4, atlasC.tex, pr.u.uAtlC);
+    gl.uniform2f(pr.u.uRes, w, h);
+    gl.uniform1f(pr.u.uT, tl);
+    gl.uniform1f(pr.u.uKick, sy.kick);
+    gl.uniform1f(pr.u.uClap, sy.clap);
+    // the scroller enters at 48.5 s and its last character leaves at 59.9 s, before the title lands
+    const chH = Math.min(h * 0.115, w * 0.11), cwid = chH * atlasA.ai[0] / atlasA.ai[1];
+    const screenChars = w / cwid;
+    const prog = (T - 48.5) / (59.9 - 48.5);
+    gl.uniform1f(pr.u.uScroll, -screenChars + prog * (STR[0].length + screenChars));
+    const card = Math.floor(tl / 2);
+    gl.uniform1f(pr.u.uCard, tl < 12 ? card : -1);
+    gl.uniform1f(pr.u.uCardT, tl - card * 2);
+    gl.uniform1f(pr.u.uTitle, T - TITLE_T);
+    gl.uniform1f(pr.u.uIn, smooth(48.0, 48.6, T));
+    quad();
+    post.flash = Math.max(0, 1 - (T - 48) * 3.5) * 0.9 + (T >= TITLE_T && T < TITLE_T + 0.25 ? (1 - (T - TITLE_T) * 4) * 0.4 : 0);
+    post.fade = smooth(63.4, 63.98, T);
+    post.vig = 0.45;
+  }
+  // final composite to the screen
+  const pr = P.post;
+  drawTo(null, pr);
+  bindTex(0, img.tex, pr.u.uScene);
+  gl.uniform2f(pr.u.uRes, canvas.width, canvas.height);
+  gl.uniform1f(pr.u.uT, T);
+  gl.uniform1f(pr.u.uTear, post.tear);
+  gl.uniform1f(pr.u.uCrush, post.crush);
+  gl.uniform1f(pr.u.uSplit, post.split);
+  gl.uniform1f(pr.u.uSeed, post.seed);
+  gl.uniform1f(pr.u.uFlash, post.flash);
+  gl.uniform3fv(pr.u.uFlashCol, post.flashCol);
+  gl.uniform2fv(pr.u.uShake, post.shake);
+  gl.uniform1f(pr.u.uGrain, post.grain);
+  gl.uniform1f(pr.u.uVig, post.vig);
+  gl.uniform1f(pr.u.uFade, post.fade);
+  gl.uniform1f(pr.u.uPay, post.pay);
+  gl.uniform1f(pr.u.uPayFlip, post.payFlip);
+  gl.uniform2fv(pr.u.uPayOff, post.payOff);
+  bindTex(1, atlasA.tex, pr.u.uAtlA); bindTex(3, strTex, pr.u.uStr);
+  gl.uniform4fv(pr.u.uAA, atlasA.a); gl.uniform4fv(pr.u.uAAi, atlasA.ai);
+  gl.uniform1fv(pr.u.uLen, strLen);
+  quad();
+}
+function hashJS(x){ const s = Math.sin(x * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
+function drawPlaceholder(){
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(16 / 255 * 0.6, 12 / 255 * 0.6, 42 / 255 * 0.6, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+}
+
+function resize(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
+  const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+  if (canvas.width !== w || canvas.height !== h){ canvas.width = w; canvas.height = h; }
+  dirty = true;
+}
+
+// adaptive render scale while playing
+let ema = 16.7, sinceChange = 0, settle = 8;
+function adapt(dtMs){
+  if (LOW) return;
+  if (settle > 0){ settle--; return; }
+  if (dtMs > 250) return;
+  ema += (dtMs - ema) * 0.08;
+  if (++sinceChange < 30) return;
+  if (ema > 19.5 && scale > MIN_S){ scale = Math.max(MIN_S, scale * 0.88); sinceChange = 0; ema = 16.7; settle = 6; }
+  else if (ema < 15.5 && sinceChange > 120 && scale < MAX_S){ scale = Math.min(MAX_S, scale + 0.04); sinceChange = 0; settle = 6; }
+}
+
+// =====================================================================
+// 8. Playback: the audio clock drives t when sound is on
+// =====================================================================
+let actx = null, srcNode = null, audioBuf = null, mode = null, ctxStart = 0, offAtStart = 0;
+let dirty = true, last = performance.now();
+let audioProgress = 0;
+const audioReady = renderSoundtrack(p => {
+  audioProgress = p;
+  meterEl.style.width = Math.round(p * 100) + '%';
+  if (p < 1) statusEl.textContent = `Synthesising the soundtrack, ${Math.round(p * 100)}%`;
+}).then(buf => {
+  audioBuf = buf;
+  statusEl.textContent = 'Soundtrack ready: 64 seconds, synthesised in your browser';
+  meterEl.style.width = '100%';
+  document.getElementById('meter-wrap').hidden = true;
+  if (mode === 'sound' && playing) startAudio(t);
+  return buf;
+}).catch(err => { statusEl.textContent = 'Sound could not be synthesised here; visuals still play.'; console.warn(err); return null; });
+
+function startAudio(offset){
+  stopAudio();
+  if (!actx || !audioBuf) return;
+  srcNode = actx.createBufferSource();
+  srcNode.buffer = audioBuf;
+  srcNode.loop = true;
+  srcNode.connect(actx.destination);
+  const when = actx.currentTime + 0.06;
+  offAtStart = ((offset % LEN) + LEN) % LEN;
+  srcNode.start(when, offAtStart);
+  ctxStart = when;
+}
+function stopAudio(){ if (srcNode){ try { srcNode.stop(); } catch (e) {} srcNode.disconnect(); srcNode = null; } }
+function audioClock(){
+  const lat = (actx.outputLatency || 0) + (actx.baseLatency || 0);
+  return offAtStart + Math.max(0, actx.currentTime - ctxStart - lat);
+}
+function setButton(){
+  playBtn.textContent = playing ? 'Pause' : 'Play';
+  playBtn.setAttribute('aria-pressed', playing ? 'false' : 'true');
+}
+function setPlaying(p){
+  playing = p;
+  last = performance.now();
+  settle = 8;
+  if (p){
+    startGate.hidden = true;
+    if (mode === 'sound' && actx){ actx.resume(); startAudio(t); }
+  } else {
+    if (srcNode) t = audioClock() % LEN;
+    stopAudio();
+    dirty = true;
+  }
+  setButton();
+}
+soundBtn.addEventListener('click', () => {
+  if (!actx){ const AC = window.AudioContext || window.webkitAudioContext; actx = new AC({ latencyHint: 'playback' }); }
+  actx.resume();
+  mode = 'sound';
+  setPlaying(true);
+});
+silentBtn.addEventListener('click', () => { mode = 'silent'; setPlaying(true); });
+
+function frame(now){
+  requestAnimationFrame(frame);
+  const dtMs = now - last; last = now;
+  if (playing){
+    if (mode === 'sound' && srcNode) t = audioClock() % LEN;
+    else t = (t + Math.min(dtMs, 100) / 1000) % LEN;
+    adapt(dtMs);
+    render(t, false);
+  } else if (dirty){
+    resize();
+    render(t, true);
+    dirty = false;
+  }
+}
+
+window.__seek = (time) => {
+  t = +time || 0;
+  stopAudio();
+  playing = false; setButton();
+  startGate.hidden = true;
+  resize();
+  render(t, true);
+  dirty = false;
+};
+window.__play = () => setPlaying(true);
+window.__ready = false;
+window.SONG = { BPM, BAR, STEP, LEN, SECTIONS, ARR, GLITCH, sectionAt, srcTime };
+
+// audio export for tools/render-intro.cjs: 16-bit PCM WAV, fetched in base64 chunks
+let wavBytes = null;
+window.__wavPrepare = async () => {
+  const buf = await audioReady;
+  if (!buf) throw new Error('no audio');
+  const n = buf.length, chs = buf.numberOfChannels;
+  const out = new DataView(new ArrayBuffer(44 + n * chs * 2));
+  const ws = (o, s) => { for (let i = 0; i < s.length; i++) out.setUint8(o + i, s.charCodeAt(i)); };
+  ws(0, 'RIFF'); out.setUint32(4, 36 + n * chs * 2, true); ws(8, 'WAVE'); ws(12, 'fmt ');
+  out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, chs, true); out.setUint32(24, SR, true);
+  out.setUint32(28, SR * chs * 2, true); out.setUint16(32, chs * 2, true); out.setUint16(34, 16, true);
+  ws(36, 'data'); out.setUint32(40, n * chs * 2, true);
+  const data = []; for (let c = 0; c < chs; c++) data.push(buf.getChannelData(c));
+  let o = 44;
+  for (let i = 0; i < n; i++) for (let c = 0; c < chs; c++){ const v = clamp(data[c][i], -1, 1); out.setInt16(o, Math.round(v < 0 ? v * 32768 : v * 32767), true); o += 2; }
+  wavBytes = new Uint8Array(out.buffer);
+  return { bytes: wavBytes.length, chunk: 1 << 20, chunks: Math.ceil(wavBytes.length / (1 << 20)) };
+};
+window.__wavChunk = (i) => {
+  const sub = wavBytes.subarray(i << 20, (i + 1) << 20);
+  let s = '';
+  for (let k = 0; k < sub.length; k += 0x8000) s += String.fromCharCode.apply(null, sub.subarray(k, k + 0x8000));
+  return btoa(s);
+};
+// loudness check per section (peak and RMS in dBFS)
+window.__audioStats = async () => {
+  const buf = await audioReady;
+  const L = buf.getChannelData(0), R = buf.getChannelData(1);
+  const rows = [];
+  const span = (name, a, b) => {
+    let pk = 0, ss = 0; const i0 = Math.round(a * SR), i1 = Math.round(b * SR);
+    for (let i = i0; i < i1; i++){ const l = L[i], r = R[i]; pk = Math.max(pk, Math.abs(l), Math.abs(r)); ss += l * l + r * r; }
+    const rms = Math.sqrt(ss / (2 * (i1 - i0)));
+    rows.push({ name, from: a, to: b, peak: +pk.toFixed(3), rmsDb: +(20 * Math.log10(rms + 1e-9)).toFixed(1) });
+  };
+  for (const s of SECTIONS) span(s.name, s.from * BAR, s.to * BAR);
+  span('drop', 32, 40); span('glitch', 40, 44); span('ice', 44, 48); span('all', 0, LEN);
+  return rows;
+};
+
+// =====================================================================
+// 9. UI wiring
+// =====================================================================
+playBtn.addEventListener('click', () => { if (!mode) mode = 'silent'; setPlaying(!playing); });
+function toggleNotes(){
+  const hide = !notes.hidden;
+  notes.hidden = hide;
+  showNotes.hidden = !hide;
+  (hide ? showNotes : hideNotes).focus({ preventScroll: true });
+}
+hideNotes.addEventListener('click', toggleNotes);
+showNotes.addEventListener('click', toggleNotes);
+window.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'h' || e.key === 'H') toggleNotes();
+  else if (e.code === 'Space' || e.key === ' '){
+    const a = document.activeElement;
+    if (a && (a.tagName === 'BUTTON' || a.tagName === 'A')) return;
+    e.preventDefault();
+    if (!mode) mode = 'silent';
+    setPlaying(!playing);
+  }
+});
+window.addEventListener('resize', () => { resize(); });
+startGate.hidden = CLEAN;
+if (t !== 0) startGate.classList.add('top');   // starting mid-piece: keep the frame visible
+
+setButton();
+resize();
+drawPlaceholder();
+buildTextures().then(() => {
+  window.__ready = true;
+  dirty = true;
+  if (!playing){ resize(); render(t, true); dirty = false; }
+});
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

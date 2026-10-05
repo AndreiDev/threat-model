@@ -1,0 +1,14 @@
+# Test screenshots and render scratch (large; some contain third-party test photos)
+out/shots/
+out/frames/
+out/check/
+# Gallery thumbnails ship as WebP; the PNG captures stay local (tools/build_index.py converts them)
+out/thumbs/*.png
+# Local copies of third-party articles saved during research (links in docs/RESEARCH.md instead)
+docs/research/
+# Tooling
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store
+*.tmp.html

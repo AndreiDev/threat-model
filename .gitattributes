@@ -1,0 +1,7 @@
+# Integrity (piece 20) rebuilds and hashes its own exact bytes: never let git rewrite them.
+pieces/20-integrity.html -text
+# Rendered media
+*.mp4 binary
+*.webp binary
+*.png binary
+*.woff2 binary

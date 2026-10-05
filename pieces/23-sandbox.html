@@ -1,0 +1,1396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sandbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--void)}
+body{overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+canvas.stage{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+
+.notes p.missing{color:var(--frost);font-size:13px;border-left:2px solid var(--ice);padding-left:10px}
+[hidden]{display:none!important}
+
+/* glass panels shared by the HUD, caption and palette */
+.glass{background:rgba(16,12,42,.66);backdrop-filter:blur(12px) saturate(1.2);-webkit-backdrop-filter:blur(12px) saturate(1.2);
+  border:1px solid rgba(140,147,196,.22);border-radius:14px}
+
+.hud{position:fixed;left:16px;top:16px;z-index:6;pointer-events:none;padding:11px 14px 10px;min-width:226px;
+  font:400 12px/1.75 "Martian Mono",ui-monospace,monospace;color:var(--mist)}
+.hud .row{display:flex;align-items:center;gap:9px}
+.hud .row .l{flex:1}
+.hud .row b{font-weight:500;color:var(--frost);font-variant-numeric:tabular-nums}
+.chip{width:9px;height:9px;border-radius:2px;flex:none}
+.hud .mode{margin-top:8px;padding-top:8px;border-top:1px solid rgba(140,147,196,.18);display:flex;gap:8px;align-items:center;
+  font:500 13px/1.35 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost)}
+.hud .mode .dot{width:7px;height:7px;border-radius:50%;background:var(--ice);flex:none;box-shadow:0 0 8px var(--ice)}
+.hud .mode.live .dot{background:var(--heat-4);box-shadow:0 0 8px var(--heat-4)}
+
+.caption{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:6;pointer-events:none;
+  max-width:min(600px,calc(100vw - 580px));padding:9px 18px;border-radius:999px;text-align:center;
+  font:500 15px/1.35 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost)}
+
+.ctag{position:fixed;left:0;top:0;z-index:5;pointer-events:none;display:flex;gap:6px;align-items:center;white-space:nowrap;
+  padding:5px 9px 5px 6px;border-radius:999px;background:rgba(16,12,42,.74);border:1px solid rgba(140,147,196,.28);
+  font:500 12px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost);will-change:transform}
+.ctag .sw{width:12px;height:12px;border-radius:3px}
+
+.palette{position:fixed;right:16px;top:16px;z-index:6;width:226px;padding:10px 10px 12px;color:var(--frost);
+  font:400 13px/1.4 "Schibsted Grotesk",system-ui,sans-serif}
+.pal-head{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist);margin:4px 6px 8px}
+.tools{display:flex;flex-direction:column;gap:1px}
+.tool{display:flex;align-items:center;gap:9px;width:100%;padding:5px 8px;border-radius:8px;border:1px solid transparent;
+  background:none;color:var(--frost);font:500 13px/1.25 "Schibsted Grotesk",system-ui,sans-serif;cursor:pointer;text-align:left}
+.tool:hover{background:rgba(155,232,255,.08)}
+.tool[aria-checked="true"]{background:rgba(155,232,255,.13);border-color:rgba(155,232,255,.5)}
+.tool .nm{flex:1;white-space:nowrap}
+.tool kbd{font:400 10.5px/1 "Martian Mono",ui-monospace,monospace;color:var(--mist);background:rgba(78,90,140,.28);border-radius:4px;padding:3px 5px}
+.sw{width:16px;height:16px;border-radius:4px;flex:none;box-shadow:inset 0 0 0 1px rgba(232,247,255,.14)}
+.sw-data{background:radial-gradient(circle at 30% 30%,#9BE8FF 0 1.2px,transparent 1.7px) 0 0/6px 6px,linear-gradient(135deg,#4FA3E0,#2F4FA8)}
+.sw-wall{background:linear-gradient(90deg,transparent 0 9px,#23205a 9px 10px,transparent 10px) 0 0/16px 6px,
+  linear-gradient(90deg,transparent 0 3px,#23205a 3px 4px,transparent 4px) 0 6px/16px 6px,
+  repeating-linear-gradient(180deg,#5b67a0 0 5px,#23205a 5px 6px)}
+.sw-mal{background:radial-gradient(circle at 35% 30%,#FF7A2F,#F0306A 45%,#9B1D8F)}
+.sw-fire{background:linear-gradient(0deg,#F0306A,#FF7A2F 35%,#FFD36B 70%,#FFF6E0)}
+.sw-patch{background:linear-gradient(180deg,#E8F7FF,#9BE8FF 50%,#4FA3E0)}
+.sw-back{background:repeating-linear-gradient(180deg,#4FA3E0 0 3px,#2F4FA8 3px 4px);box-shadow:inset 0 0 0 2px #E8F7FF}
+.sw-honey{background:radial-gradient(circle at 40% 28%,#FFF6E0,#FFD36B 32%,#FF7A2F 85%)}
+.sw-secr{background:radial-gradient(circle,#FFF6E0 0 1px,transparent 1.6px) 1px 1px/5px 5px,linear-gradient(135deg,#FFD36B,#c99b45)}
+.sw-crys{background:linear-gradient(135deg,#9B1D8F,#3A0F6B 60%,#9B1D8F)}
+.sw-glass{background:rgba(155,232,255,.12);box-shadow:inset 0 0 0 1.5px rgba(155,232,255,.75)}
+.sw-zday{background:radial-gradient(circle,#FFF6E0 0 18%,#FF7A2F 42%,rgba(240,48,106,0) 72%),#1B1747}
+.sw-erase{background:repeating-linear-gradient(45deg,transparent 0 3px,rgba(140,147,196,.55) 3px 4px);box-shadow:inset 0 0 0 1px rgba(140,147,196,.65)}
+.desc{margin:9px 6px 10px;color:var(--mist);font-size:12.5px;line-height:1.42;min-height:5.4em}
+.pal-foot{display:flex;flex-direction:column;gap:9px;margin:0 4px}
+.brush{display:flex;align-items:center;gap:6px}
+.brush .bl{flex:1;color:var(--mist)}
+.brush output{font:400 12px/1 "Martian Mono",ui-monospace,monospace;min-width:20px;text-align:center}
+.ctrls{display:flex;gap:6px}
+.pbtn{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost);background:rgba(78,90,140,.25);
+  border:1px solid rgba(140,147,196,.35);border-radius:999px;padding:7px 12px;cursor:pointer}
+.pbtn:hover{background:rgba(155,232,255,.16)}
+.pbtn.sq{width:28px;height:28px;padding:0;display:grid;place-items:center;font-size:15px}
+
+@media (max-width:600px){
+  .hud{left:8px;right:8px;top:8px;min-width:0;padding:7px 11px 7px;font-size:10.5px;line-height:1.6;
+    display:grid;grid-template-columns:1fr 1fr;column-gap:16px;border-radius:12px}
+  .hud .mode{grid-column:1/-1;margin-top:4px;padding-top:5px;font-size:12px}
+  .caption{left:8px;right:8px;transform:none;max-width:none;border-radius:12px;padding:0 10px;height:38px;
+    display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1.25}
+  .ctag{font-size:11px}
+  .palette{left:8px;right:8px;top:auto;bottom:56px;width:auto;padding:6px;border-radius:12px;
+    backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(16,12,42,.9)}
+  .pal-head,.desc,.tool kbd{display:none}
+  .tools{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+  .tool{padding:6px 4px;gap:5px;font-size:11px;letter-spacing:-.005em;border-color:rgba(140,147,196,.16)}
+  .tool .nm{overflow:hidden;text-overflow:clip}
+  .sw{width:12px;height:12px;border-radius:3px}
+  .pal-foot{position:fixed;right:8px;bottom:16px;flex-direction:row;align-items:center;gap:5px;margin:0}
+  .brush{gap:3px}.brush .bl{display:none}
+  .ctrls{gap:5px}
+  .pbtn{font-size:12px;padding:8px 10px}
+  .pbtn.sq{width:29px;height:29px}
+}
+</style>
+</head>
+<body>
+<canvas class="stage" id="c" role="img" aria-label="A falling-sand game. Cold blue data pours into brick firewall bins. Magenta malware drips from a cracked glass sandbox and eats the data, a white-hot ransomware fire sweeps through one bin leaving glittering violet encrypted crystal, then pale blue patch water pours down and steams against the flames, a backup turns the crystal back into data and a gold honeypot traps the last malware."></canvas>
+
+<div class="hud glass" id="hud" aria-live="off">
+  <div class="row"><i class="chip" style="background:#4FA3E0"></i><span class="l">Data intact</span><b id="v-data">100%</b></div>
+  <div class="row"><i class="chip sw-crys"></i><span class="l">Encrypted</span><b id="v-enc">0%</b></div>
+  <div class="row"><i class="chip" style="background:#F0306A"></i><span class="l">Malware cells</span><b id="v-mal">0</b></div>
+  <div class="row"><i class="chip" style="background:#FFD36B"></i><span class="l">Secrets leaked</span><b id="v-leak">0</b></div>
+  <div class="mode" id="mode"><i class="dot"></i><span id="mode-t">Demo playing. Draw anywhere to take over.</span></div>
+</div>
+<div class="caption glass" id="caption" aria-live="polite"></div>
+<div class="ctag" id="ctag" aria-hidden="true"><i class="sw" id="ctag-sw"></i><span id="ctag-t"></span></div>
+
+<nav class="palette glass" id="palette" aria-label="Sandbox tools">
+  <div class="pal-head">Materials</div>
+  <div class="tools" id="tools" role="radiogroup" aria-label="Material"></div>
+  <p class="desc" id="desc"></p>
+  <div class="pal-foot">
+    <div class="brush"><span class="bl">Brush size</span>
+      <button type="button" class="pbtn sq" id="bminus" aria-label="Smaller brush">&minus;</button>
+      <output id="bsize" aria-label="Brush size">4</output>
+      <button type="button" class="pbtn sq" id="bplus" aria-label="Larger brush">+</button></div>
+    <div class="ctrls">
+      <button type="button" class="pbtn" id="pause2" aria-pressed="false">Pause</button>
+      <button type="button" class="pbtn" id="step" title="Advance one tick (.)">Step</button>
+      <button type="button" class="pbtn" id="clear" title="Empty the sandbox (C)">Clear</button>
+    </div>
+  </div>
+</nav>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Sandbox</h1>
+  <p>A falling-sand game where every material is a security idea. Malware eats data, ransomware locks it into crystal, and patches, backups and honeypots fight back. Draw anywhere to play.</p>
+  <p class="missing" id="missing" hidden>Your browser has no WebGL2, so this is the plain canvas version without glow, shimmer and heat haze.</p>
+  <ul class="tech">
+    <li id="tech-grid">Cellular automaton on a 320 × 200 grid of typed arrays, scanned bottom-up in alternating directions with a per-cell moved-this-tick stamp</li>
+    <li>Powders pile, liquids level, gases rise; fifteen contact reactions all roll dice on one seeded xorshift stream</li>
+    <li>Cells upload every frame to a WebGL2 texture; shaders add per-grain shimmer, emissive glow, a two-level bloom and heat haze</li>
+    <li>The 30 s demo is scripted brush strokes on a fixed 60 Hz tick; seeking re-simulates from the seed, with snapshots every 2 s</li>
+    <li>Keys 1–9, 0 and E pick a material, [ and ] size the brush, right-click erases</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<script>
+(() => {
+'use strict';
+
+/* ------------------------------------------------------------------
+   Storyboard (seconds). Loop = 30 s, fixed 60 Hz simulation tick.
+     0.0  frame one: clouds of data already cascading into three
+          firewall bins; the player keeps pouring data into bin B
+     5.3  the player nicks the floor of the glass sandbox: a thin
+          magenta stream of malware falls into bin A and eats data
+    11.0  a zero-day spark flies in from the right, tunnels through
+          bin C's firewall and ignites ransomware in the data
+    11–17 the fire sweeps bin C, leaving glittering locked crystal
+    15.6  the player pours patch over bin C: it cascades onto the
+          flames and steams (the moment), then patches bin A
+    21.0  a backup dropped into the crystal sends a cold decrypt wave
+          back through it and regrows data
+    23.6  a honeypot under the crack lures and traps the last malware
+    26.4  the crack is sealed with sandbox glass; 29.4 dip, loop
+   __seek(t) restores the nearest snapshot and re-simulates with the
+   scripted strokes, so every frame is a pure function of t.
+   ------------------------------------------------------------------ */
+const DT = 1 / 60, PERIOD = 30, PERIOD_TICKS = 1800, SNAP_EVERY = 120, SEED = 0x5A2D23;
+const REDUCED_T = 16.3, IDLE_MS = 10000;
+const qs = new URLSearchParams(location.search);
+const DEBUG = qs.has('debug');
+const FORCE_2D = qs.get('gl') === '0';
+
+const $ = id => document.getElementById(id);
+const canvas = $('c');
+const notes = $('notes'), showNotes = $('show-notes'), hideNotes = $('hide-notes');
+const playBtn = $('playpause'), pause2 = $('pause2');
+const hud = $('hud'), cap = $('caption'), ctag = $('ctag'), palette = $('palette');
+const modeEl = $('mode'), modeT = $('mode-t');
+const vData = $('v-data'), vEnc = $('v-enc'), vMal = $('v-mal'), vLeak = $('v-leak');
+
+/* ---------------- materials ---------------- */
+const E = 0, DATA = 1, WALL = 2, MAL = 3, FIRE = 4, CRYS = 5, PATCH = 6, STEAM = 7, BACK = 8, HONEY = 9,
+      TRAP = 10, SECR = 11, EXFIL = 12, GLASS = 13, ZDAY = 14, DECR = 15, SPARK = 16, BOUND = 31, ERASE = 100;
+
+const TOOLS = [
+  { id: DATA,  key: '1', name: 'Data', sw: 'sw-data', desc: 'Cold powder that piles up. It is what everything else is after.' },
+  { id: WALL,  key: '2', name: 'Firewall', sw: 'sw-wall', desc: 'Solid wall. Stops liquids and fire, but malware slowly corrodes it and zero-days tunnel through.' },
+  { id: MAL,   key: '3', name: 'Malware', sw: 'sw-mal', desc: 'Hot liquid. Eats data and spreads, carries secrets off, and can’t cross sandbox glass.' },
+  { id: FIRE,  key: '4', name: 'Ransomware', sw: 'sw-fire', desc: 'Fire. Sweeps through data and leaves it locked as encrypted crystal.' },
+  { id: PATCH, key: '5', name: 'Patch', sw: 'sw-patch', desc: 'Cold liquid. Turns malware into inert steam and puts out ransomware, but can’t unlock crystal.' },
+  { id: BACK,  key: '6', name: 'Backup', sw: 'sw-back', desc: 'Cold emitter. Slowly regrows data around it and decrypts any crystal it touches.' },
+  { id: HONEY, key: '7', name: 'Honeypot', sw: 'sw-honey', desc: 'Sticky gold lure. Pulls malware in from a distance and traps it for good.' },
+  { id: SECR,  key: '8', name: 'Secrets', sw: 'sw-secr', desc: 'Gold dust. Malware and fire send it flying out of the top; a firewall above blocks it.' },
+  { id: GLASS, key: '9', name: 'Sandbox glass', short: 'Glass', sw: 'sw-glass', desc: 'Container. Malware, fire and zero-days can’t get through it.' },
+  { id: ZDAY,  key: '0', name: 'Zero-day', sw: 'sw-zday', desc: 'Rare spark. Tunnels through firewalls and ignites ransomware when it hits data.' },
+  { id: ERASE, key: 'E', name: 'Eraser', sw: 'sw-erase', desc: 'Removes whatever is under the brush.' },
+];
+const TOOL_BY_ID = new Map(TOOLS.map(t => [t.id, t]));
+
+const ACTIVE = new Uint8Array(256), SOLID = new Uint8Array(256), GASLIKE = new Uint8Array(256), PAINT_SOLID = new Uint8Array(256);
+[DATA, MAL, FIRE, CRYS, PATCH, STEAM, BACK, SECR, EXFIL, ZDAY, DECR, SPARK, TRAP].forEach(m => ACTIVE[m] = 1);
+[WALL, BACK, HONEY, TRAP, GLASS, CRYS, BOUND].forEach(m => SOLID[m] = 1);
+[E, STEAM, SPARK, EXFIL].forEach(m => GASLIKE[m] = 1);
+[WALL, BACK, HONEY, TRAP, GLASS, BOUND].forEach(m => PAINT_SOLID[m] = 1);
+
+// reaction odds, as 16-bit thresholds for (rnd() >>> 16) < P
+const P = x => Math.round(x * 65536);
+const P_EAT = P(0.03), P_EAT_GROW = P(0.35), P_STEAL = P(0.03), P_CORRODE = P(0.0007), P_TRAP = P(0.55),
+      P_PATCH_USE = P(0.3), P_FIRE_IGNITE = P(0.3), P_FIRE_STEAL = P(0.03), P_SPREAD = P(0.085), P_FLAME = P(0.17),
+      P_BURN_STEAL = P(0.03), P_BACK_TRY = P(0.16), P_BACK_GROW = P(0.1), P_DECRYPT = P(0.2), P_ZTURN = P(0.03),
+      P_EVAP = P(0.0025), P_VISC = P(0.45), P_POWDER = P(0.17), P_LIQUID = P(0.24), P_FIREBRUSH = P(0.3), P_LURE = 0.5 * 65536;
+
+/* ---------------- layouts (grid size is fixed per orientation) ---------------- */
+function layoutL() {
+  return { kind: 'L', W: 320, H: 200, bx0: 101, inner: 47, wt: 3, top: 104, secr: 3, fillA: 27, fillB: 24, fillC: 29,
+    flask: { x0: 114, x1: 142, y0: 24, y1: 66, wt: 2 }, flaskGap: 3,
+    clouds: [{ x0: 166, x1: 188, y0: 0, y1: 96, col: true }, { x0: 216, x1: 238, y0: 0, y1: 92, col: true }, { x0: 116, x1: 138, y0: 70, y1: 100, col: true }],
+    warm: 2, pourY: 22, r: 3, rBig: 3, brush: 4 };
+}
+function layoutP() {
+  return { kind: 'P', W: 128, H: 184, bx0: 7, inner: 34, wt: 3, top: 96, secr: 3, fillA: 22, fillB: 20, fillC: 27,
+    flask: { x0: 12, x1: 44, y0: 12, y1: 50, wt: 2 }, flaskGap: 3,
+    clouds: [{ x0: 57, x1: 71, y0: 0, y1: 88, col: true }, { x0: 94, x1: 108, y0: 0, y1: 84, col: true }, { x0: 20, x1: 34, y0: 54, y1: 84, col: true }],
+    warm: 2, pourY: 12, r: 2, rBig: 2, brush: 3 };
+}
+function binsOf(lo) {
+  return [0, 1, 2].map(k => { const l = lo.bx0 + lo.wt + k * (lo.inner + lo.wt); return { l, r: l + lo.inner, cx: l + (lo.inner >> 1) }; });
+}
+
+/* ---------------- the scripted demo session ---------------- */
+function makeScript(lo) {
+  const [A, B, C] = binsOf(lo), py = lo.pourY, f = lo.flask, r = lo.r, rb = lo.rBig;
+  const crackX = (f.x0 + f.x1) >> 1, floorTop = f.y1 - f.wt, floorBot = f.y1 - 1;
+  const floor = lo.H - 3;
+  const ev = [
+    { tool: DATA, t0: 0.25, t1: 4.5, r, path: [[B.l + 9, py], [B.r - 9, py], [B.l + 11, py], [B.r - 12, py]] },
+    { tool: ERASE, t0: 5.3, t1: 5.7, r: 0.6, path: [[crackX, floorTop], [crackX, floorBot]] },
+    { tool: WALL, t0: 6.6, t1: 7.6, r: 1.5, path: [[B.l - 2, lo.top - 2], [B.r + 2, lo.top - 2]] },
+    { tool: DATA, t0: 8.2, t1: 9.4, r, path: [[C.l + 10, py], [C.r - 10, py]] },
+    { tool: ZDAY, t0: lo.kind === 'L' ? 11.0 : 12.2, spark: true, r: 1.5, x: Math.min(lo.W - 3, C.r + lo.wt + (lo.kind === 'L' ? 26 : 4)), y: floor - 16, dir: 6 },
+    { tool: PATCH, t0: 15.5, t1: 17.6, r: rb, path: [[C.cx + 8, py], [C.l + 8, py], [C.cx + 6, py]] },
+    { tool: PATCH, t0: 18.2, t1: 20.2, r: rb, path: [[A.l + 6, lo.top - 8], [A.r - 6, lo.top - 8], [A.cx + 6, lo.top - 8]] },
+    { tool: BACK, t0: 20.9, t1: 21.4, r, path: [[C.cx - 5, floor - 30], [C.cx + 5, floor - 30]] },
+    { tool: HONEY, t0: 22.3, t1: 22.8, r: r + 1, path: [[crackX + 7, f.y1 + 18], [crackX + 8, f.y1 + 20]] },
+    { tool: GLASS, t0: 26.2, t1: 26.7, r: 1.2, path: [[crackX - 2, floorTop], [crackX + 2, floorTop]] },
+  ];
+  for (const e of ev) {
+    if (e.spark) { e.a = e.t0 - 0.55; e.b = e.t0 + 0.35; e.path = [[e.x, e.y]]; e.t1 = e.t0 + 1e-3; }
+    else { e.a = e.t0; e.b = e.t1; }
+    const p = e.path; let len = 0; e.seg = [0];
+    for (let k = 1; k < p.length; k++) { len += Math.hypot(p[k][0] - p[k - 1][0], p[k][1] - p[k - 1][1]); e.seg.push(len); }
+    e.len = len;
+  }
+  return ev;
+}
+const STORY = [
+  [0, 'Data pours into three firewall bins'],
+  [5.0, 'A crack in the sandbox: malware leaks out and eats the data'],
+  [10.5, 'A zero-day slips through the firewall and ignites ransomware'],
+  [15.3, 'Patch puts out the fire and turns malware into inert steam'],
+  [20.5, 'A backup decrypts the locked crystal and regrows data'],
+  [22.1, 'A honeypot lures the last malware and traps it'],
+  [26.0, 'Crack sealed. Your turn: draw anywhere to play'],
+];
+
+/* ---------------- simulation state ---------------- */
+let LO = null, SCRIPT = [], W = 0, H = 0, PW = 0, PH = 0, N = 0;
+let cell, c32, vel, stamp, src, blk, lure, LW = 0, LH = 0, NB4, NB8, DIR8;
+let rs = SEED | 0, tickCount = 0, tickId = 1, leaked = 0, peak = 0;
+let painter = null, attractValid = false;
+const snaps = new Map();
+
+function rnd() { rs ^= rs << 13; rs ^= rs >>> 17; rs ^= rs << 5; return rs >>> 0; }
+const r16 = () => rnd() >>> 16;
+
+function alloc(lo) {
+  LO = lo; W = lo.W; H = lo.H; PW = W + 2; PH = H + 2; N = PW * PH;
+  cell = new Uint8Array(N * 4); c32 = new Uint32Array(cell.buffer);
+  vel = new Uint8Array(N); stamp = new Uint8Array(N);
+  LW = Math.ceil(W / 4); LH = Math.ceil(H / 4);
+  src = new Float32Array(LW * LH); blk = new Uint8Array(LW * LH); lure = new Float32Array(LW * LH);
+  NB4 = [-PW, 1, PW, -1];
+  NB8 = [-PW - 1, -PW, -PW + 1, -1, 1, PW - 1, PW, PW + 1];
+  DIR8 = [-PW, -PW + 1, 1, PW + 1, PW, PW - 1, -1, -PW - 1];
+  SCRIPT = makeScript(lo);
+  snaps.clear();
+}
+const idx = (x, y) => (y + 1) * PW + (x + 1);
+function borders() {
+  for (let x = 0; x < PW; x++) { c32[x] = BOUND; c32[(PH - 1) * PW + x] = BOUND; }
+  for (let y = 0; y < PH; y++) { c32[y * PW] = BOUND; c32[y * PW + PW - 1] = BOUND; }
+}
+function setCell(i, m, s, L, a) { c32[i] = (m | (s << 8) | (L << 16) | (a << 24)) >>> 0; vel[i] = 0; stamp[i] = tickId; }
+function swap(i, j) {
+  const t = c32[i]; c32[i] = c32[j]; c32[j] = t;
+  const v = vel[i]; vel[i] = vel[j]; vel[j] = v;
+  stamp[i] = tickId; stamp[j] = tickId;
+}
+const shadeOf = i => cell[(i << 2) + 1];
+function puff(j) { if (cell[j << 2] === E && (rnd() & 0x80000000)) setCell(j, STEAM, rnd() & 255, 90 + (rnd() & 63), 0); }
+function ignite(j) { setCell(j, CRYS, shadeOf(j), 48 + (rnd() & 31), 0); }
+
+/* ---------------- one tick ---------------- */
+function simTick() {
+  tickCount++;
+  tickId = (tickCount % 255) + 1;
+  if (painter) painter();
+  if (tickCount % 6 === 0) updateLure();
+  const tid = tickId, ltr = tickCount & 1;
+  for (let y = H; y >= 1; y--) {
+    const row = y * PW;
+    for (let k = 1; k <= W; k++) {
+      const i = ltr ? row + k : row + PW - 1 - k;
+      const m = cell[i << 2];
+      if (ACTIVE[m] === 0 || stamp[i] === tid) continue;
+      switch (m) {
+        case DATA: case SECR: updPowder(i); break;
+        case MAL: updMal(i); break;
+        case PATCH: updPatch(i); break;
+        case FIRE: updFire(i); break;
+        case CRYS: if (cell[(i << 2) + 2]) updBurn(i); break;
+        case STEAM: updSteam(i); break;
+        case BACK: updBackup(i); break;
+        case EXFIL: updExfil(i); break;
+        case ZDAY: updZday(i); break;
+        case DECR: updDecr(i); break;
+        case TRAP: { const li = (i << 2) + 2; if (cell[li]) cell[li]--; break; }
+        case SPARK: { const li = (i << 2) + 2, L = cell[li]; if (L <= 1) c32[i] = 0; else cell[li] = L - 1; break; }
+      }
+    }
+  }
+  if (tickCount % 30 === 0) census();
+}
+
+function updPowder(i) {
+  let v = vel[i] + 1; if (v > 8) v = 8;
+  let steps = (v + 1) >> 1, j = i, fell = false;
+  while (steps-- > 0) {
+    const b = j + PW, mb = cell[b << 2];
+    if (GASLIKE[mb] || mb === FIRE) { swap(j, b); j = b; fell = true; }
+    else if ((mb === PATCH || mb === MAL) && (rnd() & 0x80000000)) { swap(j, b); j = b; fell = true; break; }
+    else break;
+  }
+  if (fell) { vel[j] = v; return; }
+  vel[i] = 0;
+  const d = (rnd() & 0x100) ? 1 : -1;
+  if (!powderDiag(i, d)) powderDiag(i, -d);
+}
+function powderDiag(i, d) {
+  if (SOLID[cell[(i + d) << 2]]) return false;
+  const b = i + PW + d, mb = cell[b << 2];
+  if (GASLIKE[mb] || mb === FIRE || ((mb === PATCH || mb === MAL) && (rnd() & 0x80000000))) { swap(i, b); return true; }
+  return false;
+}
+
+function updLiquid(i, disp, visc) {
+  if (visc && vel[i] === 0 && r16() < visc) return;
+  let v = vel[i] + 1; if (v > 8) v = 8;
+  let steps = (v + 1) >> 1, j = i, fell = false;
+  while (steps-- > 0) {
+    const b = j + PW;
+    if (GASLIKE[cell[b << 2]]) { swap(j, b); j = b; fell = true; } else break;
+  }
+  if (fell) { vel[j] = v; return; }
+  const v0 = vel[i]; vel[i] = 0;
+  const ai = (i << 2) + 3, a = cell[ai], dir = (a & 1) ? 1 : -1;
+  if (GASLIKE[cell[(i + PW + dir) << 2]] && !SOLID[cell[(i + dir) << 2]]) { swap(i, i + PW + dir); return; }
+  if (GASLIKE[cell[(i + PW - dir) << 2]] && !SOLID[cell[(i - dir) << 2]]) { cell[ai] = a ^ 1; swap(i, i + PW - dir); return; }
+  const reach = disp + (v0 >> 1);
+  let last = -1;
+  for (let k = 1, c = i + dir; k <= reach; k++, c += dir) {
+    if (!GASLIKE[cell[c << 2]]) break;
+    last = c;
+    if (GASLIKE[cell[(c + PW) << 2]]) break;
+  }
+  if (last >= 0) { swap(i, last); return; }
+  cell[ai] = a ^ 1;
+}
+
+function updPatch(i) {
+  if (cell[(i - PW) << 2] === E && r16() < P_EVAP) { setCell(i, STEAM, rnd() & 255, 40 + (rnd() & 63), 0); return; }
+  updLiquid(i, 5);
+}
+function updMal(i) {
+  for (let n = 0; n < 4; n++) {
+    const j = i + NB4[n], mj = cell[j << 2];
+    if (mj === E || mj === MAL) continue;
+    if (mj === PATCH) {
+      setCell(i, STEAM, rnd() & 255, 70 + (rnd() & 63), 0);
+      if (r16() < P_PATCH_USE) setCell(j, STEAM, rnd() & 255, 50 + (rnd() & 63), 0);
+      return;
+    }
+    if (mj === HONEY) { if (r16() < P_TRAP) { setCell(i, TRAP, shadeOf(i), 40, 0); return; } }
+    else if (mj === TRAP) { if (r16() < P_TRAP) { c32[i] = 0; cell[(j << 2) + 2] = 40; return; } }
+    else if (mj === DATA) {
+      if (r16() < P_EAT) { if (r16() < P_EAT_GROW) setCell(j, MAL, shadeOf(j), 0, rnd() & 1); else { c32[j] = 0; stamp[j] = tickId; } }
+    }
+    else if (mj === SECR) { if (r16() < P_STEAL) setCell(j, EXFIL, shadeOf(j), 0, 0); }
+    else if (mj === WALL) { if (r16() < P_CORRODE) c32[j] = 0; }
+  }
+  // honeypots and secrets pull malware toward them (coarse distance field)
+  const y = (i / PW) | 0, x = i - y * PW;
+  const cx = (x - 1) >> 2, cy = (y - 1) >> 2, ci = cy * LW + cx, f = lure[ci];
+  if (f > 0.12) {
+    const fx = (cx + 1 < LW ? lure[ci + 1] : f) - (cx > 0 ? lure[ci - 1] : f);
+    const fy = (cy + 1 < LH ? lure[ci + LW] : f) - (cy > 0 ? lure[ci - LW] : f);
+    const dx = fx > 0.004 ? 1 : fx < -0.004 ? -1 : 0;
+    let dy = fy > 0.004 ? 1 : fy < -0.004 ? -1 : 0;
+    if (dx) { const ai = (i << 2) + 3; cell[ai] = (cell[ai] & 254) | (dx > 0 ? 1 : 0); }
+    if (r16() < f * P_LURE) {
+      if (dy < 0 && (rnd() & 0x300) === 0) dy = 0;
+      const t = i + dy * PW + dx;
+      if (t !== i && GASLIKE[cell[t << 2]]) { swap(i, t); return; }
+    }
+  }
+  updLiquid(i, 2, f > 0.12 ? 0 : P_VISC);
+}
+
+function updFire(i) {
+  const li = (i << 2) + 2, L = cell[li];
+  if (L <= 1) { c32[i] = 0; return; }
+  cell[li] = L - 1;
+  for (let n = 0; n < 4; n++) {
+    const j = i + NB4[n], mj = cell[j << 2];
+    if (mj === DATA) { if (r16() < P_FIRE_IGNITE) ignite(j); }
+    else if (mj === PATCH) {
+      setCell(i, STEAM, rnd() & 255, 110 + (rnd() & 63), 0);
+      if (rnd() & 0x80000000) setCell(j, STEAM, rnd() & 255, 90 + (rnd() & 63), 0);
+      puff(i - PW); puff(i - PW - 1); puff(i - PW + 1);
+      return;
+    }
+    else if (mj === SECR) { if (r16() < P_FIRE_STEAL) setCell(j, EXFIL, shadeOf(j), 0, 0); }
+  }
+  const r = rnd();
+  let t;
+  if ((r & 3) !== 0) { const s = (r >>> 2) & 3; t = i - PW + (s === 0 ? -1 : s === 1 ? 1 : 0); }
+  else t = i + ((r & 16) ? 1 : -1);
+  const mt = cell[t << 2];
+  if (mt === E || mt === SPARK) swap(i, t);
+}
+
+function updBurn(i) {
+  const li = (i << 2) + 2;
+  let L = cell[li];
+  for (let n = 0; n < 4; n++) {
+    const j = i + NB4[n], mj = cell[j << 2];
+    if (mj === DATA) { if (r16() < P_SPREAD) ignite(j); }
+    else if (mj === PATCH) {
+      L = L > 12 ? L - 10 : 1;
+      if (r16() < P(0.55)) setCell(j, STEAM, rnd() & 255, 110 + (rnd() & 63), 0);
+      puff(j - PW); puff(j - PW - 1); puff(j - PW + 1); puff(j - 2 * PW);
+    }
+    else if (mj === SECR) { if (r16() < P_BURN_STEAL) setCell(j, EXFIL, shadeOf(j), 0, 0); }
+  }
+  const up = i - PW;
+  if (L > 1 && cell[up << 2] === E && r16() < P_FLAME) setCell(up, FIRE, rnd() & 255, 18 + (rnd() & 31), 0);
+  cell[li] = L - 1;
+}
+
+function updSteam(i) {
+  const li = (i << 2) + 2, L = cell[li];
+  if (L <= 1) { c32[i] = 0; return; }
+  cell[li] = L - 1;
+  const r = rnd();
+  let t;
+  if ((r & 7) < 5) t = i - PW + (((r >>> 3) % 3) - 1); else t = i + ((r & 64) ? 1 : -1);
+  const mt = cell[t << 2];
+  if (mt === E || mt === SPARK) swap(i, t);
+}
+
+function updBackup(i) {
+  if (r16() >= P_BACK_TRY) return;
+  const j = i + NB8[rnd() & 7], mj = cell[j << 2];
+  if (mj === E) { if (r16() < P_BACK_GROW) setCell(j, DATA, rnd() & 255, 0, 0); }
+  else if (mj === CRYS) setCell(j, DECR, shadeOf(j), 6 + (rnd() & 7), 0);
+}
+
+function updDecr(i) {
+  const li = (i << 2) + 2, L = cell[li];
+  for (let n = 0; n < 4; n++) {
+    const j = i + NB4[n];
+    if (cell[j << 2] === CRYS && r16() < P_DECRYPT) setCell(j, DECR, shadeOf(j), 6 + (rnd() & 7), 0);
+  }
+  if (L <= 1) setCell(i, DATA, shadeOf(i), 0, 0); else cell[li] = L - 1;
+}
+
+function updExfil(i) {
+  let j = i;
+  for (let s = 0; s < 2; s++) {
+    const r = rnd() & 3;
+    let up = j - PW + (r === 0 ? -1 : r === 1 ? 1 : 0);
+    let mu = cell[up << 2];
+    if (mu === BOUND) {
+      if (up < PW) { c32[j] = 0; leaked++; return; }
+      up = j - PW; mu = cell[up << 2];
+      if (mu === BOUND) { c32[j] = 0; leaked++; return; }
+    }
+    if (mu === WALL || mu === GLASS || mu === BACK || mu === CRYS || mu === HONEY || mu === TRAP) { setCell(j, SECR, shadeOf(j), 0, 0); return; }
+    swap(j, up); j = up;
+  }
+}
+
+function updZday(i) {
+  const b = i << 2;
+  let L = cell[b + 2], a = cell[b + 3] & 7;
+  if (L <= 1) { setCell(i, SPARK, 0, 10, 0); return; }
+  L--;
+  if (L < 200 && r16() < P_ZTURN) a = (a + ((rnd() & 0x80000000) ? 1 : 7)) & 7;
+  let j = i;
+  {
+    const d = DIR8[a], t = j + d, mt = cell[t << 2];
+    if (mt === E || mt === SPARK || mt === STEAM) {
+      setCell(t, ZDAY, 0, L, a); setCell(j, SPARK, 0, 10, 0); j = t;
+    } else if (mt === DATA) { ignite(t); setCell(j, FIRE, 0, 30, 0); return; }
+    else if (mt === SECR) { setCell(t, EXFIL, shadeOf(t), 0, 0); setCell(j, SPARK, 0, 10, 0); return; }
+    else if (mt === WALL) {
+      // zero-days are unknown to the firewall: tunnel straight through it
+      let k = t, n = 0;
+      while (cell[k << 2] === WALL && n < 14) { k += d; n++; }
+      const mk = cell[k << 2];
+      if (mk === E || mk === SPARK || mk === STEAM || mk === DATA) {
+        setCell(j, SPARK, 0, 10, 0);
+        if (mk === DATA) { ignite(k); return; }
+        setCell(k, ZDAY, 0, L, a); j = k;
+      } else a = (a + 4) & 7;
+    } else if (mt === PATCH) { setCell(j, STEAM, 0, 60, 0); return; }
+    else a = (a + 3 + (rnd() % 3)) & 7;
+  }
+  const bj = j << 2; cell[bj + 2] = L; cell[bj + 3] = a;
+}
+
+function updateLure() {
+  src.fill(0); blk.fill(0);
+  for (let y = 1; y <= H; y++) {
+    const cy = ((y - 1) >> 2) * LW;
+    let i = y * PW + 1;
+    for (let x = 0; x < W; x++, i++) {
+      const m = cell[i << 2];
+      if (m === E) continue;
+      const ci = cy + (x >> 2);
+      if (m === HONEY) src[ci] = 1;
+      else if (m === TRAP) { if (src[ci] < 0.9) src[ci] = 0.9; }
+      else if (m === SECR) { if (src[ci] < 0.7) src[ci] = 0.7; }
+      else if (m === WALL || m === GLASS || m === BACK) blk[ci] += 2;
+    }
+  }
+  const K = 0.86, n = LW * LH;
+  for (let ci = 0; ci < n; ci++) {
+    if (blk[ci] > 12) { lure[ci] = 0; continue; }
+    const cx = ci % LW;
+    let f = src[ci];
+    if (cx > 0 && lure[ci - 1] * K > f) f = lure[ci - 1] * K;
+    if (ci >= LW && lure[ci - LW] * K > f) f = lure[ci - LW] * K;
+    lure[ci] = f;
+  }
+  for (let ci = n - 1; ci >= 0; ci--) {
+    if (blk[ci] > 12) continue;
+    const cx = ci % LW;
+    let f = lure[ci];
+    if (cx < LW - 1 && lure[ci + 1] * K > f) f = lure[ci + 1] * K;
+    if (ci + LW < n && lure[ci + LW] * K > f) f = lure[ci + LW] * K;
+    lure[ci] = f;
+  }
+}
+
+function census() {
+  let d = 0, c = 0;
+  for (let i = 0; i < N; i++) { const m = cell[i << 2]; if (m === DATA) d++; else if (m === CRYS || m === DECR) c++; }
+  if (d + c > peak) peak = d + c;
+}
+
+/* ---------------- painting ---------------- */
+function paintCell(i, tool) {
+  const m = cell[i << 2];
+  if (m === BOUND) return;
+  switch (tool) {
+    case ERASE: c32[i] = 0; vel[i] = 0; return;
+    case DATA: case SECR: if (GASLIKE[m] && r16() < P_POWDER) { setCell(i, tool, rnd() & 255, 0, 0); vel[i] = rnd() & 3; } return;
+    case PATCH: case MAL: if (GASLIKE[m] && r16() < P_LIQUID) { setCell(i, tool, rnd() & 255, 0, rnd() & 1); vel[i] = rnd() & 3; } return;
+    case FIRE:
+      if (m === DATA) { if (r16() < P_FIREBRUSH) ignite(i); }
+      else if (GASLIKE[m] && r16() < P_FIREBRUSH) setCell(i, FIRE, rnd() & 255, 20 + (rnd() & 31), 0);
+      return;
+    case WALL: case GLASS: case BACK: case HONEY:
+      if (!PAINT_SOLID[m]) setCell(i, tool, rnd() & 255, 0, 0);
+      return;
+  }
+}
+let zdayCooldown = 0;
+function paintDisc(cx, cy, r, tool) {
+  if (tool === ZDAY) {
+    if (tickCount < zdayCooldown) return;
+    const x = Math.floor(cx), y = Math.floor(cy);
+    if (x < 0 || y < 0 || x >= W || y >= H) return;
+    const i = idx(x, y);
+    if (GASLIKE[cell[i << 2]]) { setCell(i, ZDAY, 0, 200 + (rnd() & 127), [3, 4, 5][rnd() % 3]); zdayCooldown = tickCount + 14; }
+    return;
+  }
+  const R = Math.max(0.5, r), R2 = R * R;
+  const x0 = Math.max(0, Math.floor(cx - R)), x1 = Math.min(W - 1, Math.floor(cx + R));
+  const y0 = Math.max(0, Math.floor(cy - R)), y1 = Math.min(H - 1, Math.floor(cy + R));
+  for (let y = y0; y <= y1; y++) {
+    const dy = y + 0.5 - cy;
+    for (let x = x0; x <= x1; x++) {
+      const dx = x + 0.5 - cx;
+      if (dx * dx + dy * dy <= R2) paintCell(idx(x, y), tool);
+    }
+  }
+}
+function paintStroke(x0, y0, x1, y1, r, tool) {
+  const d = Math.hypot(x1 - x0, y1 - y0);
+  const n = Math.max(1, Math.ceil(d / Math.max(0.5, r * 0.6)));
+  for (let k = n === 1 && d === 0 ? 1 : 0; k <= n; k++) {
+    const u = k / n;
+    paintDisc(x0 + (x1 - x0) * u, y0 + (y1 - y0) * u, r, tool);
+    if (tool === ZDAY) break;
+  }
+}
+
+/* ---------------- scripted input ---------------- */
+function evPos(e, t) {
+  const p = e.path;
+  if (p.length === 1 || e.len === 0) return p[0];
+  const u = Math.min(1, Math.max(0, (t - e.t0) / (e.t1 - e.t0))) * e.len;
+  let k = 1;
+  while (k < p.length - 1 && e.seg[k] < u) k++;
+  const s0 = e.seg[k - 1], s1 = e.seg[k], w = s1 > s0 ? (u - s0) / (s1 - s0) : 0;
+  return [p[k - 1][0] + (p[k][0] - p[k - 1][0]) * w, p[k - 1][1] + (p[k][1] - p[k - 1][1]) * w];
+}
+function attractPainter() {
+  const n = tickCount - 1, tp = n * DT;
+  for (const e of SCRIPT) {
+    if (e.spark) {
+      if (n === Math.round(e.t0 / DT)) { const i = idx(e.x, e.y); setCell(i, ZDAY, 0, 240, e.dir); }
+      continue;
+    }
+    if (tp < e.t0 - 1e-9 || tp >= e.t1) continue;
+    const p1 = evPos(e, tp), p0 = tp - DT >= e.t0 ? evPos(e, tp - DT) : p1;
+    paintStroke(p0[0] + 0.5, p0[1] + 0.5, p1[0] + 0.5, p1[1] + 0.5, e.r, e.tool);
+  }
+}
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+function cursorAt(t) {
+  let prev = null, next = null;
+  for (const e of SCRIPT) {
+    if (t >= e.a && t < e.b) {
+      const p = e.spark ? e.path[0] : evPos(e, t);
+      return { x: p[0] + 0.5, y: p[1] + 0.5, r: Math.max(1.5, e.r), tool: e.tool, active: t >= e.t0 };
+    }
+    if (e.b <= t) prev = e;
+    else if (!next && e.a > t) next = e;
+  }
+  const endOf = e => (e.spark ? e.path[0] : evPos(e, e.t1));
+  const startOf = e => (e.spark ? e.path[0] : evPos(e, e.t0));
+  if (!prev) { const p = startOf(next); return { x: p[0] + 0.5, y: p[1] + 0.5, r: Math.max(1.5, next.r), tool: next.tool, active: false }; }
+  if (!next) { const p = endOf(prev); return { x: p[0] + 0.5, y: p[1] + 0.5, r: Math.max(1.5, prev.r), tool: prev.tool, active: false }; }
+  const u = smooth(prev.b, next.a, t), a = endOf(prev), b = startOf(next);
+  const arc = Math.sin(Math.PI * u) * Math.min(14, Math.hypot(b[0] - a[0], b[1] - a[1]) * 0.12);
+  return { x: a[0] + (b[0] - a[0]) * u + 0.5, y: a[1] + (b[1] - a[1]) * u - arc + 0.5,
+    r: Math.max(1.5, prev.r + (next.r - prev.r) * u), tool: (t - prev.b) > 0.25 * (next.a - prev.b) ? next.tool : prev.tool, active: false };
+}
+
+/* ---------------- seeded initial state ---------------- */
+function fillRect(x0, y0, x1, y1, m) {
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    if (x < 0 || y < 0 || x >= W || y >= H) continue;
+    c32[idx(x, y)] = (m | ((rnd() & 255) << 8) | ((rnd() & 1) << 24)) >>> 0;
+  }
+}
+function cloud(c) {
+  const cx = (c.x0 + c.x1) / 2, rx = (c.x1 - c.x0) / 2;
+  for (let y = c.y0; y < c.y1; y++) for (let x = c.x0; x < c.x1; x++) {
+    const v = (y - c.y0) / (c.y1 - c.y0), w = rx * (0.45 + 0.55 * v) + Math.sin(y * 0.37 + c.x0) * 1.5;
+    const dx = Math.abs(x + 0.5 - cx);
+    if (dx > w || r16() > P(0.15 + 0.6 * v * (1 - 0.5 * dx / w))) continue;
+    const i = idx(x, y);
+    c32[i] = (DATA | ((rnd() & 255) << 8)) >>> 0;
+    vel[i] = rnd() % 3;
+  }
+}
+function buildInitial() {
+  c32.fill(0); vel.fill(0); stamp.fill(0); lure.fill(0);
+  borders();
+  rs = SEED | 0; leaked = 0; peak = 0; tickCount = 0; tickId = 1;
+  const lo = LO, f = lo.flask, [A, B, C] = binsOf(lo), floor = H - 3;
+  const end = lo.bx0 + 3 * (lo.inner + lo.wt) + lo.wt;
+  fillRect(lo.bx0 - 3, floor, end + 3, H, WALL);
+  for (let k = 0; k <= 3; k++) { const x = lo.bx0 + k * (lo.inner + lo.wt); fillRect(x, lo.top, x + lo.wt, floor, WALL); }
+  fillRect(A.l, floor - lo.secr, A.r, floor, SECR);
+  fillRect(A.l, floor - lo.secr - lo.fillA, A.r, floor - lo.secr, DATA);
+  fillRect(B.l, floor - lo.fillB, B.r, floor, DATA);
+  fillRect(C.l, floor - lo.fillC, C.r, floor, DATA);
+  fillRect(f.x0, f.y0, f.x1, f.y1, GLASS);
+  fillRect(f.x0 + f.wt, f.y0 + f.wt, f.x1 - f.wt, f.y1 - f.wt, E);
+  fillRect(f.x0 + f.wt, f.y0 + f.wt + lo.flaskGap, f.x1 - f.wt, f.y1 - f.wt, MAL);
+  for (const c of lo.clouds) cloud(c);
+  painter = null;
+  for (let k = 0; k < lo.warm; k++) simTick();
+  stamp.fill(0); tickCount = 0; tickId = 1; peak = 0;
+  census();
+}
+
+/* ---------------- snapshots and seeking ---------------- */
+function snapshot() {
+  snaps.set(tickCount, { cell: cell.slice(), vel: vel.slice(), stamp: stamp.slice(), lure: lure.slice(), rs, leaked, peak });
+}
+function restoreSnapshot(k) {
+  const s = snaps.get(k);
+  cell.set(s.cell); vel.set(s.vel); stamp.set(s.stamp); lure.set(s.lure);
+  rs = s.rs; leaked = s.leaked; peak = s.peak; tickCount = k; tickId = (k % 255) + 1;
+  attractValid = true;
+}
+function maybeSnapshot() { if (attractValid && tickCount % SNAP_EVERY === 0 && !snaps.has(tickCount)) snapshot(); }
+function seekTick(target) {
+  let best = 0;
+  for (const k of snaps.keys()) if (k <= target && k > best) best = k;
+  if (!(attractValid && mode === 'attract' && tickCount <= target && tickCount >= best)) restoreSnapshot(best);
+  mode = 'attract';
+  painter = attractPainter;
+  while (tickCount < target) { simTick(); maybeSnapshot(); }
+}
+
+/* ---------------- renderer: WebGL2 ---------------- */
+const GLSL_COMMON = `
+const int E=0, DATA=1, WALL=2, MAL=3, FIRE=4, CRYS=5, PATCH=6, STEAM=7, BACK=8, HONEY=9, TRAP=10, SECR=11, EXFIL=12, GLASS=13, ZDAY=14, DECR=15, SPARK=16, BOUND=31;
+const vec3 VOIDC=vec3(.063,.047,.165), DEEP=vec3(.106,.090,.278), STEEL=vec3(.306,.353,.549), MIST=vec3(.549,.576,.769), ICE=vec3(.608,.910,1.), FROST=vec3(.910,.969,1.);
+const vec3 H0=vec3(.227,.059,.420), H1=vec3(.608,.114,.561), H2=vec3(.941,.188,.416), H3=vec3(1.,.478,.184), H4=vec3(1.,.827,.420), H5=vec3(1.,.965,.878);
+const vec3 C1=vec3(.184,.310,.659), C2=vec3(.310,.639,.878);
+float hash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+vec3 ironbow(float x){ x = clamp(x, 0., 1.) * 5.;
+  if (x < 1.) return mix(H0, H1, x); if (x < 2.) return mix(H1, H2, x - 1.);
+  if (x < 3.) return mix(H2, H3, x - 2.); if (x < 4.) return mix(H3, H4, x - 3.); return mix(H4, H5, x - 4.); }
+`;
+const VS = `#version 300 es
+void main(){ vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)); gl_Position = vec4(p * 2. - 1., 0., 1.); }`;
+
+// pass A: one fragment per cell -> material colour + coverage, emissive + bevel
+const FS_CELLS = `#version 300 es
+precision highp float; precision highp int;
+uniform sampler2D uCells; uniform float uTime;
+layout(location=0) out vec4 oCol;
+layout(location=1) out vec4 oEmi;
+${GLSL_COMMON}
+ivec2 C;
+vec4 rawAt(ivec2 d){ return floor(texelFetch(uCells, C + ivec2(1) + d, 0) * 255. + .5); }
+int matAt(ivec2 d){ return int(rawAt(d).r); }
+bool airy(int m){ return m == E || m == STEAM || m == SPARK || m == FIRE || m == EXFIL || m == ZDAY; }
+void main(){
+  C = ivec2(gl_FragCoord.xy);
+  vec4 v = rawAt(ivec2(0));
+  int m = int(v.r); float s = v.g / 255.; float L = v.b;
+  vec2 cf = vec2(C); float t = uTime;
+  vec3 col = vec3(0.); float cov = 0.; vec3 em = vec3(0.); float bev = 0.;
+  if (m == DATA) {
+    col = mix(C1, C2, s);
+    if (s > .86) col = mix(col, ICE, (s - .86) * 5.);
+    col *= .9 + .1 * sin(t * 2.3 + s * 40.) + .06 * hash(cf + floor(t * 3. + s * 5.) * 13.1);
+    cov = 1.; bev = .8; em = C2 * .025;
+  } else if (m == WALL) {
+    int row = C.y / 3; int sx = C.x + (row & 1) * 4;
+    bool mortar = (C.y % 3 == 2) || (sx % 8 == 7);
+    float bs = hash(vec2(float(sx / 8), float(row)) + 3.7);
+    col = mix(STEEL * .78, STEEL * 1.08, bs * .65 + s * .35);
+    if (mortar) col = mix(DEEP, STEEL, .5);
+    int up = matAt(ivec2(0, -1));
+    if (up != WALL) col = mix(col, MIST, .5);
+    cov = 1.; bev = .35;
+  } else if (m == MAL) {
+    float n1 = sin(cf.x * .55 + t * 2.1 + sin(cf.y * .35 - t * 1.3) * 2.2);
+    float n2 = sin(cf.y * .8 - t * 2.7 + cf.x * .23);
+    float w = .5 + .25 * n1 + .25 * n2;
+    float depth = (matAt(ivec2(0, -2)) == MAL ? .5 : 0.) + (matAt(ivec2(0, -5)) == MAL ? .5 : 0.);
+    col = mix(H1 * .9, H2, .2 + .65 * w + .15 * s);
+    col = mix(col, H1 * .62, depth * .5 * (1. - .4 * w));
+    if (airy(matAt(ivec2(0, -1)))) col = mix(H2, H3, .45 + .3 * w);
+    cov = 1.; em = H2 * (.2 + .14 * w) * (1. - .45 * depth) + H1 * .06; bev = .15;
+  } else if (m == FIRE) {
+    float l = clamp(L / 46., 0., 1.);
+    float fl = hash(cf + floor(t * 24.) * 7.31);
+    float k = clamp(.3 + .62 * l + .18 * (fl - .5), 0., 1.);
+    col = ironbow(k); cov = clamp(.45 + l, 0., 1.); em = ironbow(k) * (.65 + .55 * l);
+  } else if (m == CRYS) {
+    vec3 base = mix(H0 * 1.25, H1 * .92, s * s);
+    float sheen = pow(.5 + .5 * sin((cf.x - cf.y * .7) * .11 - t * 1.4 + s * .6), 18.);
+    base += mix(H1, H5, .25) * .35 * sheen;
+    float g = hash(cf * 1.3 + floor(t * 3. + s * 11.) * 3.7);
+    float glint = smoothstep(.962, 1., g);
+    base = mix(base, H5, glint);
+    em = H1 * .1 + H5 * glint * .9 + H1 * sheen * .1;
+    bev = .9;
+    if (L > 0.) {
+      float l = clamp(L / 72., 0., 1.);
+      float fl = hash(cf + floor(t * 20.) * 3.1);
+      vec3 hot = ironbow(.42 + .58 * l + .08 * (fl - .5));
+      base = mix(base, hot, smoothstep(0., .45, l));
+      em += hot * (.25 + .8 * l);
+    }
+    col = base; cov = 1.;
+  } else if (m == PATCH) {
+    float w = .5 + .25 * sin(t * 2.6 + cf.x * .6 - cf.y * .45 + s * 5.) + .25 * sin(cf.y * .9 + t * 1.9 - cf.x * .2);
+    float depth = (matAt(ivec2(0, -3)) == PATCH ? .5 : 0.) + (matAt(ivec2(0, -7)) == PATCH ? .5 : 0.);
+    col = mix(C2, ICE, .6 + .35 * w);
+    col = mix(col, mix(C1, C2, .6), depth * .45);
+    if (airy(matAt(ivec2(0, -1)))) col = mix(col, FROST, .8);
+    cov = .86 - .1 * depth; em = ICE * (.08 - .04 * depth); bev = .05;
+  } else if (m == STEAM) {
+    float l = clamp(L / 120., 0., 1.);
+    col = mix(MIST, FROST, .4 + .4 * s); cov = .22 + .5 * l; em = mix(MIST, FROST, .45) * (.18 + .5 * l);
+  } else if (m == BACK) {
+    bool edge = matAt(ivec2(0, -1)) != BACK || matAt(ivec2(0, 1)) != BACK || matAt(ivec2(1, 0)) != BACK || matAt(ivec2(-1, 0)) != BACK;
+    float pulse = .5 + .5 * sin(t * 3. - (cf.x + cf.y) * .3);
+    col = edge ? FROST : mix(C1 * 1.1, C2, .35 + .45 * pulse);
+    if (!edge && C.y % 3 == 0) col *= .82;
+    cov = 1.; em = ICE * (.16 + .22 * pulse); bev = .3;
+  } else if (m == HONEY) {
+    float w = .5 + .5 * sin(t * 1.4 + cf.x * .3 + cf.y * .5 + s * 4.);
+    col = mix(H3 * .92, H4, .3 + .45 * w * s + .2 * s);
+    int up = matAt(ivec2(0, -1));
+    if (up != HONEY && up != TRAP) col = mix(col, H5, .55);
+    cov = 1.; em = mix(H3, H4, .5) * (.22 + .1 * w); bev = .5;
+  } else if (m == TRAP) {
+    float fl = clamp(L / 40., 0., 1.);
+    col = mix(H3 * .78, H4 * .9, .3 + .4 * s);
+    if (s > .5) col = mix(H1, H2, .35 + .3 * (.5 + .5 * sin(t * 2.2 + s * 20.)));
+    col = mix(col, H5, fl * .7);
+    cov = 1.; em = H3 * .1 + (s > .5 ? H2 * .12 : vec3(0.)) + H4 * fl * .8; bev = .5;
+  } else if (m == SECR) {
+    col = mix(H4 * .74, H4, s);
+    float g = hash(cf * .7 + floor(t * 5. + s * 13.) * 5.1);
+    float glint = smoothstep(.93, 1., g);
+    col = mix(col, H5, glint); cov = 1.; em = H4 * .1 + H5 * glint * .9; bev = .7;
+  } else if (m == EXFIL) {
+    col = mix(H4, H5, .5 + .5 * sin(t * 20. + s * 30.)); cov = 1.; em = H4;
+  } else if (m == GLASS) {
+    bool edge = matAt(ivec2(0, -1)) != GLASS || matAt(ivec2(0, 1)) != GLASS || matAt(ivec2(1, 0)) != GLASS || matAt(ivec2(-1, 0)) != GLASS;
+    cov = edge ? .5 : .16; col = edge ? mix(ICE, FROST, .45) : ICE;
+    if ((C.x + C.y) % 9 == 0) { cov += .2; col = FROST; }
+    em = ICE * (edge ? .07 : .02);
+  } else if (m == ZDAY) {
+    col = H5; cov = 1.; em = vec3(1.);
+  } else if (m == DECR) {
+    float fl = hash(cf + floor(t * 18.) * 1.7);
+    col = mix(ICE, FROST, .4 + .6 * fl); cov = 1.; em = mix(ICE, FROST, .5) * .95; bev = .3;
+  } else if (m == SPARK) {
+    float l = clamp(L / 10., 0., 1.);
+    col = ironbow(.55 + .45 * l); cov = l; em = ironbow(.6 + .4 * l) * l;
+  }
+  oCol = vec4(col, cov); oEmi = vec4(em, bev);
+}`;
+
+const FS_BLUR = `#version 300 es
+precision highp float;
+uniform sampler2D uSrc; uniform vec2 uDir, uDst;
+out vec4 o;
+void main(){
+  vec2 uv = gl_FragCoord.xy / uDst;
+  vec3 c = texture(uSrc, uv).rgb * .2270270270;
+  vec2 o1 = uDir * 1.3846153846, o2 = uDir * 3.2307692308;
+  c += (texture(uSrc, uv + o1).rgb + texture(uSrc, uv - o1).rgb) * .3162162162;
+  c += (texture(uSrc, uv + o2).rgb + texture(uSrc, uv - o2).rgb) * .0702702703;
+  o = vec4(c, 1.);
+}`;
+
+const FS_COMP = `#version 300 es
+precision highp float;
+uniform sampler2D uCol, uEmi, uG1, uG2;
+uniform vec2 uView, uGrid; uniform vec3 uRect; uniform float uTime, uFade, uDpr;
+uniform vec4 uCur; uniform vec3 uCurCol;
+out vec4 o;
+${GLSL_COMMON}
+void main(){
+  vec2 p = vec2(gl_FragCoord.x, uView.y - gl_FragCoord.y);
+  vec2 g = (p - uRect.xy) / uRect.z;
+  vec3 col;
+  bool inside = g.x >= 0. && g.y >= 0. && g.x < uGrid.x && g.y < uGrid.y;
+  if (inside) {
+    col = mix(VOIDC, DEEP, .3 * smoothstep(.15, 1., g.y / uGrid.y));
+    vec2 q = g - 8. * floor(g / 8. + .5);
+    col = mix(col, STEEL, .2 * smoothstep(1.5 * uDpr, .4 * uDpr, length(q) * uRect.z));
+    vec2 uv = g / uGrid;
+    vec3 g1 = texture(uG1, uv).rgb, g2 = texture(uG2, uv).rgb;
+    float haze = clamp((min(g1.r, g1.g) - g1.b) * 2.4, 0., 1.);
+    vec2 gh = g + haze * .5 * vec2(sin(g.y * 1.9 + uTime * 13.), cos(g.x * 1.4 + uTime * 10.));
+    ivec2 c = ivec2(clamp(floor(gh), vec2(0.), uGrid - 1.));
+    vec4 cc = texelFetch(uCol, c, 0);
+    float bev = texelFetch(uEmi, c, 0).a;
+    vec2 f = fract(gh);
+    float sh = 1. + bev * (.2 * (.5 - f.y) + .1 * (.5 - f.x));
+    col = mix(col, cc.rgb * sh, cc.a);
+    col += g1 * .9 + g2 * .8;
+  } else {
+    col = VOIDC * .78;
+    vec2 e = max(-g, g - uGrid) * uRect.z;
+    float edge = max(e.x, e.y);
+    col = mix(col, STEEL, .3 * smoothstep(1.5 * uDpr, .3 * uDpr, edge));
+  }
+  if (uCur.w > 0.) {
+    vec2 cp = uRect.xy + uCur.xy * uRect.z;
+    float d = length(p - cp), R = max(uCur.z * uRect.z, 3. * uDpr);
+    col = mix(col, VOIDC, .5 * uCur.w * smoothstep(3.5 * uDpr, 0., abs(d - R)));
+    col = mix(col, FROST, .9 * uCur.w * smoothstep(1.4 * uDpr, .3 * uDpr, abs(d - R)));
+    col = mix(col, uCurCol, uCur.w * smoothstep(2.6 * uDpr, 1.6 * uDpr, d));
+  }
+  vec2 sv = gl_FragCoord.xy / uView - .5;
+  col *= 1. - .32 * dot(sv, sv);
+  col = min(col, vec3(1.)) * uFade;
+  col += (hash(gl_FragCoord.xy + fract(uTime * 7.) * 91.) - .5) / 255.;
+  o = vec4(col, 1.);
+}`;
+
+function createGL() {
+  const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+  if (!gl) return null;
+  function sh(type, srcText) {
+    const s = gl.createShader(type); gl.shaderSource(s, srcText); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  }
+  function prog(fs) {
+    const p = gl.createProgram();
+    gl.attachShader(p, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const u = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (let k = 0; k < n; k++) { const info = gl.getActiveUniform(p, k); u[info.name] = gl.getUniformLocation(p, info.name); }
+    return { p, u };
+  }
+  const pCells = prog(FS_CELLS), pBlur = prog(FS_BLUR), pComp = prog(FS_COMP);
+  const vao = gl.createVertexArray();
+  function tex(w, h, filter) {
+    const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
+  function fbo(...texs) {
+    const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+    texs.forEach((t, k) => gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + k, gl.TEXTURE_2D, t, 0));
+    gl.drawBuffers(texs.map((_, k) => gl.COLOR_ATTACHMENT0 + k));
+    return f;
+  }
+  let R = null;
+  function resize() {
+    if (R) { R.texs.forEach(t => gl.deleteTexture(t)); R.fbos.forEach(f => gl.deleteFramebuffer(f)); }
+    const W2 = Math.max(1, W >> 1), H2 = Math.max(1, H >> 1);
+    const tCells = tex(PW, PH, gl.NEAREST), tCol = tex(W, H, gl.NEAREST), tEmi = tex(W, H, gl.LINEAR);
+    const tG1a = tex(W, H, gl.LINEAR), tG1b = tex(W, H, gl.LINEAR), tG2a = tex(W2, H2, gl.LINEAR), tG2b = tex(W2, H2, gl.LINEAR);
+    const fA = fbo(tCol, tEmi), fG1a = fbo(tG1a), fG1b = fbo(tG1b), fG2a = fbo(tG2a), fG2b = fbo(tG2b);
+    R = { W2, H2, tCells, tCol, tEmi, tG1a, tG1b, tG2a, tG2b, fA, fG1a, fG1b, fG2a, fG2b,
+      texs: [tCells, tCol, tEmi, tG1a, tG1b, tG2a, tG2b], fbos: [fA, fG1a, fG1b, fG2a, fG2b] };
+  }
+  function bindTex(unit, t) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); }
+  function blur(srcT, dstF, w, h, dx, dy) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dstF); gl.viewport(0, 0, w, h);
+    gl.useProgram(pBlur.p); bindTex(0, srcT);
+    gl.uniform1i(pBlur.u.uSrc, 0); gl.uniform2f(pBlur.u.uDir, dx, dy); gl.uniform2f(pBlur.u.uDst, w, h);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  function draw(time, cur, curCol, fade) {
+    gl.bindVertexArray(vao);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    bindTex(0, R.tCells);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, PW, PH, gl.RGBA, gl.UNSIGNED_BYTE, cell);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, R.fA); gl.viewport(0, 0, W, H);
+    gl.useProgram(pCells.p); gl.uniform1i(pCells.u.uCells, 0); gl.uniform1f(pCells.u.uTime, time);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    blur(R.tEmi, R.fG1a, W, H, 1 / W, 0);
+    blur(R.tG1a, R.fG1b, W, H, 0, 1 / H);
+    blur(R.tG1b, R.fG2a, R.W2, R.H2, 2 / W, 0);
+    blur(R.tG2a, R.fG2b, R.W2, R.H2, 0, 2 / H);
+    blur(R.tG2b, R.fG2a, R.W2, R.H2, 3.5 / W, 0);
+    blur(R.tG2a, R.fG2b, R.W2, R.H2, 0, 3.5 / H);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, canvas.width, canvas.height);
+    const u = pComp.u; gl.useProgram(pComp.p);
+    bindTex(0, R.tCol); bindTex(1, R.tEmi); bindTex(2, R.tG1b); bindTex(3, R.tG2b);
+    gl.uniform1i(u.uCol, 0); gl.uniform1i(u.uEmi, 1); gl.uniform1i(u.uG1, 2); gl.uniform1i(u.uG2, 3);
+    gl.uniform2f(u.uView, canvas.width, canvas.height); gl.uniform2f(u.uGrid, W, H);
+    gl.uniform3f(u.uRect, rect.x * dpr, rect.y * dpr, rect.s * dpr);
+    gl.uniform1f(u.uTime, time); gl.uniform1f(u.uFade, fade); gl.uniform1f(u.uDpr, dpr);
+    gl.uniform4f(u.uCur, cur[0], cur[1], cur[2], cur[3]); gl.uniform3f(u.uCurCol, curCol[0], curCol[1], curCol[2]);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  return { kind: 'gl', resize, draw };
+}
+
+/* ---------------- renderer: Canvas 2D fallback ---------------- */
+function createCanvas2D() {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  const off = document.createElement('canvas'), octx = off.getContext('2d');
+  let img = null;
+  const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const K = { void: hex('#100C2A'), steel: hex('#4E5A8C'), mist: hex('#8C93C4'), ice: hex('#9BE8FF'), frost: hex('#E8F7FF'),
+    c1: hex('#2F4FA8'), c2: hex('#4FA3E0'), h0: hex('#3A0F6B'), h1: hex('#9B1D8F'), h2: hex('#F0306A'), h3: hex('#FF7A2F'), h4: hex('#FFD36B'), h5: hex('#FFF6E0') };
+  const mixc = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  function colOf(m, s, L) {
+    switch (m) {
+      case DATA: return [mixc(K.c1, K.c2, s), 1];
+      case WALL: return [mixc(K.steel, K.mist, s * 0.25), 1];
+      case MAL: return [mixc(K.h1, K.h2, 0.4 + 0.6 * s), 1];
+      case FIRE: return [mixc(K.h3, K.h5, Math.min(1, L / 46)), 1];
+      case CRYS: return [L > 0 ? mixc(K.h2, K.h4, Math.min(1, L / 72)) : mixc(K.h0, K.h1, s * s), 1];
+      case PATCH: return [mixc(K.c2, K.ice, 0.7), 0.9];
+      case STEAM: return [K.mist, 0.12 + 0.4 * Math.min(1, L / 110)];
+      case BACK: return [K.ice, 1];
+      case HONEY: return [mixc(K.h3, K.h4, 0.5 + 0.4 * s), 1];
+      case TRAP: return [mixc(K.h3, K.h1, 0.6), 1];
+      case SECR: return [mixc(K.h4, K.h5, s > 0.9 ? 1 : 0), 1];
+      case EXFIL: return [K.h5, 1];
+      case GLASS: return [K.ice, 0.3];
+      case ZDAY: return [K.h5, 1];
+      case DECR: return [K.frost, 1];
+      case SPARK: return [K.h3, Math.min(1, L / 10)];
+    }
+    return null;
+  }
+  return {
+    kind: '2d',
+    resize() { off.width = W; off.height = H; img = octx.createImageData(W, H); },
+    draw(time, cur, curCol, fade) {
+      const d = img.data;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = idx(x, y), o = (y * W + x) * 4, m = cell[i << 2];
+        let c = K.void, a = 0;
+        const r = m ? colOf(m, cell[(i << 2) + 1] / 255, cell[(i << 2) + 2]) : null;
+        if (r) { c = r[0]; a = r[1]; }
+        d[o] = (K.void[0] + (c[0] - K.void[0]) * a) * fade; d[o + 1] = (K.void[1] + (c[1] - K.void[1]) * a) * fade;
+        d[o + 2] = (K.void[2] + (c[2] - K.void[2]) * a) * fade; d[o + 3] = 255;
+      }
+      octx.putImageData(img, 0, 0);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = '#0d0a22'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(off, rect.x * dpr, rect.y * dpr, rect.w * dpr, rect.h * dpr);
+      if (cur[3] > 0) {
+        ctx.strokeStyle = `rgba(232,247,255,${0.9 * cur[3]})`; ctx.lineWidth = 1.4 * dpr;
+        ctx.beginPath(); ctx.arc((rect.x + cur[0] * rect.s) * dpr, (rect.y + cur[1] * rect.s) * dpr, Math.max(3, cur[2] * rect.s) * dpr, 0, Math.PI * 2); ctx.stroke();
+      }
+    },
+  };
+}
+
+/* ---------------- layout of the world on screen ---------------- */
+let rect = { x: 0, y: 0, s: 1, w: 1, h: 1 }, dpr = 1, renderer = null, palRect = null;
+const kindFor = () => (innerWidth < 700 && innerHeight > innerWidth * 1.15 ? 'P' : 'L');
+function computeRect() {
+  const vw = innerWidth, vh = innerHeight;
+  let top = 0, bot = 0;
+  if (LO.kind === 'P') {
+    const hr = hud.getBoundingClientRect();
+    cap.style.top = Math.round(hr.bottom + 6) + 'px';
+    const cr = cap.getBoundingClientRect(), pr = palette.getBoundingClientRect();
+    top = Math.max(hr.bottom, cr.bottom) + 6;
+    bot = vh - pr.top + 6;
+  } else cap.style.top = '';
+  const ah = Math.max(60, vh - top - bot);
+  const s = Math.min(vw / W, ah / H);
+  rect = { x: Math.round((vw - W * s) / 2), y: Math.round(top + (ah - H * s) / 2), s, w: W * s, h: H * s };
+  palRect = palette.getBoundingClientRect();
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  const cw = Math.round(vw * dpr), ch = Math.round(vh * dpr);
+  if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+}
+
+/* ---------------- app state ---------------- */
+let mode = 'attract', playing = true, acc = 0, last = null, loops = 0, liveTime = 0, needsRender = true;
+let selTool = DATA, brushR = 4, lastInput = 0, uiFrame = 0;
+const brush = { down: false, id: -1, x: 0, y: 0, px: 0, py: 0, erase: false };
+const hover = { on: false, x: 0, y: 0 };
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const tParam = qs.get('t');
+let startT = 0;
+if (tParam !== null && isFinite(parseFloat(tParam))) { startT = parseFloat(tParam); playing = false; }
+else if (reduced) { startT = REDUCED_T; playing = false; }
+
+function livePainter() {
+  if (!brush.down) return;
+  paintStroke(brush.px, brush.py, brush.x, brush.y, brushR, brush.erase ? ERASE : selTool);
+  brush.px = brush.x; brush.py = brush.y;
+}
+function advance() {
+  if (mode === 'attract') {
+    if (tickCount >= PERIOD_TICKS) { loops++; restoreSnapshot(0); }
+    painter = attractPainter; simTick(); maybeSnapshot();
+  } else {
+    painter = livePainter; simTick(); liveTime += DT;
+  }
+}
+const attractT = () => tickCount * DT;
+function shaderTime() { return mode === 'attract' ? attractT() : liveTime; }
+function loopFade(t) { return 1 - 0.5 * (1 - smooth(0, 0.15, t)) - 0.5 * smooth(29.55, 30, t); }
+
+function hexToRgb(h) { return [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255]; }
+const TOOL_COL = { [DATA]: '#4FA3E0', [WALL]: '#8C93C4', [MAL]: '#F0306A', [FIRE]: '#FF7A2F', [PATCH]: '#9BE8FF', [BACK]: '#E8F7FF',
+  [HONEY]: '#FFD36B', [SECR]: '#FFD36B', [GLASS]: '#9BE8FF', [ZDAY]: '#FFF6E0', [ERASE]: '#8C93C4' };
+
+let curCache = null;
+function render() {
+  if (!renderer) return;
+  let cur = [0, 0, 0, 0], curCol = [1, 1, 1], fade = 1;
+  curCache = null;
+  if (mode === 'attract') {
+    const t = attractT(), c = cursorAt(t);
+    fade = loopFade(t);
+    const a = smooth(0.1, 0.5, t) * (1 - smooth(28.8, 29.4, t));
+    cur = [c.x, c.y, c.r, a]; curCol = hexToRgb(TOOL_COL[c.tool] || '#E8F7FF');
+    curCache = { c, a };
+  } else if (hover.on || brush.down) {
+    cur = [hover.x, hover.y, brushR, 0.8]; curCol = hexToRgb(TOOL_COL[brush.erase ? ERASE : selTool] || '#E8F7FF');
+  }
+  renderer.draw(shaderTime(), cur, curCol, fade);
+}
+
+/* ---------------- HUD, caption, palette ---------------- */
+const toolsEl = $('tools'), descEl = $('desc'), bsizeEl = $('bsize');
+const toolBtns = new Map();
+for (const t of TOOLS) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'tool'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', 'false');
+  b.dataset.tool = t.id;
+  b.innerHTML = `<i class="sw ${t.sw}"></i><span class="nm"></span><kbd>${t.key}</kbd>`;
+  b.querySelector('.nm').textContent = t.name;
+  b.title = `${t.name} (${t.key})`;
+  b.addEventListener('click', e => { selectTool(t.id); takeOver(); if (e.detail > 0) b.blur(); });
+  toolsEl.appendChild(b); toolBtns.set(t.id, b);
+}
+let shownTool = -1;
+function showTool(id) {
+  if (id === shownTool) return;
+  shownTool = id;
+  for (const [tid, b] of toolBtns) b.setAttribute('aria-checked', String(tid === id));
+  const t = TOOL_BY_ID.get(id);
+  descEl.textContent = t ? t.desc : '';
+}
+function selectTool(id) { selTool = id; showTool(id); }
+function setBrush(r) { brushR = Math.max(1, Math.min(14, r)); bsizeEl.textContent = String(brushR); }
+
+function countAll() {
+  let d = 0, c = 0, ml = 0;
+  for (let i = 0; i < N; i++) {
+    const m = cell[i << 2];
+    if (m === DATA) d++; else if (m === CRYS || m === DECR) c++; else if (m === MAL) ml++;
+  }
+  return { d, c, ml };
+}
+let lastCap = '', lastMode = '';
+function updateUI() {
+  const k = countAll();
+  const den = Math.max(peak, k.d + k.c, 1);
+  vData.textContent = Math.round(100 * k.d / den) + '%';
+  vEnc.textContent = Math.round(100 * k.c / den) + '%';
+  vMal.textContent = String(k.ml);
+  vLeak.textContent = String(leaked);
+  let capText = '', capOp = 1;
+  if (mode === 'attract') {
+    const t = attractT();
+    let s = 0;
+    for (let n = 0; n < STORY.length; n++) if (t >= STORY[n][0]) s = n;
+    const t0 = STORY[s][0], t1 = s + 1 < STORY.length ? STORY[s + 1][0] : PERIOD;
+    capText = STORY[s][1];
+    capOp = smooth(t0, t0 + 0.3, t) * (1 - smooth(t1 - 0.25, t1, t));
+    if (s === 0) capOp = 1 - smooth(t1 - 0.25, t1, t);
+  } else {
+    const left = IDLE_MS - (performance.now() - lastInput);
+    capText = (playing && !brush.down && left < 5000) ? `Demo resumes in ${Math.max(1, Math.ceil(left / 1000))} s` : 'Your sandbox';
+  }
+  if (capText !== lastCap) { cap.textContent = capText; lastCap = capText; }
+  cap.style.opacity = capOp.toFixed(3);
+  const narrow = innerWidth <= 600;
+  const mt = mode === 'attract' ? (narrow ? 'Demo playing. Tap anywhere to take over.' : 'Demo playing. Draw anywhere to take over.')
+    : (narrow ? 'Your turn. The demo returns after 10 s idle.' : 'Your turn. The demo returns after 10 s without input.');
+  if (mt !== lastMode) { modeT.textContent = mt; lastMode = mt; modeEl.classList.toggle('live', mode !== 'attract'); }
+  if (mode === 'attract') {
+    const cc = curCache || { c: cursorAt(attractT()), a: 1 };
+    showTool(cc.c.tool);
+    const t = TOOL_BY_ID.get(cc.c.tool);
+    $('ctag-sw').className = 'sw ' + t.sw;
+    $('ctag-t').textContent = t.short || t.name;
+    const sx = rect.x + cc.c.x * rect.s, sy = rect.y + cc.c.y * rect.s, off = Math.max(cc.c.r * rect.s, 3) + 10;
+    const tw = ctag.offsetWidth || 90, pr = palRect;
+    const hitsPal = x => pr && x + tw > pr.left - 6 && x < pr.right && sy + 14 > pr.top && sy - 12 < pr.bottom;
+    let left = sx + off;
+    if (left + tw > innerWidth - 8 || hitsPal(left)) left = sx - off - tw;
+    ctag.style.transform = `translate(${Math.round(left)}px, ${Math.round(sy - 12)}px)`;
+    ctag.style.opacity = cc.a.toFixed(3);
+    ctag.hidden = false;
+  } else {
+    ctag.hidden = true;
+    showTool(selTool);
+  }
+}
+
+/* ---------------- play, pause, take over ---------------- */
+function setPlaying(v) {
+  playing = v;
+  for (const b of [playBtn, pause2]) { b.textContent = v ? 'Pause' : 'Play'; b.setAttribute('aria-pressed', String(!v)); }
+  last = null; acc = 0;
+}
+function takeOver() {
+  lastInput = performance.now();
+  if (mode === 'live') return;
+  mode = 'live'; attractValid = false; liveTime = attractT();
+  if (selTool === ERASE || selTool === ZDAY) selTool = DATA;
+  showTool(selTool);
+  if (!playing && !reduced) setPlaying(true);
+  needsRender = true; updateUI();
+}
+function backToAttract() {
+  loops++; restoreSnapshot(0); mode = 'attract'; brush.down = false; needsRender = true; updateUI();
+}
+function stepOnce() {
+  if (playing) setPlaying(false);
+  advance(); render(); updateUI();
+}
+function clearAll() {
+  takeOver();
+  c32.fill(0); vel.fill(0); stamp.fill(0); lure.fill(0); borders();
+  leaked = 0; peak = 0;
+  render(); updateUI();
+}
+
+/* ---------------- input ---------------- */
+function toGrid(e) { return { x: (e.clientX - rect.x) / rect.s, y: (e.clientY - rect.y) / rect.s }; }
+canvas.addEventListener('pointerdown', e => {
+  if (brush.down && e.pointerId !== brush.id) return;
+  e.preventDefault();
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  takeOver();
+  const g = toGrid(e);
+  brush.down = true; brush.id = e.pointerId; brush.erase = e.button === 2;
+  brush.x = brush.px = g.x; brush.y = brush.py = g.y;
+  hover.on = e.pointerType === 'mouse'; hover.x = g.x; hover.y = g.y;
+  if (!playing) { tickId = (tickCount % 255) + 1; paintStroke(g.x, g.y, g.x, g.y, brushR, brush.erase ? ERASE : selTool); render(); }
+});
+canvas.addEventListener('pointermove', e => {
+  const g = toGrid(e);
+  if (e.pointerType === 'mouse') { hover.on = true; hover.x = g.x; hover.y = g.y; needsRender = true; }
+  if (!brush.down || e.pointerId !== brush.id) return;
+  lastInput = performance.now();
+  hover.x = g.x; hover.y = g.y;
+  if (!playing) { paintStroke(brush.x, brush.y, g.x, g.y, brushR, brush.erase ? ERASE : selTool); brush.px = g.x; brush.py = g.y; needsRender = true; }
+  brush.x = g.x; brush.y = g.y;
+});
+function endStroke(e) {
+  if (e.pointerId !== brush.id) return;
+  brush.down = false; brush.id = -1; lastInput = performance.now();
+  if (e.pointerType !== 'mouse') hover.on = false;
+  needsRender = true;
+}
+canvas.addEventListener('pointerup', endStroke);
+canvas.addEventListener('pointercancel', endStroke);
+canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !brush.down) { hover.on = false; needsRender = true; } });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+playBtn.addEventListener('click', () => setPlaying(!playing));
+pause2.addEventListener('click', () => { lastInput = performance.now(); setPlaying(!playing); });
+$('step').addEventListener('click', () => { takeOver(); stepOnce(); });
+$('clear').addEventListener('click', clearAll);
+$('bminus').addEventListener('click', () => { lastInput = performance.now(); setBrush(brushR - 1); });
+$('bplus').addEventListener('click', () => { lastInput = performance.now(); setBrush(brushR + 1); });
+// mouse clicks on the panel give focus back to the page, so Space keeps meaning play/pause
+for (const id of ['pause2', 'step', 'clear', 'bminus', 'bplus']) $(id).addEventListener('click', e => { if (e.detail > 0) e.currentTarget.blur(); });
+function setNotes(show) {
+  notes.hidden = !show; showNotes.hidden = show;
+  (show ? hideNotes : showNotes).focus({ preventScroll: true });
+  if (LO && LO.kind === 'P') { computeRect(); needsRender = true; }
+}
+hideNotes.addEventListener('click', () => setNotes(false));
+showNotes.addEventListener('click', () => setNotes(true));
+window.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key;
+  if (k === 'h' || k === 'H') { setNotes(notes.hidden); e.preventDefault(); return; }
+  if (k === ' ' || e.code === 'Space') {
+    const a = document.activeElement;
+    if (a && (a.tagName === 'BUTTON' || a.tagName === 'A')) return;
+    e.preventDefault(); lastInput = performance.now(); setPlaying(!playing); return;
+  }
+  const tool = TOOLS.find(t => t.key.toLowerCase() === k.toLowerCase());
+  if (tool) { selectTool(tool.id); takeOver(); e.preventDefault(); return; }
+  if (k === '[') { setBrush(brushR - 1); lastInput = performance.now(); }
+  else if (k === ']') { setBrush(brushR + 1); lastInput = performance.now(); }
+  else if (k === '.') { takeOver(); stepOnce(); }
+  else if (k === 'c' || k === 'C') clearAll();
+});
+
+/* ---------------- main loop ---------------- */
+let perfAcc = 0, perfN = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = last === null ? 0 : Math.min(0.1, (now - last) / 1000);
+  last = now;
+  if (playing) {
+    acc += dt;
+    let n = Math.floor(acc / DT + 1e-6);
+    if (n > 3) { n = 3; acc = 0; } else acc -= n * DT;
+    const t0 = DEBUG ? performance.now() : 0;
+    for (let k = 0; k < n; k++) advance();
+    if (DEBUG && n) { perfAcc += (performance.now() - t0) / n; if (++perfN === 120) { console.log('tick ms', (perfAcc / perfN).toFixed(2)); perfAcc = 0; perfN = 0; } }
+    if (n) needsRender = true;
+  }
+  if (mode === 'live' && playing && !brush.down && performance.now() - lastInput > IDLE_MS) backToAttract();
+  if (needsRender) { render(); needsRender = false; }
+  if ((uiFrame++ & 3) === 0 || mode === 'attract') updateUI();
+}
+
+/* ---------------- determinism hooks ---------------- */
+function goto(t) {
+  const tt = +t || 0;
+  const tm = ((tt % PERIOD) + PERIOD) % PERIOD;
+  loops = Math.floor(tt / PERIOD);
+  brush.down = false; hover.on = false;
+  seekTick(Math.min(PERIOD_TICKS, Math.round(tm / DT)));
+  render(); updateUI();
+}
+window.__seek = t => { setPlaying(false); goto(t); };
+window.__play = () => { setPlaying(true); };
+window.__state = () => {
+  let flask = 0, trap = 0;
+  for (let y = 0; y < LO.flask.y1; y++) for (let x = LO.flask.x0; x < LO.flask.x1; x++) if (cell[idx(x, y) << 2] === MAL) flask++;
+  for (let i = 0; i < N; i++) if (cell[i << 2] === TRAP) trap++;
+  return { mode, tick: tickCount, t: attractT(), leaked, peak, flask, trap, ...countAll(), grid: [W, H] };
+};
+
+/* ---------------- boot ---------------- */
+function setupLayout() {
+  const lo = LO && LO.kind === kindFor() ? null : (kindFor() === 'P' ? layoutP() : layoutL());
+  if (lo) {
+    alloc(lo);
+    buildInitial(); snapshot(); attractValid = true;
+    setBrush(lo.brush);
+    $('tech-grid').textContent = `Cellular automaton on a ${W} × ${H} grid of typed arrays, scanned bottom-up in alternating directions with a per-cell moved-this-tick stamp`;
+    if (renderer) renderer.resize();
+  }
+  computeRect();
+  return !!lo;
+}
+if (innerWidth <= 600) { notes.hidden = true; showNotes.hidden = false; }
+setPlaying(playing);
+selectTool(DATA);
+setupLayout();
+try { if (!FORCE_2D) renderer = createGL(); } catch (err) { console.warn('WebGL2 unavailable', err); renderer = null; }
+if (!renderer) { renderer = createCanvas2D(); $('missing').hidden = false; }
+renderer.resize();
+goto(startT);
+let resizeTimer = 0;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    const t = attractT();
+    if (setupLayout()) { mode = 'attract'; goto(loops * PERIOD + t); }
+    needsRender = true; updateUI();
+  }, 150);
+});
+document.fonts && document.fonts.ready.then(() => { computeRect(); needsRender = true; updateUI(); });
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

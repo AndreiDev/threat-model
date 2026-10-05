@@ -1,0 +1,1860 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Integrity</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--void);overflow:hidden}
+body{color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+
+/* the readout: what the page computed about itself */
+#readout{position:fixed;left:16px;top:16px;width:var(--pw,540px);padding:14px 16px;z-index:5;
+  background:rgba(16,12,42,.8);backdrop-filter:blur(12px) saturate(1.2);-webkit-backdrop-filter:blur(12px) saturate(1.2);
+  border:1px solid rgba(140,147,196,.22);border-radius:14px}
+#status{margin:0;min-height:2.6em;font:500 19px/1.3 "Schibsted Grotesk",system-ui,sans-serif;color:var(--ice)}
+#status.hot{color:var(--heat-2)}
+#status.mid{color:var(--frost)}
+#detail{margin:4px 0 10px;min-height:2.9em;font-size:13px;line-height:1.45;color:var(--mist)}
+.row{display:flex;gap:10px;align-items:baseline;margin:3px 0}
+.row .k{flex:0 0 62px;font-size:12px;color:var(--mist)}
+.row code{flex:1;min-width:0;font:400 10.5px/1.55 "Martian Mono",ui-monospace,monospace;font-stretch:75%;color:var(--frost);word-break:break-all}
+.row.ia code{color:var(--ice)}
+.row code .d{color:var(--steel)}
+.row code .s{color:var(--heat-4)}
+.row code .h{color:var(--heat-3)}
+.ro-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.ro-actions button{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost);background:rgba(78,90,140,.25);
+  border:1px solid rgba(140,147,196,.35);border-radius:999px;padding:8px 12px;cursor:pointer}
+.ro-actions button:hover{background:rgba(155,232,255,.16)}
+.ro-actions button:disabled{opacity:.4;cursor:default;background:rgba(78,90,140,.12)}
+
+/* the hub: how many digest bits changed */
+#hub{position:fixed;left:0;top:0;transform:translate(-50%,-50%);text-align:center;pointer-events:none;z-index:2;white-space:nowrap}
+#hubn{display:block;font:200 64px/1 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.03em;color:var(--ice)}
+#hubl{display:block;margin-top:.5em;font:400 12px/1.3 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist)}
+
+/* notes card (shared contract) */
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+@media (max-width:600px){
+  #readout{left:12px;top:12px;padding:10px 12px 11px}
+  #status{min-height:0;font-size:16px}
+  #detail{display:none}
+  .row{margin:4px 0 0}
+  .row .k{flex-basis:58px;font-size:11px}
+  .row code{font-size:10px;line-height:1.45}
+  .r3{display:none}
+  .ro-actions{margin-top:9px}
+  .ro-actions button{padding:7px 11px}
+}
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="This page's own source code typeset as tiny glyphs, lit through two rings of cells that are its SHA-256 and SHA-384 fingerprints"></canvas>
+<div id="hub" aria-hidden="true"><b id="hubn">0</b><span id="hubl">of 256 bits changed</span></div>
+<section id="readout" aria-label="Integrity readout">
+  <p id="status">Rebuilding this page from its own template</p>
+  <p id="detail"></p>
+  <div class="row ia"><code id="vexp"></code></div>
+  <div class="row"><span class="k">computed</span><code id="vgot"></code></div>
+  <div class="row r3"><span class="k">sha256</span><code id="v256"></code></div>
+  <div class="ro-actions">
+    <button type="button" id="tamper">Tamper with one byte</button>
+    <button type="button" id="restore" disabled>Restore</button>
+  </div>
+</section>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Integrity</h1>
+  <p id="lede">Every glyph here is this page's own source, rebuilt from inside itself and lit through its SHA-256 and SHA-384 fingerprints.</p>
+  <ul class="tech">
+    <li>The script is a quine: it fills a hole in its own template with a quoted copy of that template, rebuilding this file byte for byte.</li>
+    <li>Subresource Integrity refuses a script whose bytes don't match its integrity hash. crypto.subtle.digest computes this page's own.</li>
+    <li>Flip one input bit and about half the output bits change. That is the avalanche effect, shown bit by bit.</li>
+    <li>Canvas 2D lights a mask of every glyph through the rings. Hover to read; click a glyph to flip a bit.</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<script>
+const TEMPLATE = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Integrity</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--void);overflow:hidden}
+body{color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+
+/* the readout: what the page computed about itself */
+#readout{position:fixed;left:16px;top:16px;width:var(--pw,540px);padding:14px 16px;z-index:5;
+  background:rgba(16,12,42,.8);backdrop-filter:blur(12px) saturate(1.2);-webkit-backdrop-filter:blur(12px) saturate(1.2);
+  border:1px solid rgba(140,147,196,.22);border-radius:14px}
+#status{margin:0;min-height:2.6em;font:500 19px/1.3 "Schibsted Grotesk",system-ui,sans-serif;color:var(--ice)}
+#status.hot{color:var(--heat-2)}
+#status.mid{color:var(--frost)}
+#detail{margin:4px 0 10px;min-height:2.9em;font-size:13px;line-height:1.45;color:var(--mist)}
+.row{display:flex;gap:10px;align-items:baseline;margin:3px 0}
+.row .k{flex:0 0 62px;font-size:12px;color:var(--mist)}
+.row code{flex:1;min-width:0;font:400 10.5px/1.55 "Martian Mono",ui-monospace,monospace;font-stretch:75%;color:var(--frost);word-break:break-all}
+.row.ia code{color:var(--ice)}
+.row code .d{color:var(--steel)}
+.row code .s{color:var(--heat-4)}
+.row code .h{color:var(--heat-3)}
+.ro-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.ro-actions button{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost);background:rgba(78,90,140,.25);
+  border:1px solid rgba(140,147,196,.35);border-radius:999px;padding:8px 12px;cursor:pointer}
+.ro-actions button:hover{background:rgba(155,232,255,.16)}
+.ro-actions button:disabled{opacity:.4;cursor:default;background:rgba(78,90,140,.12)}
+
+/* the hub: how many digest bits changed */
+#hub{position:fixed;left:0;top:0;transform:translate(-50%,-50%);text-align:center;pointer-events:none;z-index:2;white-space:nowrap}
+#hubn{display:block;font:200 64px/1 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.03em;color:var(--ice)}
+#hubl{display:block;margin-top:.5em;font:400 12px/1.3 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist)}
+
+/* notes card (shared contract) */
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+@media (max-width:600px){
+  #readout{left:12px;top:12px;padding:10px 12px 11px}
+  #status{min-height:0;font-size:16px}
+  #detail{display:none}
+  .row{margin:4px 0 0}
+  .row .k{flex-basis:58px;font-size:11px}
+  .row code{font-size:10px;line-height:1.45}
+  .r3{display:none}
+  .ro-actions{margin-top:9px}
+  .ro-actions button{padding:7px 11px}
+}
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="This page's own source code typeset as tiny glyphs, lit through two rings of cells that are its SHA-256 and SHA-384 fingerprints"></canvas>
+<div id="hub" aria-hidden="true"><b id="hubn">0</b><span id="hubl">of 256 bits changed</span></div>
+<section id="readout" aria-label="Integrity readout">
+  <p id="status">Rebuilding this page from its own template</p>
+  <p id="detail"></p>
+  <div class="row ia"><code id="vexp"></code></div>
+  <div class="row"><span class="k">computed</span><code id="vgot"></code></div>
+  <div class="row r3"><span class="k">sha256</span><code id="v256"></code></div>
+  <div class="ro-actions">
+    <button type="button" id="tamper">Tamper with one byte</button>
+    <button type="button" id="restore" disabled>Restore</button>
+  </div>
+</section>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Integrity</h1>
+  <p id="lede">Every glyph here is this page's own source, rebuilt from inside itself and lit through its SHA-256 and SHA-384 fingerprints.</p>
+  <ul class="tech">
+    <li>The script is a quine: it fills a hole in its own template with a quoted copy of that template, rebuilding this file byte for byte.</li>
+    <li>Subresource Integrity refuses a script whose bytes don't match its integrity hash. crypto.subtle.digest computes this page's own.</li>
+    <li>Flip one input bit and about half the output bits change. That is the avalanche effect, shown bit by bit.</li>
+    <li>Canvas 2D lights a mask of every glyph through the rings. Hover to read; click a glyph to flip a bit.</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<script>
+const TEMPLATE = \`@@\`;
+/* ===========================================================================
+   Integrity: a page that audits itself.
+
+   This file is a quine. TEMPLATE is the whole file with a hole (a pair of at
+   signs) where TEMPLATE's own quoted text belongs. quote() writes TEMPLATE
+   exactly the way it appears above; dropping that into the hole rebuilds the
+   file byte for byte, with no fetch. The code below never uses a backslash or
+   a backtick, so its copy inside TEMPLATE reads exactly like the code you are
+   reading now. Edit both copies together, or the page stops being itself.
+
+   Storyboard (16 s loop; every frame is a pure function of t)
+     0.10  hash       the scan sweeps every byte in reading order, cold
+     1.80  ignite     SHA-256 (inner ring) and SHA-384 (outer ring) light up
+     4.35  tamper     a loupe finds a seeded byte; at 5.15 one of its bits flips
+     5.55  rehash     blocks before the change hash the same; every 64-byte
+                      block after it diverges and runs hot
+     6.50  avalanche  about half of the digest bits flip; the check fails
+    10.25  restore    the bit flips back; a cold rehash heals the chain
+    14.70  outro      the rings go dark and the field dims back to frame 0
+   =========================================================================== */
+(function () {
+'use strict';
+const NL = String.fromCharCode(10), BS = String.fromCharCode(92), BT = String.fromCharCode(96);
+const HOLE = '@' + '@';
+const TAU = Math.PI * 2;
+const $ = id => document.getElementById(id);
+const Q = new URLSearchParams(location.search);
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const DUR = 16;
+const K = { scan0: 0.1, scan1: 1.85, ign0: 1.8, lensIn: 4.35, flip: 5.15, scanA: 5.55, scanB: 6.55,
+  av0: 6.5, av1: 7.4, lensOut: 7.7, lensIn2: 9.75, unflip: 10.25, scan3a: 10.5, scan3b: 11.3,
+  back0: 11.25, back1: 11.85, lensOut2: 12.3, out0: 14.7, out1: 15.75 };
+
+/* ------------------------------------------------------------------ 1. quine
+   Inside a template literal only a backslash, a backtick, a dollar-brace and
+   a closing script tag need escaping, so this is the whole quoting rule. */
+function quote(s) {
+  let o = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === BS || c === BT || (c === '$' && s[i + 1] === '{')) o += BS + c;
+    else if (c === '<' && s.startsWith('/script', i + 1)) o += c + BS;
+    else o += c;
+  }
+  return o;
+}
+const halves = TEMPLATE.split(HOLE);
+const SRC = halves[0] + quote(TEMPLATE) + halves[1];
+const N = SRC.length;
+const BYTES = new TextEncoder().encode(SRC);
+window.__source = SRC;
+
+/* --------------------------------------------------------- 2. syntax classes
+   0 text, 1 keyword, 2 string, 3 number, 4 comment, 5 punctuation, 6 markup,
+   7 property; plus 8 inside TEMPLATE, the copy that the quine prints. */
+const CLS = new Uint8Array(N);
+const cc = i => SRC.charCodeAt(i);
+const at = (s, i) => SRC.startsWith(s, i);
+const until = (s, from) => { const e = SRC.indexOf(s, from); return e < 0 ? N : e; };
+const isDigit = c => c > 47 && c < 58;
+const isAlpha = c => (c > 64 && c < 91) || (c > 96 && c < 123) || c === 95 || c === 36;
+const isWordJS = c => isAlpha(c) || isDigit(c);
+const isWordCSS = c => isWordJS(c) || c === 45;
+const KW = new Set(('const let var function return if else for while do break continue new typeof of in ' +
+  'instanceof class this null true false try catch finally throw switch case default async await').split(' '));
+
+function lex() {
+  let i = 0, mode = 0, data = 0, depth = 0, val = 0;
+  const put = (a, b, k) => CLS.fill(k + data, a, b);
+  const run = (a, ok) => { let e = a + 1; while (e < N && ok(cc(e))) e++; return e; };
+  while (i < N) {
+    const c = cc(i);
+    if (mode === 0) {                                     // markup
+      if (c === 96 && data) { put(i, i + 1, 2); data = 0; mode = 2; i++; continue; }
+      if (c !== 60) { put(i, i + 1, 0); i++; continue; }
+      const j = until('>', i);
+      let k = i + 1;
+      while (k < j && (cc(k) === 47 || cc(k) === 92 || cc(k) === 33)) k++;
+      const n0 = k;
+      while (k < j && isWordCSS(cc(k))) k++;
+      const name = SRC.slice(n0, k).toLowerCase(), closing = SRC.slice(i, n0).indexOf('/') >= 0;
+      put(i, k, 6);
+      while (k < j) {
+        const d = cc(k);
+        if (d === 34 || d === 39) { const e = until(SRC[k], k + 1) + 1; put(k, e, 2); k = e; }
+        else if (isWordCSS(d)) { const e = run(k, isWordCSS); put(k, e, 7); k = e; }
+        else { put(k, k + 1, 5); k++; }
+      }
+      put(j, j + 1, 6);
+      i = j + 1;
+      if (!closing && name === 'style') { mode = 1; depth = 0; val = 0; }
+      else if (!closing && name === 'script') mode = 2;
+      continue;
+    }
+    if (mode === 1) {                                     // CSS
+      if (c === 60 && at('</style', i)) { mode = 0; continue; }
+      if (c === 47 && cc(i + 1) === 42) { const e = until('*/', i + 2) + 2; put(i, e, 4); i = e; continue; }
+      if (c === 34 || c === 39) { const e = until(SRC[i], i + 1) + 1; put(i, e, 2); i = e; continue; }
+      if ((c === 35 && depth > 0) || (isDigit(c) && val)) { const e = run(i, d => isWordCSS(d) || d === 46); put(i, e, 3); i = e; continue; }
+      if (c === 64) { const e = run(i, isWordCSS); put(i, e, 1); i = e; continue; }
+      if (isWordCSS(c)) { const e = run(i, isWordCSS); put(i, e, depth > 0 ? (val ? 0 : 7) : 6); i = e; continue; }
+      if (c === 123) { depth++; val = 0; } else if (c === 125) { depth = Math.max(0, depth - 1); val = 0; }
+      else if (c === 58 && depth > 0) val = 1; else if (c === 59) val = 0;
+      put(i, i + 1, c > 32 ? 5 : 0); i++; continue;
+    }
+    // JS: the outer code, or the copy of it inside TEMPLATE
+    if (c === 60 && (at('</scr' + 'ipt', i) || at('<' + BS + '/scr' + 'ipt', i))) { mode = 0; continue; }
+    if (c === 96) { put(i, i + 1, 2); data = 8; mode = 0; i++; continue; }
+    if (c === 92 && cc(i + 1) === 96) { const e = until(BS + BT, i + 2) + 2; put(i, e, 2); i = e; continue; }
+    if (c === 47 && cc(i + 1) === 47) { const e = until(NL, i); put(i, e, 4); i = e; continue; }
+    if (c === 47 && cc(i + 1) === 42) { const e = until('*/', i + 2) + 2; put(i, e, 4); i = e; continue; }
+    if (c === 34 || c === 39) { const e = until(SRC[i], i + 1) + 1; put(i, e, 2); i = e; continue; }
+    if (isDigit(c)) { const e = run(i, d => isWordJS(d) || d === 46); put(i, e, 3); i = e; continue; }
+    if (isAlpha(c)) { const e = run(i, isWordJS); put(i, e, KW.has(SRC.slice(i, e)) ? 1 : 0); i = e; continue; }
+    put(i, i + 1, c > 32 ? 5 : 0); i++;
+  }
+}
+lex();
+
+/* ------------------------------------------------------------ 3. palette */
+const C = { void: '#100C2A', steel: '#4E5A8C', mist: '#8C93C4', ice: '#9BE8FF', frost: '#E8F7FF',
+  c1: '#2F4FA8', c2: '#4FA3E0', h0: '#3A0F6B', h1: '#9B1D8F', h2: '#F0306A', h3: '#FF7A2F', h4: '#FFD36B', h5: '#FFF6E0' };
+const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+const rgba = (c, a) => 'rgba(' + Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]) + ',' + Math.max(0, Math.min(1, a)).toFixed(3) + ')';
+const RC = {}; for (const k in C) RC[k] = rgb(C[k]);
+const SYN = [C.mist, C.ice, C.c2, C.frost, C.steel, '#6A73A6', C.c2, C.mist].map(rgb);
+const PAL = SYN.concat(SYN.map(c => mix(c, RC.c1, 0.55)));
+const LOOK = { coldOn: { c: RC.ice, g: 1, f: 0.12 }, coldOff: { c: RC.steel, g: 0.42, f: 0 },
+  hotOn: { c: RC.h4, g: 1, f: 0.18 }, hotOff: { c: RC.h2, g: 0.85, f: 0.08 } };
+
+const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
+const smooth = x => { x = clamp01(x); return x * x * (3 - 2 * x); };
+const ease2 = x => { x = clamp01(x); return x < 0.5 ? 2 * x * x : 1 - 2 * (1 - x) * (1 - x); };
+const easeIn = x => { x = clamp01(x); return x * x; };
+const backOut = x => { x = clamp01(x) - 1; return 1 + 2.7 * x * x * x + 1.7 * x * x; };
+const bell = x => (x <= 0 || x >= 1) ? 0 : Math.sin(Math.PI * x);
+const fmt = n => Math.round(n).toLocaleString('en-US');
+function mulberry32(a) {
+  return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+const noise = (a, b) => { let h = Math.imul(a ^ 0x9E3779B9, 0x85EBCA6B) ^ Math.imul(b + 0x632BE5AB, 0xC2B2AE35);
+  h = Math.imul(h ^ h >>> 13, 0x27D4EB2F); return (h ^ h >>> 16) >>> 0; };
+
+/* ------------------------------------------------------------ 4. hashing */
+const HAS_CRYPTO = !!(window.crypto && crypto.subtle && window.isSecureContext);
+const HEX = '0123456789abcdef', B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const toHex = b => Array.from(b, x => HEX[x >> 4] + HEX[x & 15]).join('');
+const toB64 = b => btoa(String.fromCharCode.apply(null, b));
+const bitOf = (b, i) => (b[i >> 3] >> (7 - (i & 7))) & 1;
+function bitDiff(a, b) { let n = 0; for (let i = 0; i < a.length; i++) { let x = a[i] ^ b[i]; while (x) { n += x & 1; x >>= 1; } } return n; }
+async function digest(bytes) {
+  const r = await Promise.all([crypto.subtle.digest('SHA-256', bytes), crypto.subtle.digest('SHA-384', bytes)]);
+  const s256 = new Uint8Array(r[0]), s384 = new Uint8Array(r[1]);
+  return { s256, s384, hex: toHex(s256), sri: 'sha384-' + toB64(s384) };
+}
+function flipBit(ch) {                     // one bit, and still a visible ASCII glyph
+  const c = ch.charCodeAt(0);
+  for (const b of [1, 2, 4, 8, 16, 32]) { const d = c ^ b; if (d > 32 && d < 127) return String.fromCharCode(d); }
+  return ch;
+}
+let DIG = null;                            // the pristine digests, pinned at load
+
+/* ------------------------------------------------------------ 5. layout */
+const cv = $('c'), ctx = cv.getContext('2d');
+const mk = () => document.createElement('canvas');
+const base = mk(), mask = mk(), fx = mk(), em = mk(), glow = mk();
+const meas = mk().getContext('2d');
+const readout = $('readout'), hub = $('hub'), hubn = $('hubn'), hubl = $('hubl');
+let L = null;
+function setFont(x, px, w) { x.font = (w || 400) + ' ' + px + 'px "Martian Mono", ui-monospace, monospace'; x.fontStretch = 'condensed'; }
+
+function layout() {
+  const W = innerWidth, H = innerHeight, dpr = Math.min(2, devicePixelRatio || 1);
+  const P = W < 640 || H > W * 1.15;
+  const mx = P ? 10 : 20, top = P ? 10 : 20, bot = P ? 10 : 20, gut = P ? 8 : 10;
+  const nc = 1;                            // one sheet: the scan sweeps down the whole screen
+  const fw = W - 2 * mx, fh = H - top - bot, colW = (fw - (nc - 1) * gut) / nc;
+  setFont(meas, 100);
+  const adv = meas.measureText('0'.repeat(40)).width / 4000;
+  let lo = 1, hi = 30;                     // the largest type that still fits every byte on screen
+  for (let n = 0; n < 32; n++) {
+    const f = (lo + hi) / 2;
+    if (nc * Math.floor(colW / (adv * f)) * Math.floor(fh / (1.2 * f)) >= N) lo = f; else hi = f;
+  }
+  const fs = Math.floor(lo * 100) / 100;
+  setFont(meas, fs);
+  const cw = meas.measureText('0'.repeat(40)).width / 40;
+  const cpr = Math.floor(colW / cw), rpc = Math.ceil(N / (nc * cpr)), ch = fh / rpc;
+  const colX = [];
+  for (let c = 0; c < nc; c++) colX.push(mx + c * (colW + gut) + (colW - cpr * cw) / 2);
+  L = { W, H, dpr, P, fs, cw, ch, cpr, rpc, per: cpr * rpc, nc, colX, top };
+
+  const PW = P ? W - 24 : Math.round(Math.max(380, Math.min(572, W * 0.4)));
+  readout.style.setProperty('--pw', PW + 'px');
+  const rr = readout.getBoundingClientRect(), nr = $('notes').getBoundingClientRect(), rb = rr.bottom;
+  const notesTop = nr.height > 0 ? nr.top : H - (P ? 186 : 360), notesRight = nr.height > 0 ? nr.right : 396;
+  let cx, cy, R;
+  if (!P) { const aL = 16 + PW + 40, aR = W - 24; R = Math.min(H * 0.43, (aR - aL) / 2); cx = aR - R; cy = H / 2; }
+  else {                                   // phone: readout, a band of source for the loupe, then the rings
+    const y0 = rb + 12 + 128, y1 = H - 192;
+    R = Math.max(60, Math.min(W / 2 - 12, (y1 - y0) / 2)); cx = W / 2; cy = (y0 + y1) / 2;
+  }
+  const rings = [{ name: 'sha256', n: 32, r0: 0.35 * R, r1: 0.61 * R }, { name: 'sha384', n: 48, r0: 0.655 * R, r1: R }];
+  for (const g of rings) {
+    const rm = (g.r0 + g.r1) / 2, gap = Math.min(0.6, (P ? 40 : 54) / rm), step = (TAU - gap) / g.n, bw = (g.r1 - g.r0) / 8;
+    g.rm = rm; g.cells = [];
+    for (let s = 0; s < g.n; s++) {
+      const a0 = -Math.PI / 2 + gap / 2 + s * step;
+      for (let b = 0; b < 8; b++) {
+        const ro = g.r1 - b * bw, ri = ro - bw + Math.min(1.5, bw * 0.18), pad = P ? 0.6 : 0.9;
+        const p = new Path2D();
+        p.arc(cx, cy, ro, a0 + pad / ro, a0 + step - pad / ro);
+        p.arc(cx, cy, ri, a0 + step - pad / ri, a0 + pad / ri, true);
+        p.closePath();
+        g.cells.push({ p, am: a0 + step / 2, bit: s * 8 + b });
+      }
+    }
+  }
+  const box = { x: Math.floor(cx - R - 6), y: Math.floor(cy - R - 6), w: Math.ceil(2 * R + 12), h: Math.ceil(2 * R + 12) };
+  L.ring = { cx, cy, R, rings, box };
+  hub.style.left = cx + 'px'; hub.style.top = cy + 'px';
+  L.hubBig = Math.round(R * (P ? 0.2 : 0.19)); L.hubSmall = Math.round(R * (P ? 0.12 : 0.11));
+  hubl.style.fontSize = (P ? 10 : 12) + 'px';
+  L.lensR = P ? 50 : Math.round(Math.max(76, Math.min(104, H * 0.1)));
+  L.mag = (P ? 13 : 15) / fs;
+  L.panels = [rr].concat(nr.height > 0 ? [nr] : []);
+  // where the scripted tamper may land: clear of the readout, the notes card and the rings
+  const lr = L.lensR, band = notesTop - rb;
+  if (P) L.zone = { x0: mx + 4, x1: mx + 34, y0: rb + 12 + lr + 6, y1: rb + 12 + lr + 18 };
+  else if (band > 2 * lr + 70) L.zone = { x0: mx + 70, x1: mx + 150, y0: rb + lr + 16, y1: notesTop - lr - 46 };
+  else L.zone = { x0: notesRight + 20, x1: Math.max(notesRight + 40, cx - R - 2 * lr - 60), y0: rb + 30, y1: H - 2 * lr - 70 };
+  for (const c of [cv, base, mask, fx]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+  em.width = Math.round(box.w * dpr); em.height = Math.round(box.h * dpr);
+  glow.width = Math.max(1, Math.round(em.width / 4)); glow.height = Math.max(1, Math.round(em.height / 4));
+  buildLayers();
+}
+
+function cellXY(i) {
+  const c = Math.floor(i / L.per), q = i - c * L.per, r = Math.floor(q / L.cpr), k = q - r * L.cpr;
+  return { x: L.colX[c] + k * L.cw, y: L.top + r * L.ch, c, r, k };
+}
+function rangeRects(a, b, fn) {            // [a, b) as few rectangles: partial row, full rows, partial row
+  a = Math.max(0, Math.floor(a)); b = Math.min(N, Math.floor(b));
+  while (a < b) {
+    const p = cellXY(a), rowEnd = a - p.k + L.cpr;
+    if (p.k > 0 || b < rowEnd) { const e = Math.min(b, rowEnd); fn(p.x, p.y, (e - a) * L.cw, L.ch, a, e); a = e; continue; }
+    const colEnd = (p.c + 1) * L.per, rows = Math.floor((Math.min(b, colEnd) - a) / L.cpr);
+    fn(p.x, p.y, L.cpr * L.cw, rows * L.ch, a, a + rows * L.cpr); a += rows * L.cpr;
+  }
+}
+function rowRects(a, b, fn) {              // [a, b) one rectangle per row
+  a = Math.max(0, Math.floor(a)); b = Math.min(N, Math.floor(b));
+  while (a < b) { const p = cellXY(a), e = Math.min(b, a - p.k + L.cpr); fn(p.x, p.y, (e - a) * L.cw, L.ch, a, e); a = e; }
+}
+function hit(x, y) {
+  for (let c = 0; c < L.nc; c++) {
+    const x0 = L.colX[c];
+    if (x < x0 || x >= x0 + L.cpr * L.cw) continue;
+    const r = Math.floor((y - L.top) / L.ch), i = c * L.per + r * L.cpr + Math.floor((x - x0) / L.cw);
+    return r >= 0 && r < L.rpc && i < N ? i : -1;
+  }
+  return -1;
+}
+function visibleNear(i) {
+  if (i < 0) return -1;
+  if (cc(i) > 32) return i;
+  const p = cellXY(i), a = i - p.k, b = Math.min(N, a + L.cpr);
+  for (let d = 1; d < L.cpr; d++) { if (i - d >= a && cc(i - d) > 32) return i - d; if (i + d < b && cc(i + d) > 32) return i + d; }
+  return -1;
+}
+
+/* ------------------------------------------------------- 6. glyph layers
+   Every byte is drawn exactly once into two layers: syntax colours, and a
+   white mask. Each frame lights the mask through rectangles and ring cells. */
+function buildLayers() {
+  const bx = base.getContext('2d'), mx = mask.getContext('2d');
+  for (const x of [bx, mx]) {
+    x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, base.width, base.height);
+    x.setTransform(L.dpr, 0, 0, L.dpr, 0, 0); setFont(x, L.fs); x.textBaseline = 'middle';
+  }
+  mx.fillStyle = '#fff';
+  for (let a = 0; a < N; a += L.cpr) {
+    const b = Math.min(N, a + L.cpr), p = cellXY(a), y = p.y + L.ch / 2;
+    mx.fillText(SRC.slice(a, b).split(NL).join(' '), p.x, y);
+    for (let i = a; i < b;) {
+      let j = i + 1;
+      while (j < b && CLS[j] === CLS[i]) j++;
+      const s = SRC.slice(i, j).split(NL).join(' ');
+      if (s.trim()) { bx.fillStyle = rgba(PAL[CLS[i]], 1); bx.fillText(s, p.x + (i - a) * L.cw, y); }
+      i = j;
+    }
+  }
+}
+
+/* ---------------------------------------------------- 7. episodes and t
+   An episode is one tamper: which byte, its flipped value, the tampered
+   digests, and when each beat happens. The loop has one scripted episode; a
+   click or the button starts a live one on the same beats. */
+let EP = null, live = null;
+function scriptedEpisode() {
+  const R = mulberry32(0x5EED), z = L.zone, digits = [], alnum = [];
+  for (let i = 0; i < N; i++) {
+    const p = cellXY(i);
+    if (p.x < z.x0 || p.x > z.x1 || p.y < z.y0 || p.y > z.y1) continue;
+    const c = cc(i);
+    if (isDigit(c)) digits.push(i); else if (isWordJS(c)) alnum.push(i);
+  }
+  const pool = digits.length ? digits : alnum.length ? alnum : [visibleNear(N >> 1)];
+  const idx = pool[Math.floor(R() * pool.length)];
+  return Object.assign({ idx, ch: flipBit(SRC[idx]), dig: null, lens: lensFor(idx) }, K);
+}
+const NEVER = 1e9;                          // a beat that has not been scheduled yet (finite, so f * (b - a) stays a number)
+function liveEpisode(idx, t0) {
+  const I = NEVER;
+  return { idx, ch: flipBit(SRC[idx]), dig: null, lens: lensFor(idx), lensIn: t0, flip: t0 + 0.12,
+    scanA: t0 + 0.4, scanB: t0 + 1.3, av0: t0 + 1.25, av1: t0 + 2.1, lensOut: t0 + 3.4,
+    lensIn2: I, unflip: I, scan3a: I, scan3b: I, back0: I, back1: I, lensOut2: I };
+}
+function restoreEpisode(ep, t0) {
+  Object.assign(ep, { lensIn2: t0, unflip: t0 + 0.2, scan3a: t0 + 0.4, scan3b: t0 + 1.15, back0: t0 + 1.1, back1: t0 + 1.65, lensOut2: t0 + 2.4 });
+}
+async function hashEpisode(ep) {
+  const b = BYTES.slice(); b[ep.idx] = ep.ch.charCodeAt(0);
+  const d = await digest(b);
+  d.d256 = bitDiff(DIG.s256, d.s256); d.d384 = bitDiff(DIG.s384, d.s384);
+  ep.dig = d;
+}
+const overlap = (x0, y0, x1, y1, b) =>
+  Math.max(0, Math.min(x1, b.right) - Math.max(x0, b.left)) * Math.max(0, Math.min(y1, b.bottom) - Math.max(y0, b.top));
+function lensFor(idx) {                    // a callout beside the glyph, kept off the panels and the rings
+  const p = cellXY(idx), fx0 = p.x + L.cw / 2, fy0 = p.y + L.ch / 2, r = L.lensR, d = r + (L.P ? 30 : 58);
+  const g = L.ring, opts = [[d, 0], [-d, 0], [0.4 * d, -d], [0.4 * d, d], [-0.4 * d, -d], [-0.4 * d, d]];
+  let best = opts[0], bestScore = -1e9;
+  for (const o of opts) {
+    const lx = fx0 + o[0], ly = fy0 + o[1], below = L.P ? 4 : 42;
+    let score = Math.min(0, lx - r - 4, L.W - lx - r - (L.P ? 120 : 4), ly - r - 4, L.H - ly - r - below) * 6;
+    score += Math.min(0, Math.hypot(lx - g.cx, ly - g.cy) - g.R - r) * 2;
+    for (const b of L.panels) score -= overlap(lx - r, ly - r, lx + r, ly + r + below, b) / 40;
+    if (score > bestScore + 0.01) { bestScore = score; best = o; }
+  }
+  return { fx: fx0, fy: fy0, lx: fx0 + best[0], ly: fy0 + best[1] };
+}
+
+const TRAIL = 0.45;                        // seconds of scan that stay lit behind the head
+const scanPos = (t, a, b) => { const x = clamp01((t - a) / (b - a)); return N * (0.45 * x + 0.55 * ease2(x)); };
+function stateAt(t, ep, attract) {
+  const S = { t, ep, attract, lit: N, litLevel: 1, front: -1, back: -1, frontFrom: N, hotA: 0, hotB: 0, hotLevel: 0, tamp: null, lens: 0 };
+  const comet = (a, b, hotFrom) => {
+    if (t >= a && t < b + TRAIL) { S.front = scanPos(t, a, b); S.back = scanPos(t - TRAIL, a, b); S.frontFrom = hotFrom; }
+  };
+  if (attract) {
+    if (t < K.scan0) S.lit = 0;
+    else if (t < K.scan1) S.lit = scanPos(t, K.scan0, K.scan1);
+    comet(K.scan0, K.scan1, N);
+    S.litLevel = 1 - smooth((t - K.out0) / (K.out1 - K.out0));
+  }
+  if (!ep) return S;
+  const blk = Math.floor(ep.idx / 64) * 64;
+  S.blk = blk;
+  if (t >= ep.flip && t < ep.unflip + 1.2) {
+    S.tamp = { roll: smooth((t - ep.flip) / 0.24) - smooth((t - ep.unflip) / 0.24),
+      heat: t < ep.unflip ? 1 : 1 - smooth((t - ep.unflip) / 0.5) };
+  }
+  // the rehash: blocks before the change reach the same state, every block after it diverges
+  if (t >= ep.scanA && t < ep.scan3a) {
+    S.hotA = blk; S.hotB = Math.max(blk, scanPos(t, ep.scanA, ep.scanB));
+    S.hotLevel = t < ep.scanB ? 1 : 0.3 + 0.7 * Math.exp(-(t - ep.scanB) * 2.4);
+  } else if (t >= ep.scan3a && t < ep.scan3b) {
+    S.hotA = Math.max(blk, scanPos(t, ep.scan3a, ep.scan3b)); S.hotB = N; S.hotLevel = 0.3;
+  }
+  comet(ep.scanA, ep.scanB, blk);
+  comet(ep.scan3a, ep.scan3b, N);
+  const o1 = backOut((t - ep.lensIn) / 0.4) * (1 - easeIn((t - ep.lensOut) / 0.26));
+  const o2 = backOut((t - ep.lensIn2) / 0.4) * (1 - easeIn((t - ep.lensOut2) / 0.26));
+  S.lens = Math.max(0, o1, o2);
+  return S;
+}
+
+/* ------------------------------------------------------------ 8. drawing */
+function lightMasked(paint, y0) {          // paint coloured shapes below y0, keep only where glyphs are
+  const x = fx.getContext('2d'), w = fx.width, by = Math.max(0, Math.floor(y0 * L.dpr) - 2), bh = fx.height - by;
+  if (bh <= 0) return;
+  x.setTransform(1, 0, 0, 1, 0, 0); x.globalCompositeOperation = 'source-over'; x.clearRect(0, by, w, bh);
+  x.setTransform(L.dpr, 0, 0, L.dpr, 0, 0); paint(x);
+  x.setTransform(1, 0, 0, 1, 0, 0); x.globalCompositeOperation = 'destination-in'; x.drawImage(mask, 0, by, w, bh, 0, by, w, bh);
+  x.globalCompositeOperation = 'source-over';
+  ctx.drawImage(fx, 0, by, w, bh, 0, by, w, bh);
+}
+
+function drawField(S) {
+  const dpr = L.dpr;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  ctx.fillStyle = C.void; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.globalAlpha = S.lit >= N ? 1 - 0.8 * (1 - 0.42 * S.litLevel) : 0.2;   // dim, or fully hashed in one pass
+  ctx.drawImage(base, 0, 0);
+  if (S.lit > 0 && S.lit < N && S.litLevel > 0.002) {
+    ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.beginPath();
+    rangeRects(0, S.lit, (x, y, w, h) => ctx.rect(x, y, w, h)); ctx.clip();
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.42 * S.litLevel; ctx.drawImage(base, 0, 0); ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  if (S.hotB > S.hotA || S.front >= 0) {
+    const top = Math.min(S.hotB > S.hotA ? cellXY(S.hotA).y : 1e9, S.front >= 0 ? cellXY(Math.max(0, Math.min(N - 1, S.back))).y : 1e9);
+    lightMasked(x => {
+      if (S.hotB > S.hotA) {
+        x.fillStyle = rgba(RC.h1, 0.85 * S.hotLevel); x.beginPath();
+        rangeRects(S.hotA, S.hotB, (a, b, w, h) => x.rect(a, b, w, h)); x.fill();
+      }
+      if (S.front >= 0) {                  // the scan head and its comet tail, in reading order
+        const span = Math.max(1, S.front - S.back);
+        rowRects(S.back, S.front, (a, b, w, h, i0, i1) => {
+          const k = Math.pow((i1 - S.back) / span, 1.7), hot = i0 >= S.frontFrom;
+          x.fillStyle = rgba(hot ? mix(RC.h1, RC.h4, k) : mix(RC.c1, RC.frost, k), 0.12 + 0.88 * k);
+          x.fillRect(a, b, w, h);
+        });
+      }
+    }, top);
+    if (S.front >= 0 && S.front < N) {      // a soft head on the scan
+      const p = cellXY(Math.min(N - 1, S.front)), hot = S.front >= S.frontFrom;
+      ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 120);
+      g.addColorStop(0, rgba(hot ? RC.h4 : RC.frost, 0.5)); g.addColorStop(0.2, rgba(hot ? RC.h3 : RC.ice, 0.2)); g.addColorStop(1, rgba(hot ? RC.h2 : RC.c2, 0));
+      ctx.fillStyle = g; ctx.fillRect(p.x - 120, p.y - 120, 240, 240); ctx.restore();
+    }
+  }
+}
+
+function drawRing(S) {
+  const g = L.ring, dpr = L.dpr, t = S.t, ep = S.ep, B = g.box;
+  ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const well = ctx.createRadialGradient(g.cx, g.cy, 0, g.cx, g.cy, g.R * 1.06);
+  well.addColorStop(0, 'rgba(16,12,42,0.92)'); well.addColorStop(0.3, 'rgba(16,12,42,0.86)');
+  well.addColorStop(0.36, 'rgba(16,12,42,0.6)'); well.addColorStop(0.94, 'rgba(16,12,42,0.6)'); well.addColorStop(1, 'rgba(16,12,42,0)');
+  ctx.fillStyle = well; ctx.beginPath(); ctx.arc(g.cx, g.cy, g.R * 1.06, 0, TAU); ctx.fill();
+  const ex = em.getContext('2d');
+  ex.setTransform(1, 0, 0, 1, 0, 0); ex.globalCompositeOperation = 'source-over'; ex.clearRect(0, 0, em.width, em.height);
+  ex.setTransform(dpr, 0, 0, dpr, -B.x * dpr, -B.y * dpr);
+  const sweep = ((t * 0.85) % TAU) - Math.PI / 2;
+  // before ignition the ghost ring doubles as a progress dial for the first hash pass
+  const prog = !S.attract ? 1 : t < K.out0 ? clamp01(S.lit / N) : 1 - smooth((t - K.out0 - 0.3) / 0.7);
+  let shown = 0, heat = 0;
+  for (let ri = 0; ri < 2; ri++) {
+    const rg = g.rings[ri], total = rg.n * 8;
+    const A = ri ? DIG.s384 : DIG.s256, D = ep && ep.dig ? (ri ? ep.dig.s384 : ep.dig.s256) : null;
+    for (const cell of rg.cells) {
+      const f = cell.bit / total;
+      let vis = 1;
+      if (S.attract) vis = smooth((t - (K.ign0 + f * 0.42)) / 0.2) * (1 - smooth((t - (K.out0 + (1 - f) * 0.62)) / 0.3));
+      const on = bitOf(A, cell.bit), nw = D ? bitOf(D, cell.bit) : on;
+      let k = 0, fh = 0, fc = 0;
+      if (D && on !== nw) {
+        const ta = ep.av0 + f * (ep.av1 - ep.av0 - 0.2), tb = ep.back0 + f * (ep.back1 - ep.back0 - 0.18);
+        k = smooth((t - ta) / 0.2) * (1 - smooth((t - tb) / 0.18));
+        fh = bell((t - ta) / 0.28); fc = bell((t - tb) / 0.26);
+        if (ri === 0 && k >= 0.5) shown++;
+        heat = Math.max(heat, k);
+      }
+      const c0 = on ? LOOK.coldOn : LOOK.coldOff;
+      let col = c0.c, ga = c0.g, fa = c0.f;
+      let d = (sweep - cell.am) % TAU; if (d < 0) d += TAU;
+      const gl = d < 1.3 ? (1 - d / 1.3) * (1 - d / 1.3) : 0;    // a slow glint circling the rings
+      if (k > 0) {
+        const c1 = nw ? LOOK.hotOn : LOOK.hotOff;
+        col = mix(c0.c, c1.c, k); ga = c0.g + (c1.g - c0.g) * k; fa = c0.f + (c1.f - c0.f) * k;
+        if (k > 0.95) { ga *= 0.8 + 0.2 * Math.sin(t * 5.3 + cell.bit * 1.7); col = mix(col, RC.h5, gl * 0.6); fa += gl * 0.12; }
+      } else if (on) { col = mix(col, RC.frost, gl * 0.7); fa += gl * 0.08; }
+      if (fh > 0) { col = mix(col, RC.h5, fh * 0.85); ga = Math.max(ga, fh); fa = Math.max(fa, 0.34 * fh); }
+      if (fc > 0) { col = mix(col, RC.frost, fc * 0.8); ga = Math.max(ga, fc); fa = Math.max(fa, 0.24 * fc); }
+      const pr = f < prog, edge = pr && prog < 1 ? smooth(1 - (prog - f) / 0.06) : 0;
+      const gC = pr ? mix(RC.c2, RC.frost, edge) : RC.steel, gA = pr ? 0.42 + 0.5 * edge : 0.18;
+      col = mix(gC, col, vis); ga = gA + (ga - gA) * vis; fa *= vis;
+      if (S.attract) {                      // each cell flashes frost as the digest lands
+        const fi = bell((t - (K.ign0 + f * 0.42)) / 0.24);
+        if (fi > 0) { col = mix(col, RC.frost, fi * 0.75); ga = Math.max(ga, 0.9 * fi); fa = Math.max(fa, 0.14 * fi); }
+      }
+      ex.fillStyle = rgba(col, ga); ex.fill(cell.p);
+      if (fa > 0.004) { ctx.fillStyle = rgba(col, fa); ctx.fill(cell.p); }
+    }
+  }
+  ctx.restore();
+  ex.setTransform(1, 0, 0, 1, 0, 0); ex.globalCompositeOperation = 'destination-in';
+  ex.drawImage(mask, B.x * dpr, B.y * dpr, em.width, em.height, 0, 0, em.width, em.height);
+  ex.globalCompositeOperation = 'source-over';
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(em, B.x * dpr, B.y * dpr);
+  const gx = glow.getContext('2d');
+  gx.setTransform(1, 0, 0, 1, 0, 0); gx.clearRect(0, 0, glow.width, glow.height);
+  gx.filter = 'blur(' + (L.P ? 1.5 : 2.5) + 'px)'; gx.drawImage(em, 0, 0, glow.width, glow.height); gx.filter = 'none';
+  ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.55 + 0.3 * heat;
+  ctx.drawImage(glow, B.x * dpr, B.y * dpr, em.width, em.height);
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  // ring names in the gaps at twelve o'clock
+  ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  setFont(ctx, L.P ? 9 : 11); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const lv = S.attract ? smooth((t - K.ign0) / 0.4) * (1 - smooth((t - K.out0) / 0.6)) : 1;
+  ctx.fillStyle = rgba(RC.mist, 0.45 + 0.45 * lv);
+  for (const rg of g.rings) ctx.fillText(rg.name, g.cx, g.cy - rg.rm);
+  ctx.restore();
+  return { shown, heat };
+}
+
+function drawTamper(S) {
+  const ep = S.ep, t = S.t, p = cellXY(ep.idx), x = p.x + L.cw / 2, y = p.y + L.ch / 2, dpr = L.dpr;
+  ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const flare = (e, cA, cB, R0, R1) => {
+    if (e <= 0 || e >= 1) return;
+    ctx.globalCompositeOperation = 'lighter';
+    const r = R0 + (R1 - R0) * Math.sqrt(e), g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, rgba(cA, 0.9 * (1 - e))); g.addColorStop(0.25, rgba(cB, 0.45 * (1 - e))); g.addColorStop(1, rgba(cB, 0));
+    ctx.fillStyle = g; ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = rgba(cB, 0.7 * (1 - e) * (1 - e)); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, 8 + 300 * easeOutQ(e), 0, TAU); ctx.stroke();
+  };
+  flare((t - ep.flip) / 1.1, RC.h5, RC.h2, 8, 150);
+  flare((t - ep.unflip) / 0.9, RC.frost, RC.c2, 8, 110);
+  const h = S.tamp.heat, pulse = 0.75 + 0.25 * Math.sin(t * 6);
+  if (h > 0.01) {
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 16);
+    g.addColorStop(0, rgba(RC.h3, 0.75 * h * pulse)); g.addColorStop(1, rgba(RC.h2, 0));
+    ctx.fillStyle = g; ctx.fillRect(x - 16, y - 16, 32, 32);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.fillStyle = C.void; ctx.fillRect(p.x - 0.5, p.y, L.cw + 1, L.ch);
+  setFont(ctx, L.fs, 700); ctx.textBaseline = 'middle';
+  ctx.fillStyle = rgba(mix(RC.ice, RC.h5, h), 1);
+  ctx.fillText(S.tamp.roll > 0.5 ? ep.ch : SRC[ep.idx], p.x, y);
+  ctx.restore();
+}
+const easeOutQ = x => 1 - Math.pow(1 - clamp01(x), 2);
+
+function drawLens(S, fx0, fy0, lx, ly, s, callout, label) {
+  if (s <= 0.002) return;
+  const dpr = L.dpr, r = L.lensR * (callout ? 1 : 0.86) * s, M = L.mag * (0.7 + 0.3 * Math.min(1, s)), t = S.t;
+  const tamp = S.tamp && S.ep ? S.ep.idx : -1, hotNow = S.tamp && S.tamp.heat > 0.5;
+  ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (callout) {
+    const dx = lx - fx0, dy = ly - fy0, d = Math.hypot(dx, dy) || 1;
+    ctx.strokeStyle = rgba(hotNow ? RC.h3 : RC.ice, 0.75 * Math.min(1, s)); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(fx0 + dx / d * 7, fy0 + dy / d * 7); ctx.lineTo(lx - dx / d * r, ly - dy / d * r); ctx.stroke();
+    ctx.beginPath(); ctx.arc(fx0, fy0, 7, 0, TAU); ctx.stroke();
+  }
+  ctx.beginPath(); ctx.arc(lx, ly, r, 0, TAU);
+  ctx.fillStyle = 'rgba(16,12,42,0.95)'; ctx.fill();
+  ctx.save(); ctx.clip();
+  setFont(ctx, L.fs * M); ctx.textBaseline = 'middle';
+  const span = r / M;
+  for (let c = 0; c < L.nc; c++) {
+    const x0 = L.colX[c];
+    if (x0 + L.cpr * L.cw < fx0 - span || x0 > fx0 + span) continue;
+    const k0 = Math.max(0, Math.floor((fx0 - span - x0) / L.cw)), k1 = Math.min(L.cpr - 1, Math.ceil((fx0 + span - x0) / L.cw));
+    const r0 = Math.max(0, Math.floor((fy0 - span - L.top) / L.ch)), r1 = Math.min(L.rpc - 1, Math.ceil((fy0 + span - L.top) / L.ch));
+    for (let row = r0; row <= r1; row++) for (let k = k0; k <= k1; k++) {
+      const i = c * L.per + row * L.cpr + k;
+      if (i >= N) continue;
+      const X = lx + (x0 + k * L.cw - fx0) * M, Y = ly + (L.top + (row + 0.5) * L.ch - fy0) * M;
+      if (i === tamp) {
+        const ro = S.tamp.roll, h = S.tamp.heat, hc = mix(RC.ice, RC.h5, h);
+        ctx.fillStyle = rgba(mix(RC.c1, RC.h1, h), 0.55); ctx.fillRect(X - 1, Y - L.ch * M / 2, L.cw * M + 2, L.ch * M);
+        ctx.shadowColor = rgba(h > 0.5 ? RC.h3 : RC.ice, 0.9); ctx.shadowBlur = 14;
+        ctx.fillStyle = rgba(RC.frost, 1 - ro); ctx.fillText(SRC[i], X, Y - ro * L.ch * M * 0.8);
+        ctx.fillStyle = rgba(hc, ro); ctx.fillText(S.ep.ch, X, Y + (1 - ro) * L.ch * M * 0.8);
+        ctx.shadowBlur = 0;
+        continue;
+      }
+      if (cc(i) <= 32) continue;
+      let col = PAL[CLS[i]], a = i < S.lit ? 0.95 : 0.6;
+      if (i >= S.hotA && i < S.hotB) col = mix(col, RC.h2, 0.65 * S.hotLevel);
+      ctx.fillStyle = rgba(col, a * Math.min(1, s)); ctx.fillText(SRC[i], X, Y);
+    }
+  }
+  ctx.restore();
+  ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(hotNow ? RC.h3 : RC.ice, 0.8 * Math.min(1, s));
+  ctx.beginPath(); ctx.arc(lx, ly, r, 0, TAU); ctx.stroke();
+  if (label && s > 0.5) {
+    const a = smooth((s - 0.5) / 0.4), side = L.P && callout;
+    const tx = side ? lx + r + 12 : lx, ty = side ? ly - 16 : ly + r + 10;
+    const f0 = '500 ' + (L.P ? 11 : 12) + 'px "Schibsted Grotesk", system-ui, sans-serif';
+    ctx.font = f0; let w = ctx.measureText(label[0]).width;
+    if (label[1]) { setFont(ctx, L.P ? 10 : 11); w = Math.max(w, ctx.measureText(label[1]).width); }
+    const bx = side ? tx - 6 : tx - w / 2 - 7, bh = label[1] ? 38 : 21;
+    ctx.fillStyle = rgba(RC.void, 0.82 * a); ctx.beginPath(); ctx.roundRect(bx, ty - 4, w + 14, bh, 6); ctx.fill();
+    ctx.textAlign = side ? 'left' : 'center'; ctx.textBaseline = 'top';
+    ctx.font = f0; ctx.fillStyle = rgba(RC.frost, a); ctx.fillText(label[0], tx, ty);
+    if (label[1]) { setFont(ctx, L.P ? 10 : 11); ctx.fillStyle = rgba(label[2] ? RC.h3 : RC.mist, a); ctx.fillText(label[1], tx, ty + 17); }
+  }
+  ctx.restore();
+}
+
+/* ------------------------------------------------------------ 9. readout */
+const ro = { status: $('status'), detail: $('detail'), btnT: $('tamper'), btnR: $('restore') };
+function spans(el, n) {
+  el.textContent = ''; const a = [];
+  for (let i = 0; i < n; i++) { const s = document.createElement('span'); el.appendChild(s); a.push({ s, ch: null, cl: null }); }
+  return a;
+}
+function setSpan(o, ch, cl) {
+  if (o.ch !== ch) { o.s.textContent = ch; o.ch = ch; }
+  if (o.cl !== cl) { o.s.className = cl; o.cl = cl; }
+}
+let GOT = null, HEXS = null, last = {};
+function setText(key, el, v) { if (last[key] !== v) { el.textContent = v; last[key] = v; } }
+
+// each digest character follows the same cascade as the ring cells that hold its bits
+function hashChars(out, S, pristine, tampered, firstBit, bitsPer, total, alphabet, skip) {
+  const t = S.t, ep = S.ep;
+  for (let j = 0; j < out.length; j++) {
+    if (j < skip) { setSpan(out[j], pristine[j], ''); continue; }
+    const f = ((j - skip) * bitsPer) / total;
+    let ch = pristine[j], cl = '';
+    if (tampered) {
+      const ta = ep.av0 + f * (ep.av1 - ep.av0 - 0.2), tb = ep.back0 + f * (ep.back1 - ep.back0 - 0.18);
+      if (t >= ta + 0.1 && t < tb + 0.09) ch = tampered[j];
+      if (Math.abs(t - ta - 0.05) < 0.07 || Math.abs(t - tb - 0.045) < 0.06) { ch = alphabet[noise(Math.floor(t * 30), j) % alphabet.length]; cl = 's'; }
+    }
+    if (S.attract) {
+      const ti = K.ign0 + f * 0.42, to = K.out0 + (1 - f) * 0.62;
+      if (t < ti + 0.1 || t > to + 0.15) { ch = alphabet[noise(Math.floor(t * 18), j + firstBit) % alphabet.length]; cl = 'd'; }
+    }
+    if (!cl && ch !== pristine[j]) cl = 'h';
+    setSpan(out[j], ch, cl);
+  }
+}
+
+function updateDom(S, ring) {
+  const t = S.t, ep = S.ep, d = ep && ep.dig;
+  hashChars(GOT, S, DIG.sri, d ? d.sri : null, 7, 6, 384, B64, 7);
+  hashChars(HEXS, S, DIG.hex, d ? d.hex : null, 1000, 4, 256, HEX, 0);
+  let st, cls = '', de;
+  const verified = ['Integrity verified', fmt(N) + ' bytes rebuilt from inside the page, hashed by crypto.subtle.digest. The SHA-384 matches the pinned integrity value.'];
+  const hexc = c => '0x' + HEX[c >> 4] + HEX[c & 15];
+  if (!HAS_CRYPTO) { st = 'Web Crypto is unavailable here, so the page cannot hash itself'; de = 'It needs a secure context: https, localhost or a local file.'; cls = 'mid'; }
+  else if (S.attract && (t < K.scan0 || t > K.out0 + 0.7)) { st = 'Rebuilt ' + fmt(N) + " bytes from the page's own template"; de = 'The script fills a hole in its template with a quoted copy of that template: the whole file, byte for byte.'; cls = 'mid'; }
+  else if (S.attract && t < K.ign0 + 0.3) { st = 'Hashing ' + fmt(Math.min(N, S.lit)) + ' of ' + fmt(N) + ' bytes'; de = 'SHA-256 and SHA-384 read the rebuilt source in order, one block at a time.'; cls = 'mid'; }
+  else if (ep && t >= ep.flip && t < ep.av0 + 0.45) {
+    const o = cc(ep.idx), n = ep.ch.charCodeAt(0);
+    st = 'One bit flipped in byte ' + fmt(ep.idx); cls = 'hot';
+    de = t < ep.scanA ? '"' + SRC[ep.idx] + '" (' + hexc(o) + ') is now "' + ep.ch + '" (' + hexc(n) + '): one bit out of ' + fmt(N * 8) + '.'
+      : 'Rehashing. Blocks before byte ' + fmt(S.blk) + ' reach the same SHA-256 state; every 64-byte block after it diverges.';
+  } else if (ep && d && t >= ep.av0 + 0.45 && t < ep.unflip) {
+    st = L.P ? 'Integrity check failed' : 'Integrity check failed: expected ' + DIG.sri.slice(0, 15) + '..., got ' + d.sri.slice(0, 15) + '...';
+    cls = 'hot';
+    de = 'One flipped bit changed ' + d.d256 + ' of 256 SHA-256 bits and ' + d.d384 + ' of 384 SHA-384 bits.';
+  } else if (ep && t >= ep.unflip && t < ep.back1) { st = 'Byte ' + fmt(ep.idx) + ' restored, rehashing'; de = 'The cold scan heals the chain block by block.'; cls = 'mid'; }
+  else { st = verified[0]; de = verified[1]; }
+  setText('st', ro.status, st); setText('de', ro.detail, de);
+  if (last.cls !== cls) { ro.status.className = cls; last.cls = cls; }
+  // hub: a byte counter during the first pass, then how many digest bits changed
+  const bytesMode = S.attract && t < K.ign0 + 0.25;
+  const vis = !S.attract ? 1 : bytesMode ? smooth(t / 0.25) * (1 - smooth((t - K.ign0 - 0.05) / 0.2))
+    : smooth((t - K.ign0 - 0.25) / 0.3) * (1 - smooth((t - K.out0) / 0.5));
+  setText('hn', hubn, bytesMode ? fmt(Math.min(N, S.lit)) : String(ring.shown));
+  setText('hl', hubl, bytesMode ? 'bytes hashed' : 'of 256 bits changed');
+  const hs = (bytesMode ? L.hubSmall : L.hubBig) + 'px';
+  if (last.hs !== hs) { hubn.style.fontSize = hs; last.hs = hs; }
+  const hk = Math.round(ring.heat * 20) / 20;
+  if (last.hk !== hk) {
+    hubn.style.color = rgba(mix(RC.ice, RC.h3, hk), 1);
+    hubn.style.fontWeight = String(Math.round(200 + 380 * hk));
+    hubn.style.textShadow = hk > 0 ? '0 0 0.25em ' + rgba(RC.h2, 0.6 * hk) : 'none';
+    last.hk = hk;
+  }
+  const hv = vis.toFixed(2);
+  if (last.hv !== hv) { hub.style.opacity = hv; last.hv = hv; }
+  const canRestore = !!(live && S.ep === live && live.unflip >= NEVER);
+  if (last.cr !== canRestore) { ro.btnR.disabled = !canRestore; last.cr = canRestore; }
+}
+
+/* ------------------------------------------------------- 10. one frame */
+function paintState(S) {
+  drawField(S);
+  const ring = drawRing(S);
+  const ep = S.ep;
+  if (S.tamp) drawTamper(S);
+  let lensShown = false;
+  if (ep && S.lens > 0.002) {
+    const o = cc(ep.idx), n = ep.ch.charCodeAt(0), hexc = c => '0x' + HEX[c >> 4] + HEX[c & 15];
+    const restored = S.t >= ep.unflip;
+    const lab = ['byte ' + fmt(ep.idx) + ' of ' + fmt(N), restored ? hexc(n) + ' back to ' + hexc(o) : (S.tamp ? hexc(o) + ' to ' + hexc(n) + ', one bit' : ''), !restored && !!S.tamp];
+    drawLens(S, ep.lens.fx, ep.lens.fy, ep.lens.lx, ep.lens.ly, S.lens, true, lab);
+    lensShown = S.lens > 0.3;
+  }
+  if (hover && !lensShown) {
+    const i = hit(hover.x, hover.y);
+    drawLens(S, hover.x, hover.y, hover.x, hover.y, 1, false, i >= 0 ? ['byte ' + fmt(i), '', false] : null);
+  }
+  updateDom(S, ring);
+}
+
+/* -------------------------------------------------- 11. clock and input */
+let T = 0, LT = 0, mode = 'attract', playing = false, hover = null, lastInput = 0, dirty = true, stepTimer = null, stepIdx = 0, presses = 0;
+const btnPlay = $('playpause'), notes = $('notes'), showNotes = $('show-notes');
+const STEPS = [3.2, 5.7, 8.6, 12.6];
+function paint() { paintState(mode === 'attract' ? stateAt(T, EP, true) : stateAt(LT, live, false)); dirty = false; }
+function setUI(p) { playing = p; btnPlay.textContent = p ? 'Pause' : 'Play'; btnPlay.setAttribute('aria-pressed', String(!p)); }
+function stopSteps() { if (stepTimer) { clearInterval(stepTimer); stepTimer = null; } }
+function play() {
+  if (reduce && mode === 'attract') {
+    stopSteps(); T = STEPS[stepIdx]; dirty = true;
+    stepTimer = setInterval(() => { stepIdx = (stepIdx + 1) % STEPS.length; T = STEPS[stepIdx]; dirty = true; }, 4000);
+  }
+  setUI(true);
+}
+function pause() { stopSteps(); setUI(false); }
+function startLive(i) {
+  if (i < 0 || !HAS_CRYPTO) return;
+  stopSteps();
+  if (mode !== 'live') { mode = 'live'; LT = 0; }
+  const ep = liveEpisode(i, LT);
+  live = ep; lastInput = LT; dirty = true;
+  hashEpisode(ep).then(() => { dirty = true; });
+  if (!playing) setUI(true);
+}
+function restoreLive() {
+  if (live && live.unflip >= NEVER) { restoreEpisode(live, LT); lastInput = LT; dirty = true; }
+}
+function randomGlyph() {
+  const R = mulberry32(0xB17E + presses++), a = readout.getBoundingClientRect(), b = notes.hidden ? null : notes.getBoundingClientRect();
+  const inside = (r, x, y) => r && x > r.left - 20 && x < r.right + 20 && y > r.top - 20 && y < r.bottom + 20;
+  for (let n = 0; n < 400; n++) {
+    const i = visibleNear(Math.floor(R() * N)), p = cellXY(Math.max(0, i));
+    if (i >= 0 && !inside(a, p.x, p.y) && !inside(b, p.x, p.y) && Math.hypot(p.x - L.ring.cx, p.y - L.ring.cy) > L.ring.R * 0.4) return i;
+  }
+  return visibleNear(N >> 1);
+}
+function tick(now) {
+  const dt = Math.min(0.1, (now - tick.last) / 1000 || 0); tick.last = now;
+  if (playing && !stepTimer) {
+    if (mode === 'attract') T = (T + dt) % DUR;
+    else {
+      LT += dt;
+      if (LT - lastInput > 10) {             // idle: put the byte back, then hand over to the loop
+        if (live && live.unflip >= NEVER) { restoreEpisode(live, LT); lastInput = LT - 7.5; }
+        else if (!live || LT > live.back1 + 0.8) { mode = 'attract'; live = null; T = 12.4; }
+      }
+    }
+    dirty = true;
+  }
+  if (dirty) paint();
+  requestAnimationFrame(tick);
+}
+
+cv.addEventListener('pointermove', e => {
+  if (e.pointerType === 'touch') return;
+  hover = { x: e.clientX, y: e.clientY }; if (mode === 'live') lastInput = LT; dirty = true;
+});
+cv.addEventListener('pointerleave', () => { hover = null; dirty = true; });
+cv.addEventListener('click', e => {
+  const i = visibleNear(hit(e.clientX, e.clientY));
+  if (i < 0) return;
+  if (mode === 'live' && live && live.idx === i && live.unflip >= NEVER) restoreLive(); else startLive(i);
+});
+ro.btnT.addEventListener('click', () => startLive(randomGlyph()));
+ro.btnR.addEventListener('click', restoreLive);
+btnPlay.addEventListener('click', () => playing ? pause() : play());
+function setNotes(show) { notes.hidden = !show; showNotes.hidden = show; }
+$('hide-notes').addEventListener('click', () => { setNotes(false); showNotes.focus(); });
+showNotes.addEventListener('click', () => { setNotes(true); $('hide-notes').focus(); });
+addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input, textarea, select')) return;
+  if (e.code === 'Space') {
+    if (document.activeElement && document.activeElement.tagName === 'BUTTON') return;
+    e.preventDefault(); playing ? pause() : play();
+  } else if ((e.key === 'h' || e.key === 'H') && !e.metaKey && !e.ctrlKey && !e.altKey) setNotes(notes.hidden);
+});
+let rz = null;
+addEventListener('resize', () => {
+  clearTimeout(rz);
+  rz = setTimeout(async () => {
+    layout();
+    const next = scriptedEpisode();
+    if (!EP || next.idx !== EP.idx) { await hashEpisode(next); EP = next; } else EP.lens = next.lens;
+    if (live) live.lens = lensFor(live.idx);
+    dirty = true;
+  }, 160);
+});
+
+/* ------------------------------------------------------------- 12. boot */
+(async function boot() {
+  try {
+    await Promise.race([
+      Promise.all(['400 12px "Martian Mono"', '200 64px "Martian Mono"', '400 13px "Schibsted Grotesk"', '500 13px "Schibsted Grotesk"']
+        .map(f => document.fonts.load(f, 'sha0'))).then(() => document.fonts.ready),
+      new Promise(r => setTimeout(r, 5000))]);
+  } catch (e) { /* draw with whatever fonts arrived */ }
+  GOT = spans($('vgot'), 71); HEXS = spans($('v256'), 64);
+  if (HAS_CRYPTO) DIG = await digest(BYTES);
+  else {
+    const z = new Uint8Array(48);
+    DIG = { s256: z.slice(0, 32), s384: z, hex: '-'.repeat(64), sri: 'sha384-' + '-'.repeat(64) };
+    $('lede').textContent += ' This browser does not offer Web Crypto here, so you are seeing the source without its live fingerprint.';
+  }
+  $('vexp').textContent = 'integrity="' + DIG.sri + '"';
+  layout();
+  EP = scriptedEpisode();
+  if (HAS_CRYPTO) await hashEpisode(EP);
+  window.__tamper = { idx: EP.idx, ch: EP.ch };
+  window.__seek = t => { stopSteps(); mode = 'attract'; live = null; hover = null; T = ((+t % DUR) + DUR) % DUR; setUI(false); paint(); };
+  window.__play = () => play();
+  if (Q.has('t')) window.__seek(parseFloat(Q.get('t')) || 0);
+  else if (reduce) { T = 8.6; setUI(false); paint(); }
+  else { T = 0; play(); }
+  requestAnimationFrame(tick);
+})();
+})();
+<\/script>
+</body>
+</html>
+`;
+/* ===========================================================================
+   Integrity: a page that audits itself.
+
+   This file is a quine. TEMPLATE is the whole file with a hole (a pair of at
+   signs) where TEMPLATE's own quoted text belongs. quote() writes TEMPLATE
+   exactly the way it appears above; dropping that into the hole rebuilds the
+   file byte for byte, with no fetch. The code below never uses a backslash or
+   a backtick, so its copy inside TEMPLATE reads exactly like the code you are
+   reading now. Edit both copies together, or the page stops being itself.
+
+   Storyboard (16 s loop; every frame is a pure function of t)
+     0.10  hash       the scan sweeps every byte in reading order, cold
+     1.80  ignite     SHA-256 (inner ring) and SHA-384 (outer ring) light up
+     4.35  tamper     a loupe finds a seeded byte; at 5.15 one of its bits flips
+     5.55  rehash     blocks before the change hash the same; every 64-byte
+                      block after it diverges and runs hot
+     6.50  avalanche  about half of the digest bits flip; the check fails
+    10.25  restore    the bit flips back; a cold rehash heals the chain
+    14.70  outro      the rings go dark and the field dims back to frame 0
+   =========================================================================== */
+(function () {
+'use strict';
+const NL = String.fromCharCode(10), BS = String.fromCharCode(92), BT = String.fromCharCode(96);
+const HOLE = '@' + '@';
+const TAU = Math.PI * 2;
+const $ = id => document.getElementById(id);
+const Q = new URLSearchParams(location.search);
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const DUR = 16;
+const K = { scan0: 0.1, scan1: 1.85, ign0: 1.8, lensIn: 4.35, flip: 5.15, scanA: 5.55, scanB: 6.55,
+  av0: 6.5, av1: 7.4, lensOut: 7.7, lensIn2: 9.75, unflip: 10.25, scan3a: 10.5, scan3b: 11.3,
+  back0: 11.25, back1: 11.85, lensOut2: 12.3, out0: 14.7, out1: 15.75 };
+
+/* ------------------------------------------------------------------ 1. quine
+   Inside a template literal only a backslash, a backtick, a dollar-brace and
+   a closing script tag need escaping, so this is the whole quoting rule. */
+function quote(s) {
+  let o = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === BS || c === BT || (c === '$' && s[i + 1] === '{')) o += BS + c;
+    else if (c === '<' && s.startsWith('/script', i + 1)) o += c + BS;
+    else o += c;
+  }
+  return o;
+}
+const halves = TEMPLATE.split(HOLE);
+const SRC = halves[0] + quote(TEMPLATE) + halves[1];
+const N = SRC.length;
+const BYTES = new TextEncoder().encode(SRC);
+window.__source = SRC;
+
+/* --------------------------------------------------------- 2. syntax classes
+   0 text, 1 keyword, 2 string, 3 number, 4 comment, 5 punctuation, 6 markup,
+   7 property; plus 8 inside TEMPLATE, the copy that the quine prints. */
+const CLS = new Uint8Array(N);
+const cc = i => SRC.charCodeAt(i);
+const at = (s, i) => SRC.startsWith(s, i);
+const until = (s, from) => { const e = SRC.indexOf(s, from); return e < 0 ? N : e; };
+const isDigit = c => c > 47 && c < 58;
+const isAlpha = c => (c > 64 && c < 91) || (c > 96 && c < 123) || c === 95 || c === 36;
+const isWordJS = c => isAlpha(c) || isDigit(c);
+const isWordCSS = c => isWordJS(c) || c === 45;
+const KW = new Set(('const let var function return if else for while do break continue new typeof of in ' +
+  'instanceof class this null true false try catch finally throw switch case default async await').split(' '));
+
+function lex() {
+  let i = 0, mode = 0, data = 0, depth = 0, val = 0;
+  const put = (a, b, k) => CLS.fill(k + data, a, b);
+  const run = (a, ok) => { let e = a + 1; while (e < N && ok(cc(e))) e++; return e; };
+  while (i < N) {
+    const c = cc(i);
+    if (mode === 0) {                                     // markup
+      if (c === 96 && data) { put(i, i + 1, 2); data = 0; mode = 2; i++; continue; }
+      if (c !== 60) { put(i, i + 1, 0); i++; continue; }
+      const j = until('>', i);
+      let k = i + 1;
+      while (k < j && (cc(k) === 47 || cc(k) === 92 || cc(k) === 33)) k++;
+      const n0 = k;
+      while (k < j && isWordCSS(cc(k))) k++;
+      const name = SRC.slice(n0, k).toLowerCase(), closing = SRC.slice(i, n0).indexOf('/') >= 0;
+      put(i, k, 6);
+      while (k < j) {
+        const d = cc(k);
+        if (d === 34 || d === 39) { const e = until(SRC[k], k + 1) + 1; put(k, e, 2); k = e; }
+        else if (isWordCSS(d)) { const e = run(k, isWordCSS); put(k, e, 7); k = e; }
+        else { put(k, k + 1, 5); k++; }
+      }
+      put(j, j + 1, 6);
+      i = j + 1;
+      if (!closing && name === 'style') { mode = 1; depth = 0; val = 0; }
+      else if (!closing && name === 'script') mode = 2;
+      continue;
+    }
+    if (mode === 1) {                                     // CSS
+      if (c === 60 && at('</style', i)) { mode = 0; continue; }
+      if (c === 47 && cc(i + 1) === 42) { const e = until('*/', i + 2) + 2; put(i, e, 4); i = e; continue; }
+      if (c === 34 || c === 39) { const e = until(SRC[i], i + 1) + 1; put(i, e, 2); i = e; continue; }
+      if ((c === 35 && depth > 0) || (isDigit(c) && val)) { const e = run(i, d => isWordCSS(d) || d === 46); put(i, e, 3); i = e; continue; }
+      if (c === 64) { const e = run(i, isWordCSS); put(i, e, 1); i = e; continue; }
+      if (isWordCSS(c)) { const e = run(i, isWordCSS); put(i, e, depth > 0 ? (val ? 0 : 7) : 6); i = e; continue; }
+      if (c === 123) { depth++; val = 0; } else if (c === 125) { depth = Math.max(0, depth - 1); val = 0; }
+      else if (c === 58 && depth > 0) val = 1; else if (c === 59) val = 0;
+      put(i, i + 1, c > 32 ? 5 : 0); i++; continue;
+    }
+    // JS: the outer code, or the copy of it inside TEMPLATE
+    if (c === 60 && (at('</scr' + 'ipt', i) || at('<' + BS + '/scr' + 'ipt', i))) { mode = 0; continue; }
+    if (c === 96) { put(i, i + 1, 2); data = 8; mode = 0; i++; continue; }
+    if (c === 92 && cc(i + 1) === 96) { const e = until(BS + BT, i + 2) + 2; put(i, e, 2); i = e; continue; }
+    if (c === 47 && cc(i + 1) === 47) { const e = until(NL, i); put(i, e, 4); i = e; continue; }
+    if (c === 47 && cc(i + 1) === 42) { const e = until('*/', i + 2) + 2; put(i, e, 4); i = e; continue; }
+    if (c === 34 || c === 39) { const e = until(SRC[i], i + 1) + 1; put(i, e, 2); i = e; continue; }
+    if (isDigit(c)) { const e = run(i, d => isWordJS(d) || d === 46); put(i, e, 3); i = e; continue; }
+    if (isAlpha(c)) { const e = run(i, isWordJS); put(i, e, KW.has(SRC.slice(i, e)) ? 1 : 0); i = e; continue; }
+    put(i, i + 1, c > 32 ? 5 : 0); i++;
+  }
+}
+lex();
+
+/* ------------------------------------------------------------ 3. palette */
+const C = { void: '#100C2A', steel: '#4E5A8C', mist: '#8C93C4', ice: '#9BE8FF', frost: '#E8F7FF',
+  c1: '#2F4FA8', c2: '#4FA3E0', h0: '#3A0F6B', h1: '#9B1D8F', h2: '#F0306A', h3: '#FF7A2F', h4: '#FFD36B', h5: '#FFF6E0' };
+const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+const rgba = (c, a) => 'rgba(' + Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]) + ',' + Math.max(0, Math.min(1, a)).toFixed(3) + ')';
+const RC = {}; for (const k in C) RC[k] = rgb(C[k]);
+const SYN = [C.mist, C.ice, C.c2, C.frost, C.steel, '#6A73A6', C.c2, C.mist].map(rgb);
+const PAL = SYN.concat(SYN.map(c => mix(c, RC.c1, 0.55)));
+const LOOK = { coldOn: { c: RC.ice, g: 1, f: 0.12 }, coldOff: { c: RC.steel, g: 0.42, f: 0 },
+  hotOn: { c: RC.h4, g: 1, f: 0.18 }, hotOff: { c: RC.h2, g: 0.85, f: 0.08 } };
+
+const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
+const smooth = x => { x = clamp01(x); return x * x * (3 - 2 * x); };
+const ease2 = x => { x = clamp01(x); return x < 0.5 ? 2 * x * x : 1 - 2 * (1 - x) * (1 - x); };
+const easeIn = x => { x = clamp01(x); return x * x; };
+const backOut = x => { x = clamp01(x) - 1; return 1 + 2.7 * x * x * x + 1.7 * x * x; };
+const bell = x => (x <= 0 || x >= 1) ? 0 : Math.sin(Math.PI * x);
+const fmt = n => Math.round(n).toLocaleString('en-US');
+function mulberry32(a) {
+  return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+const noise = (a, b) => { let h = Math.imul(a ^ 0x9E3779B9, 0x85EBCA6B) ^ Math.imul(b + 0x632BE5AB, 0xC2B2AE35);
+  h = Math.imul(h ^ h >>> 13, 0x27D4EB2F); return (h ^ h >>> 16) >>> 0; };
+
+/* ------------------------------------------------------------ 4. hashing */
+const HAS_CRYPTO = !!(window.crypto && crypto.subtle && window.isSecureContext);
+const HEX = '0123456789abcdef', B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const toHex = b => Array.from(b, x => HEX[x >> 4] + HEX[x & 15]).join('');
+const toB64 = b => btoa(String.fromCharCode.apply(null, b));
+const bitOf = (b, i) => (b[i >> 3] >> (7 - (i & 7))) & 1;
+function bitDiff(a, b) { let n = 0; for (let i = 0; i < a.length; i++) { let x = a[i] ^ b[i]; while (x) { n += x & 1; x >>= 1; } } return n; }
+async function digest(bytes) {
+  const r = await Promise.all([crypto.subtle.digest('SHA-256', bytes), crypto.subtle.digest('SHA-384', bytes)]);
+  const s256 = new Uint8Array(r[0]), s384 = new Uint8Array(r[1]);
+  return { s256, s384, hex: toHex(s256), sri: 'sha384-' + toB64(s384) };
+}
+function flipBit(ch) {                     // one bit, and still a visible ASCII glyph
+  const c = ch.charCodeAt(0);
+  for (const b of [1, 2, 4, 8, 16, 32]) { const d = c ^ b; if (d > 32 && d < 127) return String.fromCharCode(d); }
+  return ch;
+}
+let DIG = null;                            // the pristine digests, pinned at load
+
+/* ------------------------------------------------------------ 5. layout */
+const cv = $('c'), ctx = cv.getContext('2d');
+const mk = () => document.createElement('canvas');
+const base = mk(), mask = mk(), fx = mk(), em = mk(), glow = mk();
+const meas = mk().getContext('2d');
+const readout = $('readout'), hub = $('hub'), hubn = $('hubn'), hubl = $('hubl');
+let L = null;
+function setFont(x, px, w) { x.font = (w || 400) + ' ' + px + 'px "Martian Mono", ui-monospace, monospace'; x.fontStretch = 'condensed'; }
+
+function layout() {
+  const W = innerWidth, H = innerHeight, dpr = Math.min(2, devicePixelRatio || 1);
+  const P = W < 640 || H > W * 1.15;
+  const mx = P ? 10 : 20, top = P ? 10 : 20, bot = P ? 10 : 20, gut = P ? 8 : 10;
+  const nc = 1;                            // one sheet: the scan sweeps down the whole screen
+  const fw = W - 2 * mx, fh = H - top - bot, colW = (fw - (nc - 1) * gut) / nc;
+  setFont(meas, 100);
+  const adv = meas.measureText('0'.repeat(40)).width / 4000;
+  let lo = 1, hi = 30;                     // the largest type that still fits every byte on screen
+  for (let n = 0; n < 32; n++) {
+    const f = (lo + hi) / 2;
+    if (nc * Math.floor(colW / (adv * f)) * Math.floor(fh / (1.2 * f)) >= N) lo = f; else hi = f;
+  }
+  const fs = Math.floor(lo * 100) / 100;
+  setFont(meas, fs);
+  const cw = meas.measureText('0'.repeat(40)).width / 40;
+  const cpr = Math.floor(colW / cw), rpc = Math.ceil(N / (nc * cpr)), ch = fh / rpc;
+  const colX = [];
+  for (let c = 0; c < nc; c++) colX.push(mx + c * (colW + gut) + (colW - cpr * cw) / 2);
+  L = { W, H, dpr, P, fs, cw, ch, cpr, rpc, per: cpr * rpc, nc, colX, top };
+
+  const PW = P ? W - 24 : Math.round(Math.max(380, Math.min(572, W * 0.4)));
+  readout.style.setProperty('--pw', PW + 'px');
+  const rr = readout.getBoundingClientRect(), nr = $('notes').getBoundingClientRect(), rb = rr.bottom;
+  const notesTop = nr.height > 0 ? nr.top : H - (P ? 186 : 360), notesRight = nr.height > 0 ? nr.right : 396;
+  let cx, cy, R;
+  if (!P) { const aL = 16 + PW + 40, aR = W - 24; R = Math.min(H * 0.43, (aR - aL) / 2); cx = aR - R; cy = H / 2; }
+  else {                                   // phone: readout, a band of source for the loupe, then the rings
+    const y0 = rb + 12 + 128, y1 = H - 192;
+    R = Math.max(60, Math.min(W / 2 - 12, (y1 - y0) / 2)); cx = W / 2; cy = (y0 + y1) / 2;
+  }
+  const rings = [{ name: 'sha256', n: 32, r0: 0.35 * R, r1: 0.61 * R }, { name: 'sha384', n: 48, r0: 0.655 * R, r1: R }];
+  for (const g of rings) {
+    const rm = (g.r0 + g.r1) / 2, gap = Math.min(0.6, (P ? 40 : 54) / rm), step = (TAU - gap) / g.n, bw = (g.r1 - g.r0) / 8;
+    g.rm = rm; g.cells = [];
+    for (let s = 0; s < g.n; s++) {
+      const a0 = -Math.PI / 2 + gap / 2 + s * step;
+      for (let b = 0; b < 8; b++) {
+        const ro = g.r1 - b * bw, ri = ro - bw + Math.min(1.5, bw * 0.18), pad = P ? 0.6 : 0.9;
+        const p = new Path2D();
+        p.arc(cx, cy, ro, a0 + pad / ro, a0 + step - pad / ro);
+        p.arc(cx, cy, ri, a0 + step - pad / ri, a0 + pad / ri, true);
+        p.closePath();
+        g.cells.push({ p, am: a0 + step / 2, bit: s * 8 + b });
+      }
+    }
+  }
+  const box = { x: Math.floor(cx - R - 6), y: Math.floor(cy - R - 6), w: Math.ceil(2 * R + 12), h: Math.ceil(2 * R + 12) };
+  L.ring = { cx, cy, R, rings, box };
+  hub.style.left = cx + 'px'; hub.style.top = cy + 'px';
+  L.hubBig = Math.round(R * (P ? 0.2 : 0.19)); L.hubSmall = Math.round(R * (P ? 0.12 : 0.11));
+  hubl.style.fontSize = (P ? 10 : 12) + 'px';
+  L.lensR = P ? 50 : Math.round(Math.max(76, Math.min(104, H * 0.1)));
+  L.mag = (P ? 13 : 15) / fs;
+  L.panels = [rr].concat(nr.height > 0 ? [nr] : []);
+  // where the scripted tamper may land: clear of the readout, the notes card and the rings
+  const lr = L.lensR, band = notesTop - rb;
+  if (P) L.zone = { x0: mx + 4, x1: mx + 34, y0: rb + 12 + lr + 6, y1: rb + 12 + lr + 18 };
+  else if (band > 2 * lr + 70) L.zone = { x0: mx + 70, x1: mx + 150, y0: rb + lr + 16, y1: notesTop - lr - 46 };
+  else L.zone = { x0: notesRight + 20, x1: Math.max(notesRight + 40, cx - R - 2 * lr - 60), y0: rb + 30, y1: H - 2 * lr - 70 };
+  for (const c of [cv, base, mask, fx]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+  em.width = Math.round(box.w * dpr); em.height = Math.round(box.h * dpr);
+  glow.width = Math.max(1, Math.round(em.width / 4)); glow.height = Math.max(1, Math.round(em.height / 4));
+  buildLayers();
+}
+
+function cellXY(i) {
+  const c = Math.floor(i / L.per), q = i - c * L.per, r = Math.floor(q / L.cpr), k = q - r * L.cpr;
+  return { x: L.colX[c] + k * L.cw, y: L.top + r * L.ch, c, r, k };
+}
+function rangeRects(a, b, fn) {            // [a, b) as few rectangles: partial row, full rows, partial row
+  a = Math.max(0, Math.floor(a)); b = Math.min(N, Math.floor(b));
+  while (a < b) {
+    const p = cellXY(a), rowEnd = a - p.k + L.cpr;
+    if (p.k > 0 || b < rowEnd) { const e = Math.min(b, rowEnd); fn(p.x, p.y, (e - a) * L.cw, L.ch, a, e); a = e; continue; }
+    const colEnd = (p.c + 1) * L.per, rows = Math.floor((Math.min(b, colEnd) - a) / L.cpr);
+    fn(p.x, p.y, L.cpr * L.cw, rows * L.ch, a, a + rows * L.cpr); a += rows * L.cpr;
+  }
+}
+function rowRects(a, b, fn) {              // [a, b) one rectangle per row
+  a = Math.max(0, Math.floor(a)); b = Math.min(N, Math.floor(b));
+  while (a < b) { const p = cellXY(a), e = Math.min(b, a - p.k + L.cpr); fn(p.x, p.y, (e - a) * L.cw, L.ch, a, e); a = e; }
+}
+function hit(x, y) {
+  for (let c = 0; c < L.nc; c++) {
+    const x0 = L.colX[c];
+    if (x < x0 || x >= x0 + L.cpr * L.cw) continue;
+    const r = Math.floor((y - L.top) / L.ch), i = c * L.per + r * L.cpr + Math.floor((x - x0) / L.cw);
+    return r >= 0 && r < L.rpc && i < N ? i : -1;
+  }
+  return -1;
+}
+function visibleNear(i) {
+  if (i < 0) return -1;
+  if (cc(i) > 32) return i;
+  const p = cellXY(i), a = i - p.k, b = Math.min(N, a + L.cpr);
+  for (let d = 1; d < L.cpr; d++) { if (i - d >= a && cc(i - d) > 32) return i - d; if (i + d < b && cc(i + d) > 32) return i + d; }
+  return -1;
+}
+
+/* ------------------------------------------------------- 6. glyph layers
+   Every byte is drawn exactly once into two layers: syntax colours, and a
+   white mask. Each frame lights the mask through rectangles and ring cells. */
+function buildLayers() {
+  const bx = base.getContext('2d'), mx = mask.getContext('2d');
+  for (const x of [bx, mx]) {
+    x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, base.width, base.height);
+    x.setTransform(L.dpr, 0, 0, L.dpr, 0, 0); setFont(x, L.fs); x.textBaseline = 'middle';
+  }
+  mx.fillStyle = '#fff';
+  for (let a = 0; a < N; a += L.cpr) {
+    const b = Math.min(N, a + L.cpr), p = cellXY(a), y = p.y + L.ch / 2;
+    mx.fillText(SRC.slice(a, b).split(NL).join(' '), p.x, y);
+    for (let i = a; i < b;) {
+      let j = i + 1;
+      while (j < b && CLS[j] === CLS[i]) j++;
+      const s = SRC.slice(i, j).split(NL).join(' ');
+      if (s.trim()) { bx.fillStyle = rgba(PAL[CLS[i]], 1); bx.fillText(s, p.x + (i - a) * L.cw, y); }
+      i = j;
+    }
+  }
+}
+
+/* ---------------------------------------------------- 7. episodes and t
+   An episode is one tamper: which byte, its flipped value, the tampered
+   digests, and when each beat happens. The loop has one scripted episode; a
+   click or the button starts a live one on the same beats. */
+let EP = null, live = null;
+function scriptedEpisode() {
+  const R = mulberry32(0x5EED), z = L.zone, digits = [], alnum = [];
+  for (let i = 0; i < N; i++) {
+    const p = cellXY(i);
+    if (p.x < z.x0 || p.x > z.x1 || p.y < z.y0 || p.y > z.y1) continue;
+    const c = cc(i);
+    if (isDigit(c)) digits.push(i); else if (isWordJS(c)) alnum.push(i);
+  }
+  const pool = digits.length ? digits : alnum.length ? alnum : [visibleNear(N >> 1)];
+  const idx = pool[Math.floor(R() * pool.length)];
+  return Object.assign({ idx, ch: flipBit(SRC[idx]), dig: null, lens: lensFor(idx) }, K);
+}
+const NEVER = 1e9;                          // a beat that has not been scheduled yet (finite, so f * (b - a) stays a number)
+function liveEpisode(idx, t0) {
+  const I = NEVER;
+  return { idx, ch: flipBit(SRC[idx]), dig: null, lens: lensFor(idx), lensIn: t0, flip: t0 + 0.12,
+    scanA: t0 + 0.4, scanB: t0 + 1.3, av0: t0 + 1.25, av1: t0 + 2.1, lensOut: t0 + 3.4,
+    lensIn2: I, unflip: I, scan3a: I, scan3b: I, back0: I, back1: I, lensOut2: I };
+}
+function restoreEpisode(ep, t0) {
+  Object.assign(ep, { lensIn2: t0, unflip: t0 + 0.2, scan3a: t0 + 0.4, scan3b: t0 + 1.15, back0: t0 + 1.1, back1: t0 + 1.65, lensOut2: t0 + 2.4 });
+}
+async function hashEpisode(ep) {
+  const b = BYTES.slice(); b[ep.idx] = ep.ch.charCodeAt(0);
+  const d = await digest(b);
+  d.d256 = bitDiff(DIG.s256, d.s256); d.d384 = bitDiff(DIG.s384, d.s384);
+  ep.dig = d;
+}
+const overlap = (x0, y0, x1, y1, b) =>
+  Math.max(0, Math.min(x1, b.right) - Math.max(x0, b.left)) * Math.max(0, Math.min(y1, b.bottom) - Math.max(y0, b.top));
+function lensFor(idx) {                    // a callout beside the glyph, kept off the panels and the rings
+  const p = cellXY(idx), fx0 = p.x + L.cw / 2, fy0 = p.y + L.ch / 2, r = L.lensR, d = r + (L.P ? 30 : 58);
+  const g = L.ring, opts = [[d, 0], [-d, 0], [0.4 * d, -d], [0.4 * d, d], [-0.4 * d, -d], [-0.4 * d, d]];
+  let best = opts[0], bestScore = -1e9;
+  for (const o of opts) {
+    const lx = fx0 + o[0], ly = fy0 + o[1], below = L.P ? 4 : 42;
+    let score = Math.min(0, lx - r - 4, L.W - lx - r - (L.P ? 120 : 4), ly - r - 4, L.H - ly - r - below) * 6;
+    score += Math.min(0, Math.hypot(lx - g.cx, ly - g.cy) - g.R - r) * 2;
+    for (const b of L.panels) score -= overlap(lx - r, ly - r, lx + r, ly + r + below, b) / 40;
+    if (score > bestScore + 0.01) { bestScore = score; best = o; }
+  }
+  return { fx: fx0, fy: fy0, lx: fx0 + best[0], ly: fy0 + best[1] };
+}
+
+const TRAIL = 0.45;                        // seconds of scan that stay lit behind the head
+const scanPos = (t, a, b) => { const x = clamp01((t - a) / (b - a)); return N * (0.45 * x + 0.55 * ease2(x)); };
+function stateAt(t, ep, attract) {
+  const S = { t, ep, attract, lit: N, litLevel: 1, front: -1, back: -1, frontFrom: N, hotA: 0, hotB: 0, hotLevel: 0, tamp: null, lens: 0 };
+  const comet = (a, b, hotFrom) => {
+    if (t >= a && t < b + TRAIL) { S.front = scanPos(t, a, b); S.back = scanPos(t - TRAIL, a, b); S.frontFrom = hotFrom; }
+  };
+  if (attract) {
+    if (t < K.scan0) S.lit = 0;
+    else if (t < K.scan1) S.lit = scanPos(t, K.scan0, K.scan1);
+    comet(K.scan0, K.scan1, N);
+    S.litLevel = 1 - smooth((t - K.out0) / (K.out1 - K.out0));
+  }
+  if (!ep) return S;
+  const blk = Math.floor(ep.idx / 64) * 64;
+  S.blk = blk;
+  if (t >= ep.flip && t < ep.unflip + 1.2) {
+    S.tamp = { roll: smooth((t - ep.flip) / 0.24) - smooth((t - ep.unflip) / 0.24),
+      heat: t < ep.unflip ? 1 : 1 - smooth((t - ep.unflip) / 0.5) };
+  }
+  // the rehash: blocks before the change reach the same state, every block after it diverges
+  if (t >= ep.scanA && t < ep.scan3a) {
+    S.hotA = blk; S.hotB = Math.max(blk, scanPos(t, ep.scanA, ep.scanB));
+    S.hotLevel = t < ep.scanB ? 1 : 0.3 + 0.7 * Math.exp(-(t - ep.scanB) * 2.4);
+  } else if (t >= ep.scan3a && t < ep.scan3b) {
+    S.hotA = Math.max(blk, scanPos(t, ep.scan3a, ep.scan3b)); S.hotB = N; S.hotLevel = 0.3;
+  }
+  comet(ep.scanA, ep.scanB, blk);
+  comet(ep.scan3a, ep.scan3b, N);
+  const o1 = backOut((t - ep.lensIn) / 0.4) * (1 - easeIn((t - ep.lensOut) / 0.26));
+  const o2 = backOut((t - ep.lensIn2) / 0.4) * (1 - easeIn((t - ep.lensOut2) / 0.26));
+  S.lens = Math.max(0, o1, o2);
+  return S;
+}
+
+/* ------------------------------------------------------------ 8. drawing */
+function lightMasked(paint, y0) {          // paint coloured shapes below y0, keep only where glyphs are
+  const x = fx.getContext('2d'), w = fx.width, by = Math.max(0, Math.floor(y0 * L.dpr) - 2), bh = fx.height - by;
+  if (bh <= 0) return;
+  x.setTransform(1, 0, 0, 1, 0, 0); x.globalCompositeOperation = 'source-over'; x.clearRect(0, by, w, bh);
+  x.setTransform(L.dpr, 0, 0, L.dpr, 0, 0); paint(x);
+  x.setTransform(1, 0, 0, 1, 0, 0); x.globalCompositeOperation = 'destination-in'; x.drawImage(mask, 0, by, w, bh, 0, by, w, bh);
+  x.globalCompositeOperation = 'source-over';
+  ctx.drawImage(fx, 0, by, w, bh, 0, by, w, bh);
+}
+
+function drawField(S) {
+  const dpr = L.dpr;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  ctx.fillStyle = C.void; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.globalAlpha = S.lit >= N ? 1 - 0.8 * (1 - 0.42 * S.litLevel) : 0.2;   // dim, or fully hashed in one pass
+  ctx.drawImage(base, 0, 0);
+  if (S.lit > 0 && S.lit < N && S.litLevel > 0.002) {
+    ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.beginPath();
+    rangeRects(0, S.lit, (x, y, w, h) => ctx.rect(x, y, w, h)); ctx.clip();
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.42 * S.litLevel; ctx.drawImage(base, 0, 0); ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  if (S.hotB > S.hotA || S.front >= 0) {
+    const top = Math.min(S.hotB > S.hotA ? cellXY(S.hotA).y : 1e9, S.front >= 0 ? cellXY(Math.max(0, Math.min(N - 1, S.back))).y : 1e9);
+    lightMasked(x => {
+      if (S.hotB > S.hotA) {
+        x.fillStyle = rgba(RC.h1, 0.85 * S.hotLevel); x.beginPath();
+        rangeRects(S.hotA, S.hotB, (a, b, w, h) => x.rect(a, b, w, h)); x.fill();
+      }
+      if (S.front >= 0) {                  // the scan head and its comet tail, in reading order
+        const span = Math.max(1, S.front - S.back);
+        rowRects(S.back, S.front, (a, b, w, h, i0, i1) => {
+          const k = Math.pow((i1 - S.back) / span, 1.7), hot = i0 >= S.frontFrom;
+          x.fillStyle = rgba(hot ? mix(RC.h1, RC.h4, k) : mix(RC.c1, RC.frost, k), 0.12 + 0.88 * k);
+          x.fillRect(a, b, w, h);
+        });
+      }
+    }, top);
+    if (S.front >= 0 && S.front < N) {      // a soft head on the scan
+      const p = cellXY(Math.min(N - 1, S.front)), hot = S.front >= S.frontFrom;
+      ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 120);
+      g.addColorStop(0, rgba(hot ? RC.h4 : RC.frost, 0.5)); g.addColorStop(0.2, rgba(hot ? RC.h3 : RC.ice, 0.2)); g.addColorStop(1, rgba(hot ? RC.h2 : RC.c2, 0));
+      ctx.fillStyle = g; ctx.fillRect(p.x - 120, p.y - 120, 240, 240); ctx.restore();
+    }
+  }
+}
+
+function drawRing(S) {
+  const g = L.ring, dpr = L.dpr, t = S.t, ep = S.ep, B = g.box;
+  ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const well = ctx.createRadialGradient(g.cx, g.cy, 0, g.cx, g.cy, g.R * 1.06);
+  well.addColorStop(0, 'rgba(16,12,42,0.92)'); well.addColorStop(0.3, 'rgba(16,12,42,0.86)');
+  well.addColorStop(0.36, 'rgba(16,12,42,0.6)'); well.addColorStop(0.94, 'rgba(16,12,42,0.6)'); well.addColorStop(1, 'rgba(16,12,42,0)');
+  ctx.fillStyle = well; ctx.beginPath(); ctx.arc(g.cx, g.cy, g.R * 1.06, 0, TAU); ctx.fill();
+  const ex = em.getContext('2d');
+  ex.setTransform(1, 0, 0, 1, 0, 0); ex.globalCompositeOperation = 'source-over'; ex.clearRect(0, 0, em.width, em.height);
+  ex.setTransform(dpr, 0, 0, dpr, -B.x * dpr, -B.y * dpr);
+  const sweep = ((t * 0.85) % TAU) - Math.PI / 2;
+  // before ignition the ghost ring doubles as a progress dial for the first hash pass
+  const prog = !S.attract ? 1 : t < K.out0 ? clamp01(S.lit / N) : 1 - smooth((t - K.out0 - 0.3) / 0.7);
+  let shown = 0, heat = 0;
+  for (let ri = 0; ri < 2; ri++) {
+    const rg = g.rings[ri], total = rg.n * 8;
+    const A = ri ? DIG.s384 : DIG.s256, D = ep && ep.dig ? (ri ? ep.dig.s384 : ep.dig.s256) : null;
+    for (const cell of rg.cells) {
+      const f = cell.bit / total;
+      let vis = 1;
+      if (S.attract) vis = smooth((t - (K.ign0 + f * 0.42)) / 0.2) * (1 - smooth((t - (K.out0 + (1 - f) * 0.62)) / 0.3));
+      const on = bitOf(A, cell.bit), nw = D ? bitOf(D, cell.bit) : on;
+      let k = 0, fh = 0, fc = 0;
+      if (D && on !== nw) {
+        const ta = ep.av0 + f * (ep.av1 - ep.av0 - 0.2), tb = ep.back0 + f * (ep.back1 - ep.back0 - 0.18);
+        k = smooth((t - ta) / 0.2) * (1 - smooth((t - tb) / 0.18));
+        fh = bell((t - ta) / 0.28); fc = bell((t - tb) / 0.26);
+        if (ri === 0 && k >= 0.5) shown++;
+        heat = Math.max(heat, k);
+      }
+      const c0 = on ? LOOK.coldOn : LOOK.coldOff;
+      let col = c0.c, ga = c0.g, fa = c0.f;
+      let d = (sweep - cell.am) % TAU; if (d < 0) d += TAU;
+      const gl = d < 1.3 ? (1 - d / 1.3) * (1 - d / 1.3) : 0;    // a slow glint circling the rings
+      if (k > 0) {
+        const c1 = nw ? LOOK.hotOn : LOOK.hotOff;
+        col = mix(c0.c, c1.c, k); ga = c0.g + (c1.g - c0.g) * k; fa = c0.f + (c1.f - c0.f) * k;
+        if (k > 0.95) { ga *= 0.8 + 0.2 * Math.sin(t * 5.3 + cell.bit * 1.7); col = mix(col, RC.h5, gl * 0.6); fa += gl * 0.12; }
+      } else if (on) { col = mix(col, RC.frost, gl * 0.7); fa += gl * 0.08; }
+      if (fh > 0) { col = mix(col, RC.h5, fh * 0.85); ga = Math.max(ga, fh); fa = Math.max(fa, 0.34 * fh); }
+      if (fc > 0) { col = mix(col, RC.frost, fc * 0.8); ga = Math.max(ga, fc); fa = Math.max(fa, 0.24 * fc); }
+      const pr = f < prog, edge = pr && prog < 1 ? smooth(1 - (prog - f) / 0.06) : 0;
+      const gC = pr ? mix(RC.c2, RC.frost, edge) : RC.steel, gA = pr ? 0.42 + 0.5 * edge : 0.18;
+      col = mix(gC, col, vis); ga = gA + (ga - gA) * vis; fa *= vis;
+      if (S.attract) {                      // each cell flashes frost as the digest lands
+        const fi = bell((t - (K.ign0 + f * 0.42)) / 0.24);
+        if (fi > 0) { col = mix(col, RC.frost, fi * 0.75); ga = Math.max(ga, 0.9 * fi); fa = Math.max(fa, 0.14 * fi); }
+      }
+      ex.fillStyle = rgba(col, ga); ex.fill(cell.p);
+      if (fa > 0.004) { ctx.fillStyle = rgba(col, fa); ctx.fill(cell.p); }
+    }
+  }
+  ctx.restore();
+  ex.setTransform(1, 0, 0, 1, 0, 0); ex.globalCompositeOperation = 'destination-in';
+  ex.drawImage(mask, B.x * dpr, B.y * dpr, em.width, em.height, 0, 0, em.width, em.height);
+  ex.globalCompositeOperation = 'source-over';
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(em, B.x * dpr, B.y * dpr);
+  const gx = glow.getContext('2d');
+  gx.setTransform(1, 0, 0, 1, 0, 0); gx.clearRect(0, 0, glow.width, glow.height);
+  gx.filter = 'blur(' + (L.P ? 1.5 : 2.5) + 'px)'; gx.drawImage(em, 0, 0, glow.width, glow.height); gx.filter = 'none';
+  ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.55 + 0.3 * heat;
+  ctx.drawImage(glow, B.x * dpr, B.y * dpr, em.width, em.height);
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  // ring names in the gaps at twelve o'clock
+  ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  setFont(ctx, L.P ? 9 : 11); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const lv = S.attract ? smooth((t - K.ign0) / 0.4) * (1 - smooth((t - K.out0) / 0.6)) : 1;
+  ctx.fillStyle = rgba(RC.mist, 0.45 + 0.45 * lv);
+  for (const rg of g.rings) ctx.fillText(rg.name, g.cx, g.cy - rg.rm);
+  ctx.restore();
+  return { shown, heat };
+}
+
+function drawTamper(S) {
+  const ep = S.ep, t = S.t, p = cellXY(ep.idx), x = p.x + L.cw / 2, y = p.y + L.ch / 2, dpr = L.dpr;
+  ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const flare = (e, cA, cB, R0, R1) => {
+    if (e <= 0 || e >= 1) return;
+    ctx.globalCompositeOperation = 'lighter';
+    const r = R0 + (R1 - R0) * Math.sqrt(e), g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, rgba(cA, 0.9 * (1 - e))); g.addColorStop(0.25, rgba(cB, 0.45 * (1 - e))); g.addColorStop(1, rgba(cB, 0));
+    ctx.fillStyle = g; ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = rgba(cB, 0.7 * (1 - e) * (1 - e)); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, 8 + 300 * easeOutQ(e), 0, TAU); ctx.stroke();
+  };
+  flare((t - ep.flip) / 1.1, RC.h5, RC.h2, 8, 150);
+  flare((t - ep.unflip) / 0.9, RC.frost, RC.c2, 8, 110);
+  const h = S.tamp.heat, pulse = 0.75 + 0.25 * Math.sin(t * 6);
+  if (h > 0.01) {
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 16);
+    g.addColorStop(0, rgba(RC.h3, 0.75 * h * pulse)); g.addColorStop(1, rgba(RC.h2, 0));
+    ctx.fillStyle = g; ctx.fillRect(x - 16, y - 16, 32, 32);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.fillStyle = C.void; ctx.fillRect(p.x - 0.5, p.y, L.cw + 1, L.ch);
+  setFont(ctx, L.fs, 700); ctx.textBaseline = 'middle';
+  ctx.fillStyle = rgba(mix(RC.ice, RC.h5, h), 1);
+  ctx.fillText(S.tamp.roll > 0.5 ? ep.ch : SRC[ep.idx], p.x, y);
+  ctx.restore();
+}
+const easeOutQ = x => 1 - Math.pow(1 - clamp01(x), 2);
+
+function drawLens(S, fx0, fy0, lx, ly, s, callout, label) {
+  if (s <= 0.002) return;
+  const dpr = L.dpr, r = L.lensR * (callout ? 1 : 0.86) * s, M = L.mag * (0.7 + 0.3 * Math.min(1, s)), t = S.t;
+  const tamp = S.tamp && S.ep ? S.ep.idx : -1, hotNow = S.tamp && S.tamp.heat > 0.5;
+  ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (callout) {
+    const dx = lx - fx0, dy = ly - fy0, d = Math.hypot(dx, dy) || 1;
+    ctx.strokeStyle = rgba(hotNow ? RC.h3 : RC.ice, 0.75 * Math.min(1, s)); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(fx0 + dx / d * 7, fy0 + dy / d * 7); ctx.lineTo(lx - dx / d * r, ly - dy / d * r); ctx.stroke();
+    ctx.beginPath(); ctx.arc(fx0, fy0, 7, 0, TAU); ctx.stroke();
+  }
+  ctx.beginPath(); ctx.arc(lx, ly, r, 0, TAU);
+  ctx.fillStyle = 'rgba(16,12,42,0.95)'; ctx.fill();
+  ctx.save(); ctx.clip();
+  setFont(ctx, L.fs * M); ctx.textBaseline = 'middle';
+  const span = r / M;
+  for (let c = 0; c < L.nc; c++) {
+    const x0 = L.colX[c];
+    if (x0 + L.cpr * L.cw < fx0 - span || x0 > fx0 + span) continue;
+    const k0 = Math.max(0, Math.floor((fx0 - span - x0) / L.cw)), k1 = Math.min(L.cpr - 1, Math.ceil((fx0 + span - x0) / L.cw));
+    const r0 = Math.max(0, Math.floor((fy0 - span - L.top) / L.ch)), r1 = Math.min(L.rpc - 1, Math.ceil((fy0 + span - L.top) / L.ch));
+    for (let row = r0; row <= r1; row++) for (let k = k0; k <= k1; k++) {
+      const i = c * L.per + row * L.cpr + k;
+      if (i >= N) continue;
+      const X = lx + (x0 + k * L.cw - fx0) * M, Y = ly + (L.top + (row + 0.5) * L.ch - fy0) * M;
+      if (i === tamp) {
+        const ro = S.tamp.roll, h = S.tamp.heat, hc = mix(RC.ice, RC.h5, h);
+        ctx.fillStyle = rgba(mix(RC.c1, RC.h1, h), 0.55); ctx.fillRect(X - 1, Y - L.ch * M / 2, L.cw * M + 2, L.ch * M);
+        ctx.shadowColor = rgba(h > 0.5 ? RC.h3 : RC.ice, 0.9); ctx.shadowBlur = 14;
+        ctx.fillStyle = rgba(RC.frost, 1 - ro); ctx.fillText(SRC[i], X, Y - ro * L.ch * M * 0.8);
+        ctx.fillStyle = rgba(hc, ro); ctx.fillText(S.ep.ch, X, Y + (1 - ro) * L.ch * M * 0.8);
+        ctx.shadowBlur = 0;
+        continue;
+      }
+      if (cc(i) <= 32) continue;
+      let col = PAL[CLS[i]], a = i < S.lit ? 0.95 : 0.6;
+      if (i >= S.hotA && i < S.hotB) col = mix(col, RC.h2, 0.65 * S.hotLevel);
+      ctx.fillStyle = rgba(col, a * Math.min(1, s)); ctx.fillText(SRC[i], X, Y);
+    }
+  }
+  ctx.restore();
+  ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(hotNow ? RC.h3 : RC.ice, 0.8 * Math.min(1, s));
+  ctx.beginPath(); ctx.arc(lx, ly, r, 0, TAU); ctx.stroke();
+  if (label && s > 0.5) {
+    const a = smooth((s - 0.5) / 0.4), side = L.P && callout;
+    const tx = side ? lx + r + 12 : lx, ty = side ? ly - 16 : ly + r + 10;
+    const f0 = '500 ' + (L.P ? 11 : 12) + 'px "Schibsted Grotesk", system-ui, sans-serif';
+    ctx.font = f0; let w = ctx.measureText(label[0]).width;
+    if (label[1]) { setFont(ctx, L.P ? 10 : 11); w = Math.max(w, ctx.measureText(label[1]).width); }
+    const bx = side ? tx - 6 : tx - w / 2 - 7, bh = label[1] ? 38 : 21;
+    ctx.fillStyle = rgba(RC.void, 0.82 * a); ctx.beginPath(); ctx.roundRect(bx, ty - 4, w + 14, bh, 6); ctx.fill();
+    ctx.textAlign = side ? 'left' : 'center'; ctx.textBaseline = 'top';
+    ctx.font = f0; ctx.fillStyle = rgba(RC.frost, a); ctx.fillText(label[0], tx, ty);
+    if (label[1]) { setFont(ctx, L.P ? 10 : 11); ctx.fillStyle = rgba(label[2] ? RC.h3 : RC.mist, a); ctx.fillText(label[1], tx, ty + 17); }
+  }
+  ctx.restore();
+}
+
+/* ------------------------------------------------------------ 9. readout */
+const ro = { status: $('status'), detail: $('detail'), btnT: $('tamper'), btnR: $('restore') };
+function spans(el, n) {
+  el.textContent = ''; const a = [];
+  for (let i = 0; i < n; i++) { const s = document.createElement('span'); el.appendChild(s); a.push({ s, ch: null, cl: null }); }
+  return a;
+}
+function setSpan(o, ch, cl) {
+  if (o.ch !== ch) { o.s.textContent = ch; o.ch = ch; }
+  if (o.cl !== cl) { o.s.className = cl; o.cl = cl; }
+}
+let GOT = null, HEXS = null, last = {};
+function setText(key, el, v) { if (last[key] !== v) { el.textContent = v; last[key] = v; } }
+
+// each digest character follows the same cascade as the ring cells that hold its bits
+function hashChars(out, S, pristine, tampered, firstBit, bitsPer, total, alphabet, skip) {
+  const t = S.t, ep = S.ep;
+  for (let j = 0; j < out.length; j++) {
+    if (j < skip) { setSpan(out[j], pristine[j], ''); continue; }
+    const f = ((j - skip) * bitsPer) / total;
+    let ch = pristine[j], cl = '';
+    if (tampered) {
+      const ta = ep.av0 + f * (ep.av1 - ep.av0 - 0.2), tb = ep.back0 + f * (ep.back1 - ep.back0 - 0.18);
+      if (t >= ta + 0.1 && t < tb + 0.09) ch = tampered[j];
+      if (Math.abs(t - ta - 0.05) < 0.07 || Math.abs(t - tb - 0.045) < 0.06) { ch = alphabet[noise(Math.floor(t * 30), j) % alphabet.length]; cl = 's'; }
+    }
+    if (S.attract) {
+      const ti = K.ign0 + f * 0.42, to = K.out0 + (1 - f) * 0.62;
+      if (t < ti + 0.1 || t > to + 0.15) { ch = alphabet[noise(Math.floor(t * 18), j + firstBit) % alphabet.length]; cl = 'd'; }
+    }
+    if (!cl && ch !== pristine[j]) cl = 'h';
+    setSpan(out[j], ch, cl);
+  }
+}
+
+function updateDom(S, ring) {
+  const t = S.t, ep = S.ep, d = ep && ep.dig;
+  hashChars(GOT, S, DIG.sri, d ? d.sri : null, 7, 6, 384, B64, 7);
+  hashChars(HEXS, S, DIG.hex, d ? d.hex : null, 1000, 4, 256, HEX, 0);
+  let st, cls = '', de;
+  const verified = ['Integrity verified', fmt(N) + ' bytes rebuilt from inside the page, hashed by crypto.subtle.digest. The SHA-384 matches the pinned integrity value.'];
+  const hexc = c => '0x' + HEX[c >> 4] + HEX[c & 15];
+  if (!HAS_CRYPTO) { st = 'Web Crypto is unavailable here, so the page cannot hash itself'; de = 'It needs a secure context: https, localhost or a local file.'; cls = 'mid'; }
+  else if (S.attract && (t < K.scan0 || t > K.out0 + 0.7)) { st = 'Rebuilt ' + fmt(N) + " bytes from the page's own template"; de = 'The script fills a hole in its template with a quoted copy of that template: the whole file, byte for byte.'; cls = 'mid'; }
+  else if (S.attract && t < K.ign0 + 0.3) { st = 'Hashing ' + fmt(Math.min(N, S.lit)) + ' of ' + fmt(N) + ' bytes'; de = 'SHA-256 and SHA-384 read the rebuilt source in order, one block at a time.'; cls = 'mid'; }
+  else if (ep && t >= ep.flip && t < ep.av0 + 0.45) {
+    const o = cc(ep.idx), n = ep.ch.charCodeAt(0);
+    st = 'One bit flipped in byte ' + fmt(ep.idx); cls = 'hot';
+    de = t < ep.scanA ? '"' + SRC[ep.idx] + '" (' + hexc(o) + ') is now "' + ep.ch + '" (' + hexc(n) + '): one bit out of ' + fmt(N * 8) + '.'
+      : 'Rehashing. Blocks before byte ' + fmt(S.blk) + ' reach the same SHA-256 state; every 64-byte block after it diverges.';
+  } else if (ep && d && t >= ep.av0 + 0.45 && t < ep.unflip) {
+    st = L.P ? 'Integrity check failed' : 'Integrity check failed: expected ' + DIG.sri.slice(0, 15) + '..., got ' + d.sri.slice(0, 15) + '...';
+    cls = 'hot';
+    de = 'One flipped bit changed ' + d.d256 + ' of 256 SHA-256 bits and ' + d.d384 + ' of 384 SHA-384 bits.';
+  } else if (ep && t >= ep.unflip && t < ep.back1) { st = 'Byte ' + fmt(ep.idx) + ' restored, rehashing'; de = 'The cold scan heals the chain block by block.'; cls = 'mid'; }
+  else { st = verified[0]; de = verified[1]; }
+  setText('st', ro.status, st); setText('de', ro.detail, de);
+  if (last.cls !== cls) { ro.status.className = cls; last.cls = cls; }
+  // hub: a byte counter during the first pass, then how many digest bits changed
+  const bytesMode = S.attract && t < K.ign0 + 0.25;
+  const vis = !S.attract ? 1 : bytesMode ? smooth(t / 0.25) * (1 - smooth((t - K.ign0 - 0.05) / 0.2))
+    : smooth((t - K.ign0 - 0.25) / 0.3) * (1 - smooth((t - K.out0) / 0.5));
+  setText('hn', hubn, bytesMode ? fmt(Math.min(N, S.lit)) : String(ring.shown));
+  setText('hl', hubl, bytesMode ? 'bytes hashed' : 'of 256 bits changed');
+  const hs = (bytesMode ? L.hubSmall : L.hubBig) + 'px';
+  if (last.hs !== hs) { hubn.style.fontSize = hs; last.hs = hs; }
+  const hk = Math.round(ring.heat * 20) / 20;
+  if (last.hk !== hk) {
+    hubn.style.color = rgba(mix(RC.ice, RC.h3, hk), 1);
+    hubn.style.fontWeight = String(Math.round(200 + 380 * hk));
+    hubn.style.textShadow = hk > 0 ? '0 0 0.25em ' + rgba(RC.h2, 0.6 * hk) : 'none';
+    last.hk = hk;
+  }
+  const hv = vis.toFixed(2);
+  if (last.hv !== hv) { hub.style.opacity = hv; last.hv = hv; }
+  const canRestore = !!(live && S.ep === live && live.unflip >= NEVER);
+  if (last.cr !== canRestore) { ro.btnR.disabled = !canRestore; last.cr = canRestore; }
+}
+
+/* ------------------------------------------------------- 10. one frame */
+function paintState(S) {
+  drawField(S);
+  const ring = drawRing(S);
+  const ep = S.ep;
+  if (S.tamp) drawTamper(S);
+  let lensShown = false;
+  if (ep && S.lens > 0.002) {
+    const o = cc(ep.idx), n = ep.ch.charCodeAt(0), hexc = c => '0x' + HEX[c >> 4] + HEX[c & 15];
+    const restored = S.t >= ep.unflip;
+    const lab = ['byte ' + fmt(ep.idx) + ' of ' + fmt(N), restored ? hexc(n) + ' back to ' + hexc(o) : (S.tamp ? hexc(o) + ' to ' + hexc(n) + ', one bit' : ''), !restored && !!S.tamp];
+    drawLens(S, ep.lens.fx, ep.lens.fy, ep.lens.lx, ep.lens.ly, S.lens, true, lab);
+    lensShown = S.lens > 0.3;
+  }
+  if (hover && !lensShown) {
+    const i = hit(hover.x, hover.y);
+    drawLens(S, hover.x, hover.y, hover.x, hover.y, 1, false, i >= 0 ? ['byte ' + fmt(i), '', false] : null);
+  }
+  updateDom(S, ring);
+}
+
+/* -------------------------------------------------- 11. clock and input */
+let T = 0, LT = 0, mode = 'attract', playing = false, hover = null, lastInput = 0, dirty = true, stepTimer = null, stepIdx = 0, presses = 0;
+const btnPlay = $('playpause'), notes = $('notes'), showNotes = $('show-notes');
+const STEPS = [3.2, 5.7, 8.6, 12.6];
+function paint() { paintState(mode === 'attract' ? stateAt(T, EP, true) : stateAt(LT, live, false)); dirty = false; }
+function setUI(p) { playing = p; btnPlay.textContent = p ? 'Pause' : 'Play'; btnPlay.setAttribute('aria-pressed', String(!p)); }
+function stopSteps() { if (stepTimer) { clearInterval(stepTimer); stepTimer = null; } }
+function play() {
+  if (reduce && mode === 'attract') {
+    stopSteps(); T = STEPS[stepIdx]; dirty = true;
+    stepTimer = setInterval(() => { stepIdx = (stepIdx + 1) % STEPS.length; T = STEPS[stepIdx]; dirty = true; }, 4000);
+  }
+  setUI(true);
+}
+function pause() { stopSteps(); setUI(false); }
+function startLive(i) {
+  if (i < 0 || !HAS_CRYPTO) return;
+  stopSteps();
+  if (mode !== 'live') { mode = 'live'; LT = 0; }
+  const ep = liveEpisode(i, LT);
+  live = ep; lastInput = LT; dirty = true;
+  hashEpisode(ep).then(() => { dirty = true; });
+  if (!playing) setUI(true);
+}
+function restoreLive() {
+  if (live && live.unflip >= NEVER) { restoreEpisode(live, LT); lastInput = LT; dirty = true; }
+}
+function randomGlyph() {
+  const R = mulberry32(0xB17E + presses++), a = readout.getBoundingClientRect(), b = notes.hidden ? null : notes.getBoundingClientRect();
+  const inside = (r, x, y) => r && x > r.left - 20 && x < r.right + 20 && y > r.top - 20 && y < r.bottom + 20;
+  for (let n = 0; n < 400; n++) {
+    const i = visibleNear(Math.floor(R() * N)), p = cellXY(Math.max(0, i));
+    if (i >= 0 && !inside(a, p.x, p.y) && !inside(b, p.x, p.y) && Math.hypot(p.x - L.ring.cx, p.y - L.ring.cy) > L.ring.R * 0.4) return i;
+  }
+  return visibleNear(N >> 1);
+}
+function tick(now) {
+  const dt = Math.min(0.1, (now - tick.last) / 1000 || 0); tick.last = now;
+  if (playing && !stepTimer) {
+    if (mode === 'attract') T = (T + dt) % DUR;
+    else {
+      LT += dt;
+      if (LT - lastInput > 10) {             // idle: put the byte back, then hand over to the loop
+        if (live && live.unflip >= NEVER) { restoreEpisode(live, LT); lastInput = LT - 7.5; }
+        else if (!live || LT > live.back1 + 0.8) { mode = 'attract'; live = null; T = 12.4; }
+      }
+    }
+    dirty = true;
+  }
+  if (dirty) paint();
+  requestAnimationFrame(tick);
+}
+
+cv.addEventListener('pointermove', e => {
+  if (e.pointerType === 'touch') return;
+  hover = { x: e.clientX, y: e.clientY }; if (mode === 'live') lastInput = LT; dirty = true;
+});
+cv.addEventListener('pointerleave', () => { hover = null; dirty = true; });
+cv.addEventListener('click', e => {
+  const i = visibleNear(hit(e.clientX, e.clientY));
+  if (i < 0) return;
+  if (mode === 'live' && live && live.idx === i && live.unflip >= NEVER) restoreLive(); else startLive(i);
+});
+ro.btnT.addEventListener('click', () => startLive(randomGlyph()));
+ro.btnR.addEventListener('click', restoreLive);
+btnPlay.addEventListener('click', () => playing ? pause() : play());
+function setNotes(show) { notes.hidden = !show; showNotes.hidden = show; }
+$('hide-notes').addEventListener('click', () => { setNotes(false); showNotes.focus(); });
+showNotes.addEventListener('click', () => { setNotes(true); $('hide-notes').focus(); });
+addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input, textarea, select')) return;
+  if (e.code === 'Space') {
+    if (document.activeElement && document.activeElement.tagName === 'BUTTON') return;
+    e.preventDefault(); playing ? pause() : play();
+  } else if ((e.key === 'h' || e.key === 'H') && !e.metaKey && !e.ctrlKey && !e.altKey) setNotes(notes.hidden);
+});
+let rz = null;
+addEventListener('resize', () => {
+  clearTimeout(rz);
+  rz = setTimeout(async () => {
+    layout();
+    const next = scriptedEpisode();
+    if (!EP || next.idx !== EP.idx) { await hashEpisode(next); EP = next; } else EP.lens = next.lens;
+    if (live) live.lens = lensFor(live.idx);
+    dirty = true;
+  }, 160);
+});
+
+/* ------------------------------------------------------------- 12. boot */
+(async function boot() {
+  try {
+    await Promise.race([
+      Promise.all(['400 12px "Martian Mono"', '200 64px "Martian Mono"', '400 13px "Schibsted Grotesk"', '500 13px "Schibsted Grotesk"']
+        .map(f => document.fonts.load(f, 'sha0'))).then(() => document.fonts.ready),
+      new Promise(r => setTimeout(r, 5000))]);
+  } catch (e) { /* draw with whatever fonts arrived */ }
+  GOT = spans($('vgot'), 71); HEXS = spans($('v256'), 64);
+  if (HAS_CRYPTO) DIG = await digest(BYTES);
+  else {
+    const z = new Uint8Array(48);
+    DIG = { s256: z.slice(0, 32), s384: z, hex: '-'.repeat(64), sri: 'sha384-' + '-'.repeat(64) };
+    $('lede').textContent += ' This browser does not offer Web Crypto here, so you are seeing the source without its live fingerprint.';
+  }
+  $('vexp').textContent = 'integrity="' + DIG.sri + '"';
+  layout();
+  EP = scriptedEpisode();
+  if (HAS_CRYPTO) await hashEpisode(EP);
+  window.__tamper = { idx: EP.idx, ch: EP.ch };
+  window.__seek = t => { stopSteps(); mode = 'attract'; live = null; hover = null; T = ((+t % DUR) + DUR) % DUR; setUI(false); paint(); };
+  window.__play = () => play();
+  if (Q.has('t')) window.__seek(parseFloat(Q.get('t')) || 0);
+  else if (reduce) { T = 8.6; setUI(false); paint(); }
+  else { T = 0; play(); }
+  requestAnimationFrame(tick);
+})();
+})();
+</script>
+</body>
+</html>

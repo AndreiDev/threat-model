@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memento expirare</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+  --col: 380px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--void);overflow:hidden}
+body{color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+
+/* the gallery room: a soft museum light falls on the wall from above */
+.room{position:fixed;inset:0;
+  background:
+    radial-gradient(900px 620px at calc(var(--col) + (100% - var(--col)) / 2) -8%, rgba(140,147,196,.13), transparent 70%),
+    radial-gradient(700px 500px at 10% 110%, rgba(58,15,107,.28), transparent 70%),
+    var(--void)}
+.wall{position:absolute;left:var(--col);right:0;top:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:16px 24px}
+
+/* ebonised ripple frame with a thin gilt slip, the classic Dutch still-life frame */
+.frame{position:relative;padding:22px;border-radius:3px;
+  background:
+    repeating-linear-gradient(45deg, rgba(255,255,255,.028) 0 1px, transparent 1px 4px),
+    linear-gradient(160deg,#1a130e,#0a0706 60%,#120d0a);
+  box-shadow:0 0 0 1px rgba(0,0,0,.75), inset 0 0 0 1px rgba(255,255,255,.06), inset 0 0 0 9px rgba(0,0,0,.35),
+    inset 0 0 0 10px rgba(255,255,255,.05), 0 44px 90px -24px rgba(0,0,0,.75), 0 12px 30px rgba(0,0,0,.45)}
+.viewport{position:relative;overflow:hidden;background:#0b0907;width:960px;height:640px;
+  box-shadow:0 0 0 2px #80622f, 0 0 0 3px #2b2013, inset 0 0 18px rgba(0,0,0,.55);
+  cursor:grab;touch-action:none;outline-offset:6px}
+.viewport.dragging{cursor:grabbing}
+.stage{position:absolute;left:0;top:0;transform-origin:0 0}
+.stage img{display:block;width:100%;height:100%;user-select:none;-webkit-user-drag:none;pointer-events:none}
+#film{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#0b0907;display:none}
+.film-mode #film{display:block}
+.film-mode .stage{visibility:hidden}
+.film-mode .viewport{cursor:default}
+
+/* hotspots: rings that frame each object; the hostile ones run hot */
+.hs{position:absolute;width:30px;height:30px;margin:-15px 0 0 -15px;padding:0;border-radius:50%;cursor:pointer;
+  border:2px solid rgba(232,247,255,.92);background:rgba(16,12,42,.10);
+  box-shadow:0 0 0 1px rgba(0,0,0,.5),0 0 16px rgba(155,232,255,.35);transition:transform .2s, background .2s}
+.hs::after{content:"";position:absolute;inset:-8px;border-radius:50%;border:1px solid rgba(155,232,255,.55);
+  animation:ping 2.8s cubic-bezier(.2,.7,.1,1) infinite;animation-delay:var(--d,0s);pointer-events:none}
+.hs.hot{border-color:var(--heat-3);box-shadow:0 0 0 1px rgba(0,0,0,.5),0 0 16px rgba(255,122,47,.5)}
+.hs.hot::after{border-color:rgba(255,122,47,.6)}
+.hs:hover,.hs:focus-visible{transform:scale(1.15);background:rgba(155,232,255,.16)}
+.hs[aria-pressed="true"]{background:rgba(155,232,255,.22);transform:scale(1.12)}
+.hs.hot[aria-pressed="true"]{background:rgba(255,122,47,.22)}
+.hs .tip{position:absolute;left:50%;bottom:calc(100% + 10px);transform:translateX(-50%);white-space:nowrap;pointer-events:none;
+  font:500 12px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost);background:rgba(16,12,42,.86);
+  border:1px solid rgba(140,147,196,.3);border-radius:999px;padding:6px 10px;opacity:0;transition:opacity .15s}
+.hs:hover .tip,.hs:focus-visible .tip{opacity:1}
+@keyframes ping{0%{transform:scale(.7);opacity:.9}80%,100%{transform:scale(1.45);opacity:0}}
+.hide-hs .hs{display:none}
+.zoomed .hs{opacity:0;pointer-events:none}
+.hs{transition:transform .2s, background .2s, opacity .3s}
+
+/* controls under the frame */
+.controls{display:flex;flex-direction:column;gap:10px;align-items:stretch}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.btn{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost);background:rgba(78,90,140,.25);
+  border:1px solid rgba(140,147,196,.35);border-radius:999px;padding:8px 12px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:rgba(155,232,255,.16)}
+.seg{display:inline-flex;padding:3px;border-radius:999px;background:rgba(27,23,71,.7);border:1px solid rgba(140,147,196,.28)}
+.seg button{border:0;background:none;border-radius:999px;padding:7px 14px;font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist);cursor:pointer}
+.seg button[aria-pressed="true"]{background:rgba(155,232,255,.16);color:var(--frost);box-shadow:inset 0 0 0 1px rgba(155,232,255,.45)}
+.zoomgrp{display:inline-flex;gap:6px;align-items:center}
+.zoomgrp .btn{min-width:34px;text-align:center}
+.hint{color:var(--mist);font-size:12.5px}
+.spacer{flex:1}
+.filmbar{display:none;align-items:center;gap:12px}
+.film-mode .filmbar{display:flex}
+.film-mode .zoomgrp,.film-mode .hint{display:none}
+.chapter{color:var(--frost);font-size:13px;white-space:nowrap;display:none}
+.film-mode .chapter{display:inline}
+.tc{font:400 12px/1 "Martian Mono",ui-monospace,monospace;color:var(--mist);white-space:nowrap;min-width:9.5em}
+.tc b{font-weight:400;color:var(--frost)}
+#film-play{min-width:64px}
+.scrub{position:relative;flex:1;height:30px;cursor:pointer;touch-action:none;border-radius:6px;outline-offset:3px}
+.track{position:absolute;left:0;right:0;top:14px;height:3px;border-radius:2px;background:rgba(78,90,140,.55)}
+.fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:2px;background:var(--ice)}
+.tick{position:absolute;top:9px;width:1px;height:13px;background:rgba(140,147,196,.55)}
+.tick.on{background:var(--ice)}
+.head{position:absolute;top:9px;left:0;width:13px;height:13px;margin-left:-6.5px;border-radius:50%;background:var(--frost);box-shadow:0 0 0 4px rgba(155,232,255,.22)}
+
+/* museum label */
+.label{position:absolute;left:16px;top:16px;width:calc(var(--col) - 32px);padding:18px 20px 16px;
+  background:rgba(16,12,42,.6);border:1px solid rgba(140,147,196,.2);border-radius:14px;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.label h2{margin:0 0 4px;font:250 22px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.label .meta{margin:0 0 12px;color:var(--mist);font-size:13px}
+.label p{margin:0 0 10px;color:var(--frost);font-size:14.5px;line-height:1.55}
+.label p .k{color:var(--mist)}
+.label p.here{color:var(--frost)}
+.label .hot{color:var(--heat-3)}
+.label .cold{color:var(--ice)}
+.label code{font:400 .9em/1 "Martian Mono",ui-monospace,monospace;color:var(--heat-4)}
+.label .lbl-actions{display:flex;gap:8px;margin-top:4px}
+.label .hint2{color:var(--mist);font-size:13px;margin:0}
+
+/* notes card (shared contract) */
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+.notes code{font:400 12px/1.3 "Martian Mono",ui-monospace,monospace;color:var(--frost)}
+.notes p.src{font-size:12.5px;margin:-4px 0 12px}
+.notes p.src a{color:var(--ice)}
+
+/* shorter desktop windows: tighten the label so it clears the notes card */
+@media (min-width:701px) and (max-height:820px){
+  .label .meta,.label .hint2{display:none}
+  .label p{font-size:13.5px}
+}
+
+/* phones in portrait: a scrolling column. Frame first, then controls, label, notes */
+@media (max-width:700px) and (orientation:portrait){
+  html,body{overflow-x:hidden;overflow-y:auto}
+  .room{position:static;min-height:100vh;min-height:100svh;padding:12px 0 18px;display:flex;flex-direction:column;gap:14px}
+  .wall{position:static;padding:0 12px;gap:12px}
+  .frame{padding:12px;width:100%}
+  .viewport{width:100%}
+  .controls{width:100%}
+  .row{gap:8px}
+  .hint{display:none}
+  .label{position:static;width:auto;margin:0 12px}
+  .label h2{font-size:19px}
+  .notes{position:static;margin:0 12px;max-width:none}
+  .show-notes{position:static;align-self:flex-start;margin:0 12px}
+  .tc{min-width:0}
+  .tc .dur{display:none}
+  .chapter{font-size:12.5px}
+  .seg button{padding:7px 11px}
+}
+/* thumbnail / render mode: just the painting */
+.clean .label,.clean .controls,.clean .notes,.clean .show-notes{display:none!important}
+.clean .wall{left:0;padding:0}
+.clean .frame{padding:0;box-shadow:none;background:none}
+.clean .viewport{box-shadow:none}
+@media (prefers-reduced-motion: reduce){.hs::after{animation:none;opacity:0}}
+</style>
+</head>
+<body>
+<div class="room" id="room">
+  <section class="wall" id="wall" aria-label="The painting">
+    <div class="frame" id="frame">
+      <div class="viewport" id="viewport" tabindex="0" role="application"
+           aria-label="Memento expirare, a vanitas still life. Scroll or pinch to zoom, drag to pan, plus and minus keys to zoom.">
+        <div class="stage" id="stage">
+          <img id="painting" src="../out/vanitas.png" width="3000" height="2000" draggable="false"
+               alt="A dark oil painting of a wooden ledge: an open book titled README with a brass key on its page and a red tag reading AKIA…EXAMPLE, a smoking candle stub in a pewter candlestick, an hourglass almost run out, a pocket watch at two minutes to twelve, a wilting tulip, a sealed letter hanging over the edge, and a fly.">
+        </div>
+        <video id="film" src="../out/vanitas-timelapse.mp4" muted playsinline preload="auto"
+               aria-label="Timelapse of the painting being made, stroke by stroke"></video>
+      </div>
+    </div>
+    <div class="controls" id="controls">
+      <div class="row">
+        <div class="seg" role="group" aria-label="View">
+          <button type="button" id="mode-paint" aria-pressed="true">Painting</button>
+          <button type="button" id="mode-film" aria-pressed="false">Watch it being painted</button>
+        </div>
+        <span class="spacer"></span>
+        <span class="chapter" id="chapter" aria-live="polite"></span>
+        <div class="zoomgrp">
+          <button type="button" class="btn" id="zoom-out" aria-label="Zoom out">&minus;</button>
+          <button type="button" class="btn" id="zoom-in" aria-label="Zoom in">+</button>
+          <button type="button" class="btn" id="zoom-fit">Fit</button>
+        </div>
+      </div>
+      <div class="row filmbar">
+        <button type="button" class="btn" id="film-play" aria-pressed="true">Play</button>
+        <span class="tc" id="tc"><b>0:00</b><span class="dur"> / 0:41</span></span>
+        <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="Timelapse time" aria-valuemin="0" aria-valuemax="41.7" aria-valuenow="0">
+          <div class="track"><div class="fill" id="fill"></div></div>
+          <div id="ticks"></div>
+          <div class="head" id="head"></div>
+        </div>
+      </div>
+      <div class="row"><span class="hint">Scroll or pinch to zoom, drag to look closer. Rings mark the objects.</span></div>
+    </div>
+  </section>
+
+  <aside class="label" id="label" aria-live="polite"></aside>
+
+  <aside class="notes" id="notes" aria-label="About this piece">
+    <h1>Memento expirare</h1>
+    <p>A Dutch vanitas still life painted stroke by stroke by a Python script, with no image models. Every object is something in security that expires.</p>
+    <ul class="tech">
+      <li>Scene built in numpy: lathe solids, a curled page, SDF heightfields, a leaded window reflected in glass and brass</li>
+      <li>Hertzmann layered painting, from a 64 px brush to a 0.8 px liner, strokes traced along the structure tensor</li>
+      <li>Bristle-textured strokes with per-channel Kubelka–Munk wet mixing and an impasto height map lit for relief</li>
+      <li>Umber glaze, linen weave, craquelure and a lightly yellowed varnish</li>
+      <li>One seeded command renders the PNG and the timelapse: <code>python3 tools/paint_vanitas.py</code></li>
+    </ul>
+    <p class="src">The <code>AKIA</code> access key prefix is documented in <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html#identifiers-prefixes">AWS IAM identifiers</a>.</p>
+    <div class="notes-actions">
+      <a href="../index.html">Back to gallery</a>
+      <button type="button" id="playpause" aria-pressed="true">Play</button>
+      <button type="button" id="hide-notes">Hide notes</button>
+    </div>
+  </aside>
+  <button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+</div>
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const Q = new URLSearchParams(location.search);
+const CLEAN = Q.has('clean');
+const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const IMG_W = 3000, IMG_H = 2000, DW = 2400, DH = 1600;   // painting pixels; design space of the renderer
+const DUR = 41.73;
+// chapter times printed by tools/paint_vanitas.py (fixed frame budget per stage, so they are deterministic)
+const CHAPTERS = [[0.0, 'Toned ground'], [0.2, 'Underdrawing in umber'], [2.4, 'Dead colouring, 64 px brush'],
+  [7.4, 'Blocking in, 34 px brush'], [11.9, 'Forms, 17 px brush'], [16.4, 'Edges, 8.5 px brush'], [20.9, 'Detail, 4 px brush'],
+  [24.9, 'Fine detail, 2 px brush'], [27.9, 'Lettering with a liner'], [30.7, 'Lead-white impasto'], [31.9, 'Umber glaze'],
+  [33.4, 'Varnish and craquelure'], [35.73, 'A close look at the tag']];
+
+// Objects: ring position and zoom target in the renderer's design space (2400 x 1600)
+const OBJECTS = [
+  { id: 'book', name: 'The open README', x: 420, y: 965, fx: 620, fy: 975, z: 2.0,
+    body: `<p><span class="k">In a vanitas,</span> books stand for learning, which also passes.</p>
+           <p class="here">Here it is the README: the place where advice belongs, and where a secret should never be pasted.</p>` },
+  { id: 'key', name: 'The key and its tag', x: 1012, y: 1150, fx: 905, fy: 1110, z: 3.3, hot: true,
+    body: `<p><span class="k">In a vanitas,</span> keys stand for property and power you cannot take with you.</p>
+           <p class="here">Here it is a <span class="hot">leaked credential</span>, left lying in the README. The tag reads <code>AKIA…EXAMPLE</code>, the shape of an AWS access key ID; <code>AKIA</code> is the documented prefix for long-term access keys. It is the only hot colour in the room. Revoke it, rotate it, then search the history for copies.</p>` },
+  { id: 'candle', name: 'The guttering candle', x: 1135, y: 670, fx: 1135, fy: 700, z: 2.4,
+    body: `<p><span class="k">In a vanitas,</span> a candle that has just gone out is a life snuffed, with the smoke still rising.</p>
+           <p class="here">Here it is a <span class="cold">session timeout</span>. Nobody touched it, so it ended. That is the system working.</p>` },
+  { id: 'hourglass', name: 'The hourglass', x: 1505, y: 760, fx: 1505, fy: 900, z: 2.1,
+    body: `<p><span class="k">In a vanitas,</span> the sand is a life measured out, and it only runs one way.</p>
+           <p class="here">Here it is a <span class="cold">token lifetime</span>. Most of the sand is already below the neck. A short-lived token stops being useful to a thief soon after it is stolen.</p>` },
+  { id: 'watch', name: 'The pocket watch', x: 1814, y: 1094, fx: 1772, fy: 1150, z: 3.0,
+    body: `<p><span class="k">In a vanitas,</span> a watch is a memento mori small enough to carry in a pocket.</p>
+           <p class="here">Here it is a <span class="cold">TTL</span>. The hands stand at two minutes to twelve.</p>` },
+  { id: 'tulip', name: 'The wilting tulip', x: 2076, y: 1205, fx: 2080, fy: 1210, z: 3.0,
+    body: `<p><span class="k">In a vanitas,</span> a cut flower is beauty that fades. Tulips also recall the Dutch tulip mania that collapsed in 1637.</p>
+           <p class="here">Here it is a <span class="hot">deprecated dependency</span>: still on the table, petals already falling. Pin it while you plan the replacement.</p>` },
+  { id: 'letter', name: 'The sealed letter', x: 560, y: 1262, fx: 448, fy: 1370, z: 2.8,
+    body: `<p><span class="k">In a vanitas,</span> documents and seals are worldly authority, as temporary as everything else on the table.</p>
+           <p class="here">Here it is a <span class="cold">signed release</span>. The wax is blue because the seal can be checked: verify the signature before you open the package.</p>` },
+  { id: 'fly', name: 'The fly', x: 1196, y: 1268, fx: 1196, fy: 1262, z: 4.2, hot: true,
+    body: `<p><span class="k">In a vanitas,</span> a fly is a sign of decay.</p>
+           <p class="here">Here, a <span class="hot">bug</span>.</p>` },
+];
+const DEFAULT_LABEL = `<h2>Remember that you will expire</h2>
+  <p class="meta">Claude Opus 5.5, 2026. Oil on canvas, simulated in Python. 3000 by 2000 pixels.</p>
+  <p>A vanitas still life reminded its owner that everything passes. This one is about the things in software that are meant to: credentials, sessions, dependencies.</p>
+  <p class="hint2">Select a ring on the painting to read its label.</p>`;
+
+const room = $('#room'), wall = $('#wall'), frame = $('#frame'), vp = $('#viewport'), stage = $('#stage');
+const film = $('#film'), label = $('#label'), notes = $('#notes'), showNotes = $('#show-notes');
+const btnNotes = $('#playpause'), btnFilm = $('#film-play'), scrub = $('#scrub'), fill = $('#fill'), head = $('#head');
+const tc = $('#tc'), chapterEl = $('#chapter'), ticks = $('#ticks');
+if (CLEAN) document.documentElement.classList.add('clean');
+
+// ------------------------------------------------------------------ hotspots
+OBJECTS.forEach((o, i) => {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'hs' + (o.hot ? ' hot' : '');
+  b.style.left = (o.x / DW * 100) + '%';
+  b.style.top = (o.y / DH * 100) + '%';
+  b.style.setProperty('--d', (i * 0.33).toFixed(2) + 's');
+  b.setAttribute('aria-label', o.name);
+  b.setAttribute('aria-pressed', 'false');
+  b.dataset.id = o.id;
+  b.innerHTML = `<span class="tip">${o.name}</span>`;
+  b.addEventListener('click', e => { e.stopPropagation(); openLabel(o.id, !REDUCE); });
+  stage.appendChild(b);
+});
+if (CLEAN) room.classList.add('hide-hs');
+
+let current = null;
+function openLabel(id, animate) {
+  const o = OBJECTS.find(v => v.id === id);
+  current = o ? o.id : null;
+  stage.querySelectorAll('.hs').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === current)));
+  if (!o) { label.innerHTML = DEFAULT_LABEL; return; }
+  label.innerHTML = `<h2>${o.name}</h2>${o.body}
+    <div class="lbl-actions"><button type="button" class="btn" id="lbl-close">Back to the whole painting</button></div>`;
+  $('#lbl-close').addEventListener('click', () => { openLabel(null); fitView(!REDUCE); });
+  if (mode !== 'paint') setMode('paint');
+  focusOn(o.fx, o.fy, o.z * baseZoomFor(), animate);
+}
+label.innerHTML = DEFAULT_LABEL;
+
+// ------------------------------------------------------------------ pan and zoom
+let vw = 960, vh = 640, base = 1, z = 1, tx = 0, ty = 0, anim = 0;
+const ZMAX = 9;
+const mobile = () => !CLEAN && matchMedia('(max-width:700px) and (orientation:portrait)').matches;
+const dispW = () => IMG_W * base * z, dispH = () => IMG_H * base * z;
+function clampView() {
+  const dw = dispW(), dh = dispH();
+  tx = dw <= vw ? (vw - dw) / 2 : Math.min(0, Math.max(vw - dw, tx));
+  ty = dh <= vh ? (vh - dh) / 2 : Math.min(0, Math.max(vh - dh, ty));
+}
+function apply() {
+  clampView();
+  stage.style.width = dispW() + 'px';
+  stage.style.height = dispH() + 'px';
+  stage.style.transform = `translate(${tx}px,${ty}px)`;
+  room.classList.toggle('zoomed', z > baseZoomFor() * 1.7);   // rings are for finding things, not for close looking
+}
+function zoomAt(px, py, nz) {
+  nz = Math.min(ZMAX, Math.max(1, nz));
+  const ix = (px - tx) / dispW(), iy = (py - ty) / dispH();
+  z = nz;
+  tx = px - ix * dispW();
+  ty = py - iy * dispH();
+  apply();
+}
+// cover zoom: on a phone the frame is taller than the painting, so the default view fills it
+function baseZoomFor() { return Math.max(vw / (IMG_W * base), vh / (IMG_H * base)); }
+function setView(cfx, cfy, nz) {           // centre as a fraction of the painting
+  z = Math.min(ZMAX, Math.max(1, nz));
+  tx = vw / 2 - cfx * dispW();
+  ty = vh / 2 - cfy * dispH();
+  apply();
+}
+const easeIO = p => p < .5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2;
+function animateTo(cfx, cfy, nz, ms = 700) {
+  cancelAnimationFrame(anim);
+  const c0x = (vw / 2 - tx) / dispW(), c0y = (vh / 2 - ty) / dispH(), z0 = z;
+  const t0 = performance.now();
+  const step = now => {
+    const p = easeIO(Math.min(1, (now - t0) / ms));
+    const zz = Math.exp(Math.log(z0) + (Math.log(nz) - Math.log(z0)) * p);
+    setView(c0x + (cfx - c0x) * p, c0y + (cfy - c0y) * p, zz);
+    if (p < 1) anim = requestAnimationFrame(step);
+  };
+  anim = requestAnimationFrame(step);
+}
+function focusOn(dx, dy, nz, animate) {
+  if (animate) animateTo(dx / DW, dy / DH, nz); else { cancelAnimationFrame(anim); setView(dx / DW, dy / DH, nz); }
+}
+function homeView() { return mobile() ? [1120 / DW, 980 / DH, baseZoomFor()] : CLEAN ? [1200 / DW, 905 / DH, baseZoomFor() * 1.1] : [0.5, 0.5, 1]; }
+function fitView(animate) {
+  const [cx, cy, zz] = homeView();
+  if (animate) animateTo(cx, cy, zz); else setView(cx, cy, zz);
+}
+
+const pts = new Map();
+let pinch = null, dragged = false;
+vp.addEventListener('pointerdown', e => {
+  if (mode !== 'paint' || e.target.closest('.hs')) return;
+  cancelAnimationFrame(anim);
+  vp.setPointerCapture(e.pointerId);
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  dragged = false;
+  if (pts.size === 2) {
+    const [a, b] = [...pts.values()];
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z };
+  }
+  vp.classList.add('dragging');
+});
+vp.addEventListener('pointermove', e => {
+  if (!pts.has(e.pointerId)) return;
+  const prev = pts.get(e.pointerId);
+  const cur = { x: e.clientX, y: e.clientY };
+  pts.set(e.pointerId, cur);
+  const r = vp.getBoundingClientRect();
+  if (pts.size === 2 && pinch) {
+    const [a, b] = [...pts.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    zoomAt((a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top, pinch.z * d / pinch.d);
+    dragged = true;
+  } else if (pts.size === 1) {
+    tx += cur.x - prev.x; ty += cur.y - prev.y;
+    if (Math.abs(cur.x - prev.x) + Math.abs(cur.y - prev.y) > 0) dragged = true;
+    apply();
+  }
+});
+const endPtr = e => {
+  pts.delete(e.pointerId);
+  if (pts.size < 2) pinch = null;
+  if (!pts.size) vp.classList.remove('dragging');
+};
+vp.addEventListener('pointerup', endPtr);
+vp.addEventListener('pointercancel', endPtr);
+vp.addEventListener('wheel', e => {
+  if (mode !== 'paint') return;
+  e.preventDefault();
+  cancelAnimationFrame(anim);
+  const r = vp.getBoundingClientRect();
+  const k = e.ctrlKey ? 0.012 : 0.0018;
+  zoomAt(e.clientX - r.left, e.clientY - r.top, z * Math.exp(-e.deltaY * k));
+}, { passive: false });
+vp.addEventListener('dblclick', e => {
+  if (mode !== 'paint' || e.target.closest('.hs')) return;
+  const r = vp.getBoundingClientRect();
+  const px = e.clientX - r.left, py = e.clientY - r.top;
+  const ix = (px - tx) / dispW(), iy = (py - ty) / dispH();
+  animateTo(ix, iy, Math.min(ZMAX, z * 2.2), 450);
+});
+vp.addEventListener('keydown', e => {
+  if (mode !== 'paint') return;
+  const step = 60;
+  if (e.key === '+' || e.key === '=') { zoomAt(vw / 2, vh / 2, z * 1.4); e.preventDefault(); }
+  else if (e.key === '-' || e.key === '_') { zoomAt(vw / 2, vh / 2, z / 1.4); e.preventDefault(); }
+  else if (e.key === '0') { fitView(!REDUCE); e.preventDefault(); }
+  else if (e.key.startsWith('Arrow')) {
+    if (e.key === 'ArrowLeft') tx += step; if (e.key === 'ArrowRight') tx -= step;
+    if (e.key === 'ArrowUp') ty += step; if (e.key === 'ArrowDown') ty -= step;
+    apply(); e.preventDefault();
+  }
+});
+$('#zoom-in').addEventListener('click', () => animateTo((vw / 2 - tx) / dispW(), (vh / 2 - ty) / dispH(), Math.min(ZMAX, z * 1.6), 350));
+$('#zoom-out').addEventListener('click', () => animateTo((vw / 2 - tx) / dispW(), (vh / 2 - ty) / dispH(), Math.max(1, z / 1.6), 350));
+$('#zoom-fit').addEventListener('click', () => { openLabel(null); fitView(!REDUCE); });
+
+// ------------------------------------------------------------------ layout
+function layout() {
+  const keep = { cx: (vw / 2 - tx) / dispW(), cy: (vh / 2 - ty) / dispH(), rel: z / baseZoomFor() };
+  const W = innerWidth, H = innerHeight;
+  if (CLEAN) {
+    vw = W; vh = H;
+  } else if (mobile()) {
+    vw = Math.max(200, frame.parentElement.clientWidth - 24 - 24);
+    vh = Math.round(vw * (mode === 'film' ? 2 / 3 : 1.18));
+  } else {
+    const col = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--col')) || 380;
+    const availW = W - col - 48 - 44, availH = H - 32 - 44 - 104;
+    vw = Math.min(availW, availH * 1.5); vh = vw / 1.5;
+    vw = Math.floor(vw); vh = Math.floor(vh);
+  }
+  vp.style.width = vw + 'px';
+  vp.style.height = vh + 'px';
+  $('#controls').style.width = mobile() ? '100%' : (vw + 44) + 'px';
+  base = Math.min(vw / IMG_W, vh / IMG_H);
+  if (!layout.done) { fitView(false); layout.done = true; }
+  else setView(keep.cx, keep.cy, keep.rel * baseZoomFor());
+}
+addEventListener('resize', layout);
+
+// ------------------------------------------------------------------ timelapse
+let mode = 'paint', paused = true;
+CHAPTERS.forEach(([t]) => {
+  const d = document.createElement('div');
+  d.className = 'tick';
+  d.style.left = (t / DUR * 100) + '%';
+  ticks.appendChild(d);
+});
+const fmt = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+function chapterAt(t) { let c = CHAPTERS[0]; for (const ch of CHAPTERS) if (t + 1e-3 >= ch[0]) c = ch; return c; }
+function syncUI() {
+  const t = film.currentTime || 0;
+  const p = Math.min(1, t / DUR);
+  fill.style.width = (p * 100) + '%';
+  head.style.left = (p * 100) + '%';
+  tc.innerHTML = `<b>${fmt(t)}</b><span class="dur"> / ${fmt(DUR)}</span>`;
+  scrub.setAttribute('aria-valuenow', t.toFixed(1));
+  const ch = chapterAt(t);
+  if (chapterEl.textContent !== ch[1]) chapterEl.textContent = ch[1];
+  ticks.querySelectorAll('.tick').forEach((el, i) => el.classList.toggle('on', CHAPTERS[i][0] <= t + 1e-3));
+}
+function setPaused(v) {
+  paused = v;
+  for (const b of [btnNotes, btnFilm]) { b.textContent = v ? 'Play' : 'Pause'; b.setAttribute('aria-pressed', String(v)); }
+}
+function setMode(m) {
+  mode = m;
+  room.classList.toggle('film-mode', m === 'film');
+  $('#mode-paint').setAttribute('aria-pressed', String(m === 'paint'));
+  $('#mode-film').setAttribute('aria-pressed', String(m === 'film'));
+  if (m === 'paint') { film.pause(); setPaused(true); }
+  layout();
+  syncUI();
+}
+function play() {
+  if (mode !== 'film') setMode('film');
+  if (film.ended || film.currentTime >= DUR - 0.05) film.currentTime = 0;
+  const pr = film.play();
+  if (pr && pr.catch) pr.catch(() => setPaused(true));
+  setPaused(false);
+}
+function pause() { film.pause(); setPaused(true); }
+function toggle() { paused ? play() : pause(); }
+film.addEventListener('timeupdate', syncUI);
+film.addEventListener('seeked', syncUI);
+film.addEventListener('ended', () => setPaused(true));
+film.addEventListener('pause', () => { if (!film.seeking) setPaused(true); });
+(function tickLoop() { if (!paused && mode === 'film') syncUI(); requestAnimationFrame(tickLoop); })();
+
+$('#mode-paint').addEventListener('click', () => setMode('paint'));
+$('#mode-film').addEventListener('click', () => { setMode('film'); if (!REDUCE) play(); });
+btnFilm.addEventListener('click', toggle);
+btnNotes.addEventListener('click', toggle);
+
+// scrubbing
+function scrubTo(e) {
+  const r = scrub.getBoundingClientRect();
+  const t = Math.max(0, Math.min(DUR, (e.clientX - r.left) / r.width * DUR));
+  film.currentTime = t;
+  syncUI();
+}
+let scrubbing = false;
+scrub.addEventListener('pointerdown', e => { scrubbing = true; scrub.setPointerCapture(e.pointerId); pause(); scrubTo(e); });
+scrub.addEventListener('pointermove', e => { if (scrubbing) scrubTo(e); });
+scrub.addEventListener('pointerup', () => { scrubbing = false; });
+scrub.addEventListener('keydown', e => {
+  const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+  if (!d) return;
+  pause();
+  film.currentTime = Math.max(0, Math.min(DUR, film.currentTime + d * (e.shiftKey ? 5 : 1)));
+  e.preventDefault();
+});
+
+// ------------------------------------------------------------------ notes card + keys
+function setNotes(show) { notes.hidden = !show; showNotes.hidden = show; }
+$('#hide-notes').addEventListener('click', () => { setNotes(false); showNotes.focus(); });
+showNotes.addEventListener('click', () => { setNotes(true); $('#hide-notes').focus(); });
+addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input,textarea')) return;
+  if (e.key === 'h' || e.key === 'H') { setNotes(notes.hidden); }
+  else if (e.key === ' ' || e.code === 'Space') {
+    if (e.target.closest && e.target.closest('button,[role="slider"]')) return;
+    e.preventDefault(); toggle();
+  } else if (e.key === 'Escape' && current) { openLabel(null); fitView(!REDUCE); }
+});
+
+// ------------------------------------------------------------------ deterministic hooks
+function whenReady() {
+  return film.readyState >= 1 ? Promise.resolve() :
+    new Promise(res => film.addEventListener('loadedmetadata', res, { once: true }));
+}
+const twoFrames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+window.__seek = async t => {
+  t = Math.max(0, Math.min(DUR - 0.02, +t || 0));
+  film.pause(); setPaused(true);
+  await whenReady();
+  if (Math.abs(film.currentTime - t) > 1e-4 || film.readyState < 2) {
+    await new Promise(res => {
+      const done = () => { film.removeEventListener('seeked', done); res(); };
+      film.addEventListener('seeked', done);
+      film.currentTime = t;
+      setTimeout(done, 4000);
+    });
+  }
+  film.pause();
+  syncUI();
+  // hotspot pings are CSS animations on the wall clock; pin them to t so the frame is a pure function of t
+  for (const a of document.getAnimations()) if (a.animationName === 'ping') { a.pause(); a.currentTime = t * 1000; }
+  await twoFrames();
+};
+window.__play = () => {
+  for (const a of document.getAnimations()) if (a.animationName === 'ping') a.play();
+  play();
+};
+
+// ------------------------------------------------------------------ start
+layout();
+if (Q.get('view') === 'film' || Q.has('t')) setMode('film');
+if (Q.has('t')) window.__seek(parseFloat(Q.get('t')) || 0);
+else if (mode === 'film' && REDUCE) window.__seek(29);
+if (Q.has('label')) openLabel(Q.get('label'), false);
+document.fonts && document.fonts.ready.then(() => layout());
+syncUI();
+})();
+</script>
+</body>
+</html>

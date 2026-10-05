@@ -1,0 +1,1961 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Thirty-six views of the firewall</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--void)}
+body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;outline:none}
+
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+</style>
+</head>
+<body>
+<canvas id="c" role="img" aria-label="Woodblock prints after Hokusai: a great wave whose foam claws are made of tiny packet glyphs curls over boats toward a stepped firewall mountain; every seven seconds a new sheet slides in and the next view is printed block by block"></canvas>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Thirty-six views of the firewall</h1>
+  <p>Four woodblock prints after Hokusai, each printing itself block by block: the mountain is a stepped firewall around a datacentre, the sea is network traffic, and vermilion marks only the hostile packets that break against it.</p>
+  <ul class="tech">
+    <li>Four Three.js scenes drawn into 11 ink separations with multiple render targets, then printed on procedural washi with per-block misregistration, woodgrain and bokashi</li>
+    <li>Two-tone cel lighting with noisy band thresholds and inverted-hull key lines; the great wave is a slab painted from a signed distance field</li>
+    <li>Ink-wash shadows: the inverted shadow map is smoothstepped, broken with world-space noise and edged with a separate noisy contour</li>
+    <li>Foam claws, spray and mackerel clouds made of thousands of instanced packet glyphs, outlined as one mass by a key-block pass</li>
+    <li>The transition is the printing sequence: key block, each colour block, then the seal; every frame is a pure function of t</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+/* =====================================================================
+   Thirty-six views of the firewall
+   Pipeline: each view is a Three.js scene whose materials write one-hot
+   "ink separations" into 3 RGBA render targets (MRT). A composite pass
+   then prints those separations onto washi paper: per-block registration
+   offsets, woodgrain, bokashi gradients, edge carving, ink-wash shadows,
+   and a block-by-block printing sequence as the transition.
+   Every frame is a pure function of t.
+   ===================================================================== */
+
+/* ---------- params ---------- */
+const params = new URLSearchParams(location.search);
+const LOW = params.get('q') === 'low' || params.has('low');
+const T_PARAM = params.has('t') ? parseFloat(params.get('t')) : NaN;
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const VIEW_DUR = 7.0, T_OFF = 0.45;
+const HERO_T = 3.55;
+
+/* ---------- seeded randomness ---------- */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const easeInOut = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const easeOut = x => 1 - Math.pow(1 - x, 3);
+const fract = x => x - Math.floor(x);
+
+/* ---------- ink channels ---------- */
+// 0 key, 1 Prussian dark, 2 Prussian mid, 3 pale ice, 4 stone dark, 5 stone light,
+// 6 hot (hostile), 7 dim heat, 8 sky (bokashi block), 9 ink wash, 10 light (reserve + ice)
+const K = 0, AD = 1, AM = 2, AP = 3, SD = 4, SL = 5, HOT = 6, DH = 7, SKY = 8, WASH = 9, ICE = 10, PAPER = -1;
+const NCH = 11;
+const hex3 = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+const PAPER_HEX = '#E2E6F0';
+
+const DAY = ['#1E1B4B', '#213F8A', '#4677BC', '#A8C9E6', '#5C6598', '#A6ABCF', '#F0306A', '#9B1D8F', '#6B7FB8', '#2B2E66', '#9BE8FF'];
+const DAY2 = DAY.slice(); DAY2[SKY] = '#3D579E';
+const NIGHT = ['#120F30', '#1A2760', '#2F4E9C', '#7EA3D6', '#262A60', '#6A73AC', '#F0306A', '#9B1D8F', '#131036', '#0E0B26', '#9BE8FF'];
+
+/* ---------- renderer ---------- */
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
+renderer.autoClear = false;
+renderer.setClearColor(0x000000, 0);
+renderer.toneMapping = THREE.NoToneMapping;
+
+/* ---------- CPU textures: periodic noise, woodgrain, washi ---------- */
+function periodicValueNoise(size, px, py, seed) {
+  const r = mulberry32(seed), L = new Float32Array(px * py);
+  for (let i = 0; i < L.length; i++) L[i] = r();
+  const out = new Float32Array(size * size);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const fx = x / size * px, fy = y / size * py;
+    const ix = Math.floor(fx), iy = Math.floor(fy);
+    let tx = fx - ix, ty = fy - iy; tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
+    const x0 = ix % px, x1 = (ix + 1) % px, y0 = iy % py, y1 = (iy + 1) % py;
+    const a = L[y0 * px + x0], b = L[y0 * px + x1], c = L[y1 * px + x0], d = L[y1 * px + x1];
+    out[y * size + x] = (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty;
+  }
+  return out;
+}
+function fbmTex(size, px, py, oct, seed) {
+  const out = new Float32Array(size * size); let amp = 0.5, tot = 0;
+  for (let o = 0; o < oct; o++) {
+    const n = periodicValueNoise(size, px << o, py << o, seed + o * 101);
+    for (let i = 0; i < out.length; i++) out[i] += n[i] * amp;
+    tot += amp; amp *= 0.5;
+  }
+  for (let i = 0; i < out.length; i++) out[i] /= tot;
+  return out;
+}
+function dataTex(arrs, size) {
+  const d = new Uint8Array(size * size * 4);
+  for (let i = 0; i < size * size; i++) for (let c = 0; c < 4; c++) d[i * 4 + c] = clamp(Math.round((arrs[c] ? arrs[c][i] : 1) * 255), 0, 255);
+  const t = new THREE.DataTexture(d, size, size, THREE.RGBAFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true;
+  return t;
+}
+const NS = 256;
+const noiseTex = dataTex([fbmTex(NS, 4, 4, 5, 11), fbmTex(NS, 8, 8, 4, 23), fbmTex(NS, 24, 24, 3, 37), fbmTex(NS, 64, 64, 2, 51)], NS);
+
+// woodgrain: long rings along x, periodic, with late-wood bands and pores
+function makeGrain(size) {
+  const warpA = fbmTex(size, 2, 6, 4, 71), warpB = fbmTex(size, 4, 24, 3, 83), pores = fbmTex(size, 6, 160, 2, 97);
+  const out = new Float32Array(size * size);
+  const rings = 22;
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const i = y * size + x;
+    const v = y / size * rings + (warpA[i] - 0.5) * 5.0 + (warpB[i] - 0.5) * 0.9;
+    const f = fract(v);
+    const late = smooth(0.62, 0.86, f) * (1 - smooth(0.9, 1.0, f));
+    out[i] = clamp(1 - 0.55 * late - 0.25 * Math.max(0, pores[i] - 0.45) * 2, 0, 1);
+  }
+  return out;
+}
+const GS = 512;
+const grainTex = dataTex([makeGrain(GS), fbmTex(GS, 3, 3, 4, 131), null, null], GS);
+
+// washi: kozo fibres drawn on a canvas, tileable
+function makePaper(size) {
+  const cv = document.createElement('canvas'); cv.width = cv.height = size;
+  const g = cv.getContext('2d');
+  g.fillStyle = 'rgb(128,128,128)'; g.fillRect(0, 0, size, size);
+  const r = mulberry32(7);
+  const strokeWrapped = (pts, lw, style) => {
+    g.strokeStyle = style; g.lineWidth = lw;
+    for (const ox of [-size, 0, size]) for (const oy of [-size, 0, size]) {
+      g.beginPath(); g.moveTo(pts[0] + ox, pts[1] + oy);
+      g.bezierCurveTo(pts[2] + ox, pts[3] + oy, pts[4] + ox, pts[5] + oy, pts[6] + ox, pts[7] + oy); g.stroke();
+    }
+  };
+  for (let i = 0; i < 2600; i++) {
+    const x = r() * size, y = r() * size, a = r() * Math.PI * 2, len = 10 + Math.pow(r(), 2) * 90;
+    const bend = (r() - 0.5) * 0.9;
+    const pts = [x, y];
+    for (let k = 1; k <= 3; k++) {
+      const aa = a + bend * k / 3;
+      pts.push(x + Math.cos(aa) * len * k / 3 + (r() - 0.5) * 4, y + Math.sin(aa) * len * k / 3 + (r() - 0.5) * 4);
+    }
+    const light = r() < 0.72;
+    const al = (0.05 + r() * 0.2).toFixed(3);
+    strokeWrapped(pts, 0.5 + r() * 1.3, light ? `rgba(255,255,255,${al})` : `rgba(0,0,0,${(al * 0.55).toFixed(3)})`);
+  }
+  const id = g.getImageData(0, 0, size, size), d = id.data;
+  for (let i = 0; i < d.length; i += 4) { const n = (r() - 0.5) * 18; d[i] = clamp(d[i] + n, 0, 255); }
+  const out = new Float32Array(size * size);
+  for (let i = 0; i < out.length; i++) out[i] = d[i * 4] / 255;
+  return out;
+}
+const PS = 1024;
+const paperTex = dataTex([makePaper(PS), fbmTex(PS, 6, 6, 4, 177), null, null], PS);
+
+/* ---------- render targets ---------- */
+const SAMPLES = LOW ? 0 : (matchMedia('(max-width: 600px)').matches ? 2 : 4);
+const gbuf = new THREE.WebGLRenderTarget(4, 4, { count: 3, samples: SAMPLES, type: THREE.UnsignedByteType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: true });
+const SHADOW = LOW ? 1024 : 2048;
+const shadowRT = new THREE.WebGLRenderTarget(SHADOW, SHADOW, { depthBuffer: true, depthTexture: new THREE.DepthTexture(SHADOW, SHADOW) });
+const shadowOverride = new THREE.MeshBasicMaterial({ colorWrite: false });
+const lightCam = new THREE.OrthographicCamera(-50, 50, 50, -50, 0.1, 1000);
+lightCam.layers.set(1);
+
+/* ---------- shared uniforms ---------- */
+const U = {
+  uLight: { value: new THREE.Vector3(0, 1, 0) },
+  tShadow: { value: shadowRT.depthTexture },
+  uShadowMat: { value: new THREE.Matrix4() },
+  uShadowTexel: { value: new THREE.Vector2(1 / SHADOW, 1 / SHADOW) },
+  uBias: { value: 0.0015 },
+  uTime: { value: 0 },
+  uGRes: { value: new THREE.Vector2(1, 1) },
+};
+
+/* ---------- GLSL chunks ---------- */
+const NOISE = /* glsl */`
+float hash13(vec3 p){ p = fract(p*0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+float vnoise(vec3 p){
+  vec3 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+  float a = hash13(i), b = hash13(i+vec3(1,0,0)), c = hash13(i+vec3(0,1,0)), d = hash13(i+vec3(1,1,0));
+  float e = hash13(i+vec3(0,0,1)), g = hash13(i+vec3(1,0,1)), h = hash13(i+vec3(0,1,1)), k = hash13(i+vec3(1,1,1));
+  return mix(mix(mix(a,b,f.x), mix(c,d,f.x), f.y), mix(mix(e,g,f.x), mix(h,k,f.x), f.y), f.z);
+}
+float fbm3(vec3 p){ return (0.5*vnoise(p) + 0.25*vnoise(p*2.03+7.1) + 0.125*vnoise(p*4.07+3.3) + 0.0625*vnoise(p*8.13+1.7)) / 0.9375; }
+`;
+
+const VERT = /* glsl */`
+varying vec3 vW; varying vec3 vN; varying vec2 vUv; varying vec3 vL;
+void main(){
+  vec4 lp = vec4(position, 1.0); vec3 nn = normal;
+  #ifdef USE_INSTANCING
+    lp = instanceMatrix * lp; nn = mat3(instanceMatrix) * nn;
+  #endif
+  vec4 wp = modelMatrix * lp;
+  vW = wp.xyz; vN = normalize(mat3(modelMatrix) * nn); vUv = uv; vL = lp.xyz;
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`;
+
+const FRAG_PRE = /* glsl */`
+precision highp float;
+layout(location = 0) out highp vec4 o0;
+layout(location = 1) out highp vec4 o1;
+layout(location = 2) out highp vec4 o2;
+uniform vec3 uLight;
+uniform sampler2D tShadow;
+uniform mat4 uShadowMat;
+uniform vec2 uShadowTexel;
+uniform float uBias;
+uniform float uTime;
+uniform vec2 uGRes;
+float INK[11];
+void clr(){ for (int i = 0; i < 11; i++) INK[i] = 0.0; }
+void block(int c){ for (int i = 0; i < 9; i++) INK[i] = (i == c) ? 1.0 : 0.0; }
+void blockMix(int c, float a){ a = clamp(a, 0.0, 1.0); for (int i = 0; i < 9; i++) INK[i] *= (1.0 - a); if (c >= 0) INK[c] += a; }
+void emit(float alpha){
+  o0 = vec4(INK[0], INK[1], INK[2], alpha);
+  o1 = vec4(INK[3], INK[4], INK[5], INK[6]);
+  o2 = vec4(INK[7], INK[8], INK[9], INK[10]);
+}
+${NOISE}
+float shadowAmt(vec3 w){
+  vec4 sp = uShadowMat * vec4(w, 1.0);
+  vec3 sc = sp.xyz / sp.w * 0.5 + 0.5;
+  if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0 || sc.z > 1.0) return 0.0;
+  float s = 0.0;
+  for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) {
+    float d = texture(tShadow, sc.xy + vec2(float(i), float(j)) * uShadowTexel * 1.6).r;
+    s += step(d, sc.z - uBias);
+  }
+  return s / 9.0;
+}
+// ink wash: store the noisy pre-threshold value; the print pass smoothsteps it and draws the contour
+void washAt(vec3 w){
+  float s = shadowAmt(w);
+  vec3 nn = normalize(cross(dFdx(w), dFdy(w)));
+  s *= smoothstep(0.45, 0.75, nn.y);
+  float n = fbm3(vec3(w.xz * 0.22, w.y * 0.1 + 3.7));
+  INK[9] = clamp(s * 0.85 + (n - 0.5) * 0.5 + 0.08 * s, 0.0, 1.0);
+}
+float band(vec3 n, vec3 w, float thr, float amp, float sc){
+  float ndl = dot(n, uLight);
+  float tn = (fbm3(w * sc) - 0.5) * amp;
+  return step(thr + tn, ndl);
+}
+`;
+
+function mat(frag, uniforms = {}, opts = {}) {
+  return new THREE.ShaderMaterial(Object.assign({
+    glslVersion: THREE.GLSL3,
+    uniforms: Object.assign({}, U, uniforms),
+    vertexShader: opts.vert || VERT,
+    fragmentShader: FRAG_PRE + frag,
+  }, opts.extra || {}));
+}
+
+/* generic cel material: two-tone band, optional wash */
+const CEL_FRAG = /* glsl */`
+uniform float uLit, uShade, uWashOn, uThr, uNAmp, uNSc;
+varying vec3 vW; varying vec3 vN;
+void main(){
+  clr();
+  vec3 n = normalize(vN); if (!gl_FrontFacing) n = -n;
+  float b = band(n, vW, uThr, uNAmp, uNSc);
+  block(int(b > 0.5 ? uLit : uShade));
+  if (uWashOn > 0.5) washAt(vW);
+  emit(1.0);
+}`;
+function celMat(lit, shade, o = {}) {
+  return mat(CEL_FRAG, {
+    uLit: { value: lit }, uShade: { value: shade }, uWashOn: { value: o.wash ? 1 : 0 },
+    uThr: { value: o.thr ?? 0.25 }, uNAmp: { value: o.amp ?? 0.35 }, uNSc: { value: o.sc ?? 0.6 },
+  }, { extra: { side: o.side ?? THREE.FrontSide } });
+}
+
+/* inverted hull: back faces pushed out in screen space, constant pixel width */
+const HULL_VERT = /* glsl */`
+attribute vec3 aHN;
+uniform float uW; uniform vec2 uGRes;
+${NOISE}
+void main(){
+  vec4 lp = vec4(position, 1.0); vec3 n = aHN;
+  #ifdef USE_INSTANCING
+    lp = instanceMatrix * lp; n = mat3(instanceMatrix) * n;
+  #endif
+  vec4 wp = modelMatrix * lp;
+  vec3 wn = normalize(mat3(modelMatrix) * n);
+  vec4 cp = projectionMatrix * viewMatrix * wp;
+  vec4 cn = projectionMatrix * viewMatrix * vec4(wn, 0.0);
+  vec2 dir = cn.xy * uGRes; float L = length(dir); dir = L > 1e-6 ? dir / L : vec2(0.0);
+  float w = uW * (0.55 + 0.9 * vnoise(wp.xyz * 0.9));
+  cp.xy += dir * w * 2.0 / uGRes * cp.w;
+  gl_Position = cp;
+}`;
+function hullMat(w = 1.6) {
+  return mat(`void main(){ clr(); block(0); emit(1.0); }`, { uW: { value: w } }, { vert: HULL_VERT, extra: { side: THREE.BackSide } });
+}
+function addHullNormals(geo) {
+  const pos = geo.attributes.position, nrm = geo.attributes.normal, map = new Map();
+  const key = i => `${Math.round(pos.getX(i) * 1e4)},${Math.round(pos.getY(i) * 1e4)},${Math.round(pos.getZ(i) * 1e4)}`;
+  for (let i = 0; i < pos.count; i++) {
+    const k = key(i); const a = map.get(k) || [0, 0, 0];
+    a[0] += nrm.getX(i); a[1] += nrm.getY(i); a[2] += nrm.getZ(i); map.set(k, a);
+  }
+  const out = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const a = map.get(key(i)); const l = Math.hypot(a[0], a[1], a[2]) || 1;
+    out[i * 3] = a[0] / l; out[i * 3 + 1] = a[1] / l; out[i * 3 + 2] = a[2] / l;
+  }
+  geo.setAttribute('aHN', new THREE.BufferAttribute(out, 3));
+  return geo;
+}
+function withHull(mesh, w = 1.6, cast = true) {
+  addHullNormals(mesh.geometry);
+  const h = mesh.isInstancedMesh ? new THREE.InstancedMesh(mesh.geometry, hullMat(w), mesh.count) : new THREE.Mesh(mesh.geometry, hullMat(w));
+  if (mesh.isInstancedMesh) { h.instanceMatrix = mesh.instanceMatrix; }
+  h.frustumCulled = false; mesh.frustumCulled = false;
+  const g = new THREE.Group();
+  // the wrapper takes the mesh's local transform so mesh and hull stay together
+  g.position.copy(mesh.position); g.quaternion.copy(mesh.quaternion); g.scale.copy(mesh.scale);
+  mesh.position.set(0, 0, 0); mesh.quaternion.identity(); mesh.scale.set(1, 1, 1);
+  g.add(mesh); g.add(h);
+  if (cast) mesh.layers.enable(1);
+  return g;
+}
+
+/* sky dome: the sky block (bokashi is applied in print space) */
+function skyDome() {
+  const m = mat(`void main(){ clr(); block(8); emit(1.0); }`, {}, { extra: { side: THREE.BackSide, depthWrite: false } });
+  const s = new THREE.Mesh(new THREE.SphereGeometry(2400, 24, 12), m);
+  s.frustumCulled = false; s.renderOrder = -10;
+  return s;
+}
+
+/* flat SDF cards: moon disc, cloud bands (capsules) */
+const CARD_FRAG = /* glsl */`
+uniform vec4 uCaps[6]; uniform float uNCaps; uniform float uFill; uniform float uLineW; uniform float uRing; uniform float uAsp;
+varying vec2 vUv;
+float sdSeg(vec2 p, vec2 a, vec2 b){ vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h); }
+void main(){
+  clr();
+  vec2 p = (vUv - 0.5) * 2.0 * vec2(uAsp, 1.0);
+  float d = 1e3;
+  for (int i = 0; i < 6; i++) { if (float(i) >= uNCaps) break; vec4 c = uCaps[i]; d = min(d, sdSeg(p, vec2(c.x, c.z), vec2(c.y, c.z)) - c.w); }
+  float fw = max(fwidth(d), 1e-5);
+  float lw = uLineW * fw;
+  float alpha = clamp(0.5 - (d - lw) / fw, 0.0, 1.0);
+  if (alpha <= 0.0) discard;
+  block(int(uFill));
+  blockMix(0, clamp(0.5 + (d + 0.0) / fw, 0.0, 1.0));
+  if (uRing > 0.0) { float r = abs(d + uRing) ; blockMix(0, clamp(0.5 - (r - lw * 0.45) / fw, 0.0, 1.0)); }
+  emit(alpha);
+}`;
+function cardMesh(w, h, caps, fill, o = {}) {
+  const arr = []; for (let i = 0; i < 6; i++) { const c = caps[i] || [0, 0, 0, 0]; arr.push(new THREE.Vector4(...c)); }
+  const m = mat(CARD_FRAG, { uCaps: { value: arr }, uNCaps: { value: caps.length }, uFill: { value: fill }, uLineW: { value: o.lw ?? 1.5 }, uRing: { value: o.ring ?? 0 }, uAsp: { value: w / h } },
+    { extra: { alphaToCoverage: true, side: THREE.DoubleSide } });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
+  mesh.frustumCulled = false;
+  return mesh;
+}
+
+/* ---------- glyphs: instanced packet billboards with SDF outline ---------- */
+const GLYPH_VERT = /* glsl */`
+attribute vec3 iPos; attribute vec4 iP; // size, rotation, kind, aspect
+uniform vec2 uGRes;
+varying vec2 vQ; varying float vKind; varying float vPx; varying float vAsp;
+void main(){
+  vec4 vp = viewMatrix * vec4(iPos, 1.0);
+  float c = cos(iP.y), s = sin(iP.y);
+  vec2 q = position.xy * 2.6 * vec2(iP.w, 1.0);
+  vp.xy += mat2(c, s, -s, c) * q * iP.x * 0.5;
+  gl_Position = projectionMatrix * vp;
+  vQ = q; vKind = iP.z; vAsp = iP.w;
+  vPx = iP.x * projectionMatrix[1][1] / max(-vp.z, 0.01) * 0.5 * uGRes.y; // glyph height in px
+}`;
+const GLYPH_FRAG = /* glsl */`
+uniform float uPass;
+varying vec2 vQ; varying float vKind; varying float vPx; varying float vAsp;
+float sdRB(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }
+void main(){
+  clr();
+  float kf = vKind;
+  bool detail = kf >= 9.5; if (detail) kf -= 10.0;
+  int kind = int(kf + 0.5);
+  float ppu = max(vPx * 0.5, 0.5);          // pixels per unit (half height = 1 unit)
+  bool dot = (kind == 2);
+  float d = dot ? length(vQ) - 1.0 : sdRB(vQ, vec2(vAsp, 1.0), 0.45);
+  float dpx = d * ppu;
+  float lw = clamp(ppu * 0.22, 1.5, 2.1);
+  if (uPass < 0.5) {
+    // key silhouette of the whole foam mass (drawn first, no depth write)
+    float alpha = clamp(lw - dpx + 0.5, 0.0, 1.0);
+    if (alpha <= 0.002) discard;
+    block(0);
+    emit(alpha);
+    return;
+  }
+  float alpha = clamp(0.5 - dpx, 0.0, 1.0);
+  if (alpha <= 0.002) discard;
+  int fill = -1;
+  if (kind == 1) fill = 6; else if (kind == 3) fill = 3; else if (kind == 4) fill = 3; else if (kind == 5) fill = 5;
+  block(fill);
+  if (detail || kind == 1 || kind == 3) blockMix(0, clamp(dpx + lw * 0.7 + 0.5, 0.0, 1.0));
+  if (!dot && ppu > 5.0) {                   // header line of the packet
+    float hl = abs(vQ.y - 0.36) * ppu;
+    blockMix(0, clamp(lw * 0.45 - hl + 0.5, 0.0, 1.0) * step(abs(vQ.x), vAsp - 0.25));
+  }
+  emit(alpha);
+}`;
+const glyphMatOutline = mat(GLYPH_FRAG, { uPass: { value: 0 } }, { vert: GLYPH_VERT, extra: { alphaToCoverage: true, depthWrite: false } });
+const glyphMat = mat(GLYPH_FRAG, { uPass: { value: 1 } }, { vert: GLYPH_VERT, extra: { alphaToCoverage: true } });
+class Glyphs {
+  constructor(max) {
+    const base = new THREE.PlaneGeometry(1, 1);
+    const g = new THREE.InstancedBufferGeometry();
+    g.index = base.index; g.setAttribute('position', base.attributes.position); g.setAttribute('uv', base.attributes.uv);
+    this.pos = new Float32Array(max * 3); this.p = new Float32Array(max * 4);
+    this.aPos = new THREE.InstancedBufferAttribute(this.pos, 3); this.aP = new THREE.InstancedBufferAttribute(this.p, 4);
+    this.aPos.setUsage(THREE.DynamicDrawUsage); this.aP.setUsage(THREE.DynamicDrawUsage);
+    g.setAttribute('iPos', this.aPos); g.setAttribute('iP', this.aP);
+    g.instanceCount = 0;
+    this.geo = g; this.max = max; this.n = 0;
+    const outline = new THREE.Mesh(g, glyphMatOutline); outline.frustumCulled = false; outline.renderOrder = 5;
+    const fillM = new THREE.Mesh(g, glyphMat); fillM.frustumCulled = false; fillM.renderOrder = 6;
+    this.mesh = new THREE.Group(); this.mesh.add(outline, fillM);
+  }
+  begin() { this.n = 0; }
+  add(x, y, z, size, rot, kind, asp = 1.45) {
+    if (this.n >= this.max || size <= 0) return;
+    const i = this.n++;
+    this.pos[i * 3] = x; this.pos[i * 3 + 1] = y; this.pos[i * 3 + 2] = z;
+    this.p[i * 4] = size; this.p[i * 4 + 1] = rot; this.p[i * 4 + 2] = kind; this.p[i * 4 + 3] = asp;
+  }
+  end() { this.geo.instanceCount = this.n; this.aPos.needsUpdate = true; this.aP.needsUpdate = true; }
+}
+
+/* ---------- the wave profile (Hokusai's curl), as a closed outline ---------- */
+const WAVE_CP = [[-1.7, -0.32], [-1.35, -0.05], [-1.0, 0.11], [-0.7, 0.29], [-0.45, 0.51], [-0.26, 0.73], [-0.09, 0.91], [0.1, 1.03], [0.31, 1.08], [0.53, 1.07],
+  [0.75, 1.0], [0.93, 0.88], [1.05, 0.72], [1.09, 0.56], [1.04, 0.44], [0.94, 0.38], [0.85, 0.39], [0.86, 0.47], [0.9, 0.58], [0.86, 0.7],
+  [0.74, 0.79], [0.56, 0.83], [0.38, 0.8], [0.22, 0.7], [0.12, 0.55], [0.08, 0.38], [0.1, 0.21], [0.17, 0.06], [0.28, -0.1], [0.45, -0.32], [-0.2, -0.38], [-1.0, -0.38]];
+function buildProfile(cps, N) {
+  const curve = new THREE.CatmullRomCurve3(cps.map(p => new THREE.Vector3(p[0], p[1], 0)), true, 'centripetal');
+  const sp = curve.getSpacedPoints(N); sp.pop();
+  const pts = sp.map(v => ({ x: v.x, y: v.y }));
+  const n = pts.length;
+  let A = 0; for (let i = 0; i < n; i++) { const a = pts[i], b = pts[(i + 1) % n]; A += a.x * b.y - b.x * a.y; }
+  const cw = A < 0;
+  const nearest = (p) => { let bi = 0, bd = 1e9; for (let i = 0; i < n; i++) { const d = (pts[i].x - p[0]) ** 2 + (pts[i].y - p[1]) ** 2; if (d < bd) { bd = d; bi = i; } } return bi / n; };
+  const at = (s) => { const f = fract(s) * n, i = Math.floor(f), t = f - i; const a = pts[i % n], b = pts[(i + 1) % n]; return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; };
+  const tan = (s) => { const a = at(s - 0.5 / n), b = at(s + 0.5 / n); const l = Math.hypot(b.x - a.x, b.y - a.y) || 1; return { x: (b.x - a.x) / l, y: (b.y - a.y) / l }; };
+  const outward = (s) => { const t = tan(s); return cw ? { x: -t.y, y: t.x } : { x: t.y, y: -t.x }; };
+  return { pts, n, cw, nearest, at, tan, outward, s: (i) => nearest(cps[i]) };
+}
+const PROF = buildProfile(WAVE_CP, 420);
+const S_CREST0 = PROF.s(6), S_CREST = PROF.s(9), S_TIP = PROF.s(16), S_FACE1 = PROF.s(28);
+PROF.sOuter = PROF.s(14);
+
+// signed distance field of the profile (+inside) with the nearest outline parameter s
+function buildSdf(prof, box, TW, TH) {
+  const { pts, n } = prof;
+  const data = new Uint16Array(TW * TH * 4);
+  const h = THREE.DataUtils.toHalfFloat;
+  for (let ty = 0; ty < TH; ty++) for (let tx = 0; tx < TW; tx++) {
+    const px = box[0] + (tx + 0.5) / TW * (box[2] - box[0]), py = box[1] + (ty + 0.5) / TH * (box[3] - box[1]);
+    let best = 1e9, bs = 0, inside = false, bestO = 1e9;
+    for (let i = 0; i < n; i++) {
+      const a = pts[i], b = pts[(i + 1) % n];
+      const bx = b.x - a.x, by = b.y - a.y, ax = px - a.x, ay = py - a.y;
+      if (a.y > -0.24 || b.y > -0.24) {
+        const t = clamp((ax * bx + ay * by) / (bx * bx + by * by), 0, 1);
+        const dx = ax - bx * t, dy = ay - by * t, d2 = dx * dx + dy * dy;
+        if (d2 < best) { best = d2; bs = (i + t) / n; }
+        if ((i / n) < prof.sOuter && d2 < bestO) bestO = d2;
+      }
+      if ((a.y > py) !== (b.y > py) && px < (b.x - a.x) * (py - a.y) / (b.y - a.y) + a.x) inside = !inside;
+    }
+    const o = (ty * TW + tx) * 4;
+    data[o] = h(Math.sqrt(best) * (inside ? 1 : -1)); data[o + 1] = h(bs); data[o + 2] = h(Math.sqrt(bestO)); data[o + 3] = h(1);
+  }
+  const t = new THREE.DataTexture(data, TW, TH, THREE.RGBAFormat, THREE.HalfFloatType);
+  t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
+  return t;
+}
+const SDF_BOX = [-1.8, -0.45, 1.25, 1.2];
+const sdfTex = buildSdf(PROF, SDF_BOX, LOW ? 300 : 420, LOW ? 162 : 228);
+
+/* wave face: painted from the SDF — concentric Prussian stripes, foam band, pale lip */
+const CAP_FRAG = /* glsl */`
+uniform sampler2D tSdf; uniform vec4 uBox; uniform vec4 uZ; uniform float uSeed; uniform float uFreq;
+varying vec2 vUv; varying vec3 vW;
+vec4 sdfS(vec2 q){ return texture(tSdf, (q - uBox.xy) / (uBox.zw - uBox.xy)); }
+void main(){
+  clr();
+  vec2 q = vUv;
+  vec4 sd = sdfS(q);
+  float d = max(sd.r, 0.0), s = sd.g;
+  float fw = max(fwidth(d), 1e-5);
+  float e = 0.006;
+  vec2 g = vec2(sdfS(q + vec2(e, 0)).r - sdfS(q - vec2(e, 0)).r, sdfS(q + vec2(0, e)).r - sdfS(q - vec2(0, e)).r) / (2.0 * e);
+  float bul = exp(-d * 7.0);
+  vec3 n = normalize(vec3(-g * 1.6 * bul, 1.0));
+  vec3 L = normalize(vec3(-0.6, 0.72, 0.42));
+  float lit = step(0.72 + (fbm3(vec3(q * 7.0, uSeed)) - 0.5) * 0.16, dot(n, L));
+
+  float lip  = smoothstep(uZ.x - 0.012, uZ.x + 0.012, s) * (1.0 - smoothstep(uZ.y - 0.004, uZ.y + 0.01, s));
+  float face = smoothstep(uZ.y - 0.004, uZ.y + 0.01, s) * (1.0 - smoothstep(uZ.z - 0.02, uZ.z, s));
+
+  // body tone: Prussian dark, mid where lit; the barrel face is lighter
+  int base = lit > 0.5 ? 2 : 1;
+  if (face > 0.5 && d < 0.06) base = lit > 0.5 ? 3 : 2;
+  block(base);
+
+  // concentric stripes that thin into "fingers"
+  float dO = sd.b;
+  float dS = (face > 0.5 && d < 0.06) ? d : mix(dO, d, smoothstep(0.05, 0.0, d));
+  float warp = (fbm3(vec3(s * 18.0, dS * 2.0, uSeed)) - 0.5) * 1.8;
+  float f = dS * uFreq + warp;
+  float idx = floor(f);
+  float wmod = 0.5 + 0.5 * sin(s * 110.0 + idx * 2.7 + uSeed * 3.0);
+  float sw = mix(0.05, 0.42, wmod * wmod) * smoothstep(0.025, 0.075, d);
+  float fwf = max(fwidth(f), 1e-4);
+  float dist = abs(fract(f) - 0.5);
+  float stripe = clamp((sw * 0.5 - dist) / fwf + 0.5, 0.0, 1.0);
+  int sInk = base == 1 ? 2 : (base == 2 ? 3 : -1);
+  blockMix(sInk, stripe);
+
+  // foam band along the crest and lip, scalloped like Hokusai's
+  float sc = fract(s * 150.0 + (fbm3(vec3(s * 40.0, 0.0, uSeed)) - 0.5) * 0.8);
+  float scal = pow(1.0 - abs(sc - 0.5) * 2.0, 2.5);
+  float foamW = (0.018 + 0.03 * scal) * lip + (0.006 + 0.016 * scal) * face * smoothstep(uZ.y + 0.06, uZ.y, s);
+  float paleW = foamW + 0.028 * (lip + face * 0.4);
+  if (d < paleW) blockMix(3, clamp((paleW - d) / fw + 0.5, 0.0, 1.0));
+  if (d < foamW + fw) {
+    blockMix(-1, clamp((foamW - d) / fw + 0.5, 0.0, 1.0));
+  }
+  float fl = abs(d - foamW) / fw;
+  blockMix(0, clamp(1.1 - fl, 0.0, 1.0) * step(0.004, foamW));
+  // edge line
+  blockMix(0, clamp(1.6 - d / fw + 0.5, 0.0, 1.0));
+  INK[9] = 0.0;
+  emit(1.0);
+}`;
+const BODY_FRAG = /* glsl */`
+attribute float aS;
+varying vec3 vW; varying vec3 vN;
+void main(){
+  clr();
+  vec3 n = normalize(vN); if (!gl_FrontFacing) n = -n;
+  float b = band(n, vW, 0.2, 0.3, 0.3);
+  block(b > 0.5 ? 2 : 1);
+  emit(1.0);
+}`.replace('attribute float aS;', '');
+
+function buildWave(o) {
+  const { S, X, Y, Z, seed = 1, freq = 34 } = o;
+  const grp = new THREE.Group();
+  const shape = new THREE.Shape(PROF.pts.map(p => new THREE.Vector2(p.x, p.y)));
+  const capGeo = new THREE.ShapeGeometry(shape);
+  const capMat = mat(CAP_FRAG, {
+    tSdf: { value: sdfTex }, uBox: { value: new THREE.Vector4(...SDF_BOX) },
+    uZ: { value: new THREE.Vector4(S_CREST0, S_TIP, S_FACE1, 0) }, uSeed: { value: seed }, uFreq: { value: freq },
+  });
+  const cap = new THREE.Mesh(capGeo, capMat);
+  cap.layers.enable(1);
+  grp.add(cap);
+  // body: the outline extruded backwards, shrinking and sinking (a caster and a hull)
+  const J = 6, n = PROF.n, D = o.depth ?? 0.5;
+  const pos = new Float32Array((J + 1) * n * 3);
+  for (let j = 0; j <= J; j++) {
+    const f = j / J, sc = 1 - 0.16 * f, sink = 0.45 * f * f;
+    for (let i = 0; i < n; i++) {
+      const p = PROF.pts[i], k = (j * n + i) * 3;
+      pos[k] = p.x * sc; pos[k + 1] = p.y * sc - sink; pos[k + 2] = -D * f - 0.002;
+    }
+  }
+  const idx = [];
+  for (let j = 0; j < J; j++) for (let i = 0; i < n; i++) {
+    const a = j * n + i, b = j * n + (i + 1) % n, c = (j + 1) * n + i, d = (j + 1) * n + (i + 1) % n;
+    if (PROF.cw) idx.push(a, b, c, b, d, c); else idx.push(a, c, b, b, c, d);
+  }
+  const bodyGeo = new THREE.BufferGeometry();
+  bodyGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  bodyGeo.setIndex(idx); bodyGeo.computeVertexNormals();
+  const body = new THREE.Mesh(bodyGeo, mat(BODY_FRAG));
+  body.layers.set(1);
+  grp.add(body);
+  grp.scale.setScalar(S); grp.position.set(X, Y, Z);
+  grp.userData = { S, X, Y, Z };
+  return grp;
+}
+
+function placeWave(w, X, Y, Z, S) {
+  w.position.set(X, Y, Z); w.scale.setScalar(S);
+  Object.assign(w.userData, { X, Y, Z, S });
+}
+/* claws: talon paths off the lip, curling clockwise like the lip itself, with sub-claws */
+function makeClaws(prof, sA, sB, count, opt, seed) {
+  const r = mulberry32(seed);
+  const paths = [];
+  function grow(x, y, ang, len, r0, depth, z0) {
+    const steps = 34, dl = len / steps, pts = [];
+    let a = ang;
+    for (let k = 0; k <= steps; k++) {
+      const f = k / steps;
+      pts.push({ x, y, r: r0 * Math.pow(1 - 0.86 * f, 1.2), a, l: k * dl });
+      const curv = -(opt.c0 + opt.c1 * Math.pow(f, 2.2)) / len;
+      a += curv * dl; x += Math.cos(a) * dl; y += Math.sin(a) * dl;
+    }
+    paths.push({ pts, len, depth, z0 });
+    if (depth < 1) {
+      // fingers branch off the outer side near the end and curl the same way
+      const fr = [0.4, 0.58, 0.74];
+      const nb = 2 + (r() < 0.55 ? 1 : 0);
+      for (let b = 0; b < nb; b++) {
+        const k = Math.round(fr[b] * steps), p = pts[k];
+        grow(p.x, p.y, p.a + 0.75 + r() * 0.3, len * (0.6 - b * 0.12 + r() * 0.08), p.r * 0.95, depth + 1, z0 + 0.004 * (b + 1));
+      }
+    }
+  }
+  for (let c = 0; c < count; c++) {
+    const u = (c + 0.5 + (r() - 0.5) * 0.4) / count;
+    const s0 = sA + (sB - sA) * u;
+    const P = prof.at(s0), N = prof.outward(s0);
+    const env = 0.3 + 0.7 * smooth(0.05, 0.55, u) * (1 - 0.3 * smooth(0.8, 1.0, u));
+    const len = opt.len * env * (0.8 + 0.4 * r());
+    const ang = Math.atan2(N.y, N.x) - opt.lean * (1.35 - 0.55 * u);
+    grow(P.x - N.x * 0.01, P.y - N.y * 0.01, ang, len, opt.r0 * (0.55 + 0.45 * env), 0, r() * 0.012);
+  }
+  // glyph slots along each path: spacing proportional to the local radius
+  for (const p of paths) {
+    const slots = [0];
+    let l = 0;
+    while (l < p.len) { l += Math.max(pathAt(p, l).r * opt.spacing, 0.0015); slots.push(Math.min(l, p.len)); }
+    p.slots = slots;
+  }
+  return paths;
+}
+function pathAt(p, l) {
+  const f = clamp(l / p.len, 0, 1) * (p.pts.length - 1);
+  const i = Math.min(Math.floor(f), p.pts.length - 2), t = f - i;
+  const a = p.pts[i], b = p.pts[i + 1];
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, r: a.r + (b.r - a.r) * t, a: a.a + (b.a - a.a) * t };
+}
+
+/* ---------- sea: displaced plane with contour lines and foam caps ---------- */
+const SEA_FN = /* glsl */`
+uniform vec4 uSea;   // amp, freq scale, speed, line density
+float seaH(vec2 p, float t){
+  p *= uSea.y; t *= uSea.z;
+  float h = 0.0;
+  h += 0.50 * (1.0 - abs(sin(dot(p, vec2(0.11, 0.045)) + t * 0.55)));
+  h += 0.30 * (1.0 - abs(sin(dot(p, vec2(-0.06, 0.15)) + t * 0.75 + 1.3)));
+  h += 0.20 * sin(dot(p, vec2(0.21, -0.1)) + t * 1.05 + 2.1);
+  h += 0.10 * sin(dot(p, vec2(0.05, 0.33)) + t * 1.4 + 0.4);
+  return h - 0.5;
+}`;
+const SEA_VERT = /* glsl */`
+uniform float uTime;
+${SEA_FN}
+varying vec3 vW; varying vec3 vN; varying vec2 vUv; varying vec3 vL;
+void main(){
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  wp.y += seaH(wp.xz, uTime) * uSea.x;
+  vW = wp.xyz; vN = vec3(0, 1, 0); vUv = uv; vL = position;
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`;
+const SEA_FRAG = /* glsl */`
+${SEA_FN}
+uniform float uLit, uShade, uLineLit, uLineShade, uFoam, uThr, uMoonOn;
+uniform vec3 uMoonDir;
+varying vec3 vW;
+void main(){
+  clr();
+  vec2 p = vW.xz; float t = uTime, e = 0.08;
+  float h = seaH(p, t);
+  float hx = (seaH(p + vec2(e, 0), t) - seaH(p - vec2(e, 0), t)) / (2.0 * e) * uSea.x;
+  float hz = (seaH(p + vec2(0, e), t) - seaH(p - vec2(0, e), t)) / (2.0 * e) * uSea.x;
+  vec3 n = normalize(vec3(-hx, 1.0, -hz));
+  float b = band(n, vW, uThr, 0.25, 0.12);
+  block(int(b > 0.5 ? uLit : uShade));
+  // contour lines of the swell height
+  float f = h * uSea.w + (fbm3(vec3(p * 0.06, 1.0)) - 0.5) * 1.4;
+  float fwf = max(fwidth(f), 1e-4);
+  float dist = abs(fract(f + 0.5) - 0.5);
+  float fade = 1.0 - smoothstep(0.18, 0.4, fwf);
+  float ln = clamp((0.9 * fwf + 0.03 - dist) / fwf, 0.0, 1.0) * fade;
+  blockMix(int(b > 0.5 ? uLineLit : uLineShade), ln);
+  float f2 = h * uSea.w * 2.6 + (fbm3(vec3(p * 0.11, 3.0)) - 0.5) * 2.2;
+  float fw2 = max(fwidth(f2), 1e-4);
+  float d2 = abs(fract(f2 + 0.5) - 0.5);
+  float ln2 = clamp((0.7 * fw2 + 0.02 - d2) / fw2, 0.0, 1.0) * (1.0 - smoothstep(0.1, 0.25, fw2)) * step(0.45, fbm3(vec3(p * 0.05, 7.0)));
+  blockMix(int(b > 0.5 ? uLineLit : uLineShade), ln2 * 0.9);
+  // foam flecks on the crests
+  if (uFoam > 0.0) {
+    float cr = h + (fbm3(vec3(p * 0.35, 2.0)) - 0.5) * 0.35;
+    float fwc = max(fwidth(cr), 1e-4);
+    float farOK = smoothstep(18.0, 30.0, length(vW - cameraPosition));
+    float foam = clamp((cr - uFoam) / fwc + 0.5, 0.0, 1.0) * fade * farOK;
+    blockMix(-1, foam);
+    blockMix(0, clamp(1.0 - abs(cr - uFoam) / fwc, 0.0, 1.0) * fade * farOK);
+  }
+  // moon glade: broken dashes where the swell reflects the moon
+  if (uMoonOn > 0.5) {
+    vec3 v = normalize(vW - cameraPosition);
+    vec3 rr = reflect(v, normalize(vec3(-hx * 2.5, 1.0, -hz * 2.5)));
+    float g = dot(rr, uMoonDir);
+    float dash = step(0.55, fbm3(vec3(p.x * 0.5, p.y * 3.0, 0.5)));
+    blockMix(7, step(0.9975, g) * dash);
+  }
+  washAt(vW);
+  emit(1.0);
+}`;
+function seaMesh(o) {
+  const g = new THREE.PlaneGeometry(o.size ?? 1400, o.size ?? 1400, 260, 260);
+  g.rotateX(-Math.PI / 2);
+  const m = mat(SEA_FRAG, {
+    uSea: { value: new THREE.Vector4(o.amp ?? 0.6, o.freq ?? 1, o.speed ?? 1, o.lines ?? 3) },
+    uLit: { value: o.lit ?? AM }, uShade: { value: o.shade ?? AD }, uLineLit: { value: o.lineLit ?? AP }, uLineShade: { value: o.lineShade ?? AM },
+    uFoam: { value: o.foam ?? 0 }, uThr: { value: o.thr ?? 0.93 }, uMoonOn: { value: o.moon ? 1 : 0 }, uMoonDir: { value: new THREE.Vector3(0, 1, 0) },
+  }, { vert: SEA_VERT });
+  const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false;
+  if (o.offset) mesh.position.set(o.offset[0], 0, o.offset[1]);
+  return mesh;
+}
+
+/* ---------- the firewall mountain: stepped rampart lathe with a datacentre summit ---------- */
+const MTN_FRAG = /* glsl */`
+uniform float uHt, uTiers, uSnow, uLit, uShade, uSeed, uLineW, uBase;
+varying vec3 vW; varying vec3 vN; varying vec3 vL;
+void main(){
+  clr();
+  vec3 n = normalize(vN);
+  float ang = atan(vL.z, vL.x);
+  float b = band(n, vL / uHt * 3.0, 0.18, 0.04, 1.0);
+  block(int(b > 0.5 ? uLit : uShade));
+  float y = vL.y / uHt * uTiers;
+  float fy = fract(y), fwy = max(fwidth(y), 1e-4);
+  // snowcap with streaks running down
+  float streak = fbm3(vec3(ang * 5.0, uSeed, 0.0)) * 0.9 + fbm3(vec3(ang * 19.0, uSeed + 3.0, 0.0)) * 0.4;
+  float snowLine = uSnow - streak * 0.22 * uHt;
+  float snow = clamp((vL.y - snowLine) / max(fwidth(vL.y), 1e-4) + 0.5, 0.0, 1.0);
+  blockMix(-1, snow);
+  blockMix(0, clamp(1.0 - abs(vL.y - snowLine) / max(fwidth(vL.y), 1e-4) * 0.9, 0.0, 1.0));
+  // key line under each tier lip, crenel notches on top of each riser
+  float lip = clamp((uLineW * fwy - (1.0 - fy)) / fwy + 0.5, 0.0, 1.0);
+  float notch = step(0.5, fract(ang * 28.0)) * clamp((2.6 * fwy - (1.0 - fy)) / fwy, 0.0, 1.0);
+  blockMix(0, max(lip, notch * 0.0 + lip));
+  if (uBase > 0.0) {
+    // the foot of the rampart: a dark band of datacentre racks with lit windows
+    float edge = uBase + (fbm3(vec3(ang * 9.0, uSeed + 9.0, 0.0)) - 0.5) * uHt * 0.05;
+    float inB = clamp((edge - vL.y) / max(fwidth(vL.y), 1e-4) + 0.5, 0.0, 1.0);
+    blockMix(4, inB);
+    float ra = ang * 260.0, ry = vL.y / (uHt * 0.012);
+    vec2 rc = vec2(fract(ra), fract(ry));
+    float win = step(0.35, rc.x) * step(rc.x, 0.65) * step(0.3, rc.y) * step(rc.y, 0.6) * step(0.4, fbm3(vec3(floor(ra) * 0.37, floor(ry) * 0.53, uSeed)));
+    float fwr = max(fwidth(ra), 1e-4);
+    blockMix(3, win * inB * (1.0 - smoothstep(0.25, 0.5, fwr)));
+    blockMix(0, clamp(1.2 - abs(vL.y - edge) / max(fwidth(vL.y), 1e-4), 0.0, 1.0));
+  }
+  emit(1.0);
+}`;
+function buildMountain(o) {
+  const { R0 = 40, Ht = 24, tiers = 8, Rtop = 3.2 } = o;
+  const grp = new THREE.Group();
+  const pts = [new THREE.Vector2(0.01, -3), new THREE.Vector2(R0 * 1.04, -3)];
+  const rad = f => Rtop + (R0 - Rtop) * Math.pow(1 - f, 1.65);
+  for (let i = 0; i < tiers; i++) {
+    const f0 = i / tiers, f1 = (i + 1) / tiers, r0 = rad(f0), r1 = rad(f1);
+    pts.push(new THREE.Vector2(r0, f0 * Ht));
+    pts.push(new THREE.Vector2(r0 - (r0 - r1) * 0.72, f1 * Ht - 0.0001));
+    pts.push(new THREE.Vector2(r1, f1 * Ht));
+  }
+  pts.push(new THREE.Vector2(0.01, Ht));
+  const geo = new THREE.LatheGeometry(pts, 96);
+  const m = mat(MTN_FRAG, {
+    uHt: { value: Ht }, uTiers: { value: tiers }, uSnow: { value: Ht * (o.snow ?? 0.7) }, uLit: { value: o.lit ?? SL }, uShade: { value: o.shade ?? SD },
+    uSeed: { value: o.seed ?? 2 }, uLineW: { value: o.tierLine ?? 1.1 }, uBase: { value: o.base ? o.base * Ht : 0 },
+  });
+  const mesh = new THREE.Mesh(geo, m);
+  grp.add(withHull(mesh, o.lw ?? 1.2, true));
+  // datacentre on the summit
+  const boxes = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), celMat(o.dcLit ?? AP, o.dcShade ?? AM, { thr: 0.3 }), 7);
+  const r = mulberry32(o.seed ?? 3), mm = new THREE.Matrix4();
+  const lay = [[0, 0, 2.4, 2.2, 2.4], [-1.9, 0.6, 1.4, 1.4, 1.6], [1.8, -0.4, 1.6, 1.7, 1.3], [0.4, 1.9, 1.2, 1.1, 1.0], [-0.6, -1.9, 1.3, 1.0, 1.2], [0, 0, 0.35, 4.2, 0.35], [1.0, 0.6, 0.2, 3.0, 0.2]];
+  lay.forEach((b, i) => { mm.compose(new THREE.Vector3(b[0], Ht + b[3] / 2, b[1]), new THREE.Quaternion(), new THREE.Vector3(b[2], b[3], b[4])); boxes.setMatrixAt(i, mm); });
+  grp.add(withHull(boxes, o.lw ?? 1.2, true));
+  return grp;
+}
+
+/* ---------- boats (services): slim hulls carrying containers ---------- */
+function boatGeo(L, Wd, Dp) {
+  const nu = 28, nv = 12, pos = [], idx = [];
+  for (let i = 0; i <= nu; i++) {
+    const u = -1 + 2 * i / nu;
+    const w = Wd * 0.5 * Math.pow(Math.max(1 - u * u, 0), 0.55) + 0.004;
+    const sheer = Dp * 0.9 * Math.pow(Math.abs(u), 3.2);
+    const dep = Dp * (0.25 + 0.75 * Math.pow(Math.max(1 - u * u, 0), 0.35));
+    for (let j = 0; j < nv; j++) {
+      const a = j / (nv - 1) * Math.PI;
+      pos.push(Math.cos(a) * w, -Math.sin(a) * dep + sheer, u * L / 2);
+    }
+    pos.push(0, sheer + Dp * 0.05, u * L / 2); // deck centre
+  }
+  const ring = nv + 1;
+  for (let i = 0; i < nu; i++) for (let j = 0; j < ring; j++) {
+    const a = i * ring + j, b = i * ring + (j + 1) % ring, c = (i + 1) * ring + j, d = (i + 1) * ring + (j + 1) % ring;
+    idx.push(a, c, b, b, c, d);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+function buildBoat(o) {
+  const grp = new THREE.Group();
+  const L = o.L ?? 7, Wd = o.W ?? 1.0, Dp = o.D ?? 0.55;
+  const hull = new THREE.Mesh(boatGeo(L, Wd, Dp), celMat(o.lit ?? SL, o.shade ?? SD, { thr: 0.15, side: THREE.DoubleSide }));
+  grp.add(withHull(hull, o.lw ?? 1.4, true));
+  const n = o.boxes ?? 6;
+  const boxes = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), celMat(o.boxLit ?? AP, o.boxShade ?? AM, { thr: 0.2 }), n);
+  const mm = new THREE.Matrix4();
+  for (let i = 0; i < n; i++) {
+    const z = (i - (n - 1) / 2) * (L * 0.62 / n);
+    const h = 0.32 + 0.12 * ((i * 7) % 3);
+    mm.compose(new THREE.Vector3(0, Dp * 0.05 + h / 2, z), new THREE.Quaternion(), new THREE.Vector3(Wd * 0.62, h, L * 0.62 / n * 0.78));
+    boxes.setMatrixAt(i, mm);
+  }
+  grp.add(withHull(boxes, o.lw ?? 1.2, true));
+  return grp;
+}
+
+/* ---------- small figures (daemons): robe, head, kasa hat ---------- */
+function buildFigure(o = {}) {
+  const grp = new THREE.Group();
+  const lit = o.lit ?? AM, shade = o.shade ?? AD;
+  const robe = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.42, 1.05, 16), celMat(lit, shade, { thr: 0.1 }));
+  robe.position.y = 0.53;
+  const torso = new THREE.Mesh(new THREE.SphereGeometry(0.27, 16, 12), celMat(lit, shade, { thr: 0.1 }));
+  torso.scale.set(1, 1.15, 0.85); torso.position.y = 1.08;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), celMat(o.skinLit ?? AP, o.skinShade ?? AP, { thr: 0.1 }));
+  head.position.y = 1.5;
+  const hat = new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.3, 20), celMat(o.hatLit ?? SL, o.hatShade ?? SD, { thr: 0.2 }));
+  hat.position.y = 1.7;
+  for (const m of [robe, torso, head, hat]) grp.add(withHull(m, o.lw ?? 1.4, true));
+  return grp;
+}
+
+/* =====================================================================
+   VIEW 1 — The great wave of packets off the edge network
+   ===================================================================== */
+function buildView1() {
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(26, 1.6, 0.5, 6000);
+  scene.add(skyDome());
+  const sea = seaMesh({ amp: 0.9, lines: 4.2, foam: 0.36, thr: 0.76, freq: 1.25 });
+  scene.add(sea);
+  const mtn = buildMountain({ R0: 58, Ht: 27, tiers: 9, Rtop: 5, snow: 0.8, lw: 1.1, seed: 5, lit: SD, shade: AD });
+  scene.add(mtn);
+  // clouds near the horizon
+  const cloud1 = cardMesh(420, 46, [[-6.5, 2.5, 0.3, 0.32], [-3.5, 6.8, -0.35, 0.36]], AP, { lw: 1.4 });
+  const cloud2 = cardMesh(300, 36, [[-5.5, 4.5, 0.0, 0.5]], AP, { lw: 1.4 });
+  scene.add(cloud1, cloud2);
+  const big = buildWave({ S: 12, X: -5.5, Y: 0, Z: 0, seed: 1.3, freq: 30 });
+  const mid = buildWave({ S: 5.2, X: 22, Y: -0.3, Z: -24, seed: 4.1, freq: 22, lw: 1.5 });
+  const small = buildWave({ S: 3.0, X: -1.5, Y: -0.2, Z: 13, seed: 7.7, freq: 18, lw: 1.5 });
+  scene.add(big, mid, small);
+  const boats = [
+    buildBoat({ L: 8, W: 1.1, D: 0.6, boxes: 7 }),
+    buildBoat({ L: 7, W: 1.0, D: 0.55, boxes: 6 }),
+    buildBoat({ L: 6.5, W: 0.95, D: 0.5, boxes: 5 }),
+  ];
+  boats.forEach(b => scene.add(b));
+  const glyphs = new Glyphs(7000);
+  scene.add(glyphs.mesh);
+
+  // claw paths per wave (profile space)
+  const clawSets = [
+    { w: big, paths: makeClaws(PROF, S_CREST + 0.004, S_TIP + 0.004, 17, { len: 0.31, r0: 0.024, lean: 0.5, c0: 1.0, c1: 13.0, spacing: 0.46 }, 11), speed: 0.55 },
+    { w: mid, paths: makeClaws(PROF, S_CREST - 0.03, S_TIP, 9, { len: 0.24, r0: 0.036, lean: 0.55, c0: 1.2, c1: 10.0, spacing: 0.62 }, 21), speed: 0.42 },
+    { w: small, paths: makeClaws(PROF, S_CREST - 0.03, S_TIP, 7, { len: 0.24, r0: 0.04, lean: 0.55, c0: 1.2, c1: 10.0, spacing: 0.66 }, 31), speed: 0.38 },
+  ];
+  clawSets.forEach(cs => { cs.mains = cs.paths.filter(p => p.depth === 0); });
+  // foam band glyph rows along the lip
+  const bandRows = [];
+  {
+    const r = mulberry32(41);
+    for (let row = 0; row < 2; row++) {
+      let s = S_CREST0 - 0.03 + row * 0.002;
+      while (s < S_TIP - 0.004) {
+        const u = (s - S_CREST0) / (S_TIP - S_CREST0);
+        const sz = (0.011 - row * 0.003) * (0.85 + r() * 0.3) * (0.8 + 0.4 * Math.sin(Math.PI * clamp(u, 0, 1)));
+        bandRows.push({ s, d: 0.02 + row * 0.016, rr: sz * 0.75, rot: (r() - 0.5) * 0.18 });
+        s += sz * (1.6 + row * 0.4) / 1.2;
+      }
+    }
+  }
+  // spray: snow of packets drifting off the crest
+  const spray = [];
+  { const r = mulberry32(57); for (let i = 0; i < 260; i++) spray.push({ x: r(), y: r(), z: r(), ph: r(), sz: r() }); }
+  // hostile packets: ride a claw, are flung at the rampart, break there
+  const hostiles = [0.9, 1.8, 2.7, 3.6].map((t0, i) => ({ t0, path: [0, 0, 0, 0][i], claw: [9, 12, 10, 13][i] }));
+
+  const view = {
+    scene, cam, inks: DAY, order: [K, AP, SL, AM, SD, AD, SKY, HOT],
+    bok: { [SKY]: [0.28, 1.0, 0.2, 1.0] },
+    grain: { [SKY]: 0.4, [AM]: 0.2, [AD]: 0.16, [AP]: 0.22, [SL]: 0.2 },
+    wash: [0.42, 0.2, 0.3, 0.55],
+    title: ['The great wave', 'of packets off', 'the edge network'],
+    chrome: 'tl', seed: 101,
+    lightDir: new THREE.Vector3(-0.42, 0.72, -0.55).normalize(), lightBox: { c: new THREE.Vector3(6, 0, 4), r: 34 },
+    camBase: null,
+    layout(portrait) {
+      this.portrait = portrait;
+      if (!portrait) {
+        placeWave(big, -5.5, 0, 0, 12); placeWave(mid, 22, -0.3, -24, 5.2); placeWave(small, -2.5, -0.2, 17, 3.0);
+        mid.visible = true;
+        mtn.position.set(64, -1, -380); mtn.scale.setScalar(1.0);
+        cloud1.position.set(420, 250, -1400); cloud2.position.set(80, 300, -1500);
+        boats[0].position.set(4.5, 0.25, -4); boats[0].rotation.set(0.05, 0.95, -0.12);
+        boats[1].position.set(17.5, 0.6, -17); boats[1].rotation.set(-0.12, 1.25, 0.18);
+        boats[2].position.set(7.5, 0.2, 14); boats[2].rotation.set(0.0, 0.5, 0.08);
+        this.camBase = { pos: new THREE.Vector3(3, 2.1, 46), look: new THREE.Vector3(3.5, 6.9, -10), fov: 27 };
+      } else {
+        // kakemono-e: the curl stacked over the trough, boats and a near wave below
+        placeWave(big, -5.0, 0, 0, 12); placeWave(mid, 30, -0.3, -60, 5.2); placeWave(small, 1.6, -0.15, 22, 1.5);
+        mid.visible = false;
+        mtn.position.set(40, -1, -400); mtn.scale.setScalar(1.25);
+        cloud1.position.set(60, 380, -1400); cloud2.position.set(-40, 470, -1500);
+        boats[0].position.set(3.4, 0.2, -3); boats[0].rotation.set(0.05, 1.2, -0.12);
+        boats[1].position.set(9.5, 0.4, -16); boats[1].rotation.set(-0.1, 1.3, 0.16);
+        boats[2].position.set(6.6, 0.15, 6); boats[2].rotation.set(0.0, 0.7, 0.08);
+        this.camBase = { pos: new THREE.Vector3(4.6, 1.15, 46), look: new THREE.Vector3(4.6, 2.6, 0), fov: 33 };
+      }
+    },
+    update(t, tau) {
+      const cb = this.camBase;
+      cam.fov = cb.fov;
+      cam.position.set(cb.pos.x + Math.sin(t * 0.23) * 0.5, cb.pos.y + Math.sin(t * 0.17 + 1) * 0.25, cb.pos.z);
+      cam.lookAt(cb.look); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+      // boats bob on the swell
+      boats.forEach((b, i) => {
+        if (b.userData.y0 === undefined || b.userData.lay !== this.portrait) { b.userData.y0 = b.position.y; b.userData.rz = b.rotation.z; b.userData.lay = this.portrait; }
+        b.position.y = b.userData.y0 + Math.sin(t * 0.9 + i * 2.1) * 0.12;
+        b.rotation.z = b.userData.rz + Math.sin(t * 0.7 + i) * 0.04;
+      });
+      glyphs.begin();
+      const camPos = cam.position;
+      // claws
+      for (const set of clawSets) {
+        if (!set.w.visible) continue;
+        const { S, X, Y, Z } = set.w.userData;
+        for (let pi = 0; pi < set.paths.length; pi++) {
+          const p = set.paths[pi], K2 = p.slots.length;
+          const sig0 = t * set.speed * (1 + (pi % 3) * 0.12);
+          for (let k = 0; k < K2; k++) {
+            let sg = fract((k + sig0) / K2) * K2;
+            const i0 = Math.floor(sg), tt = sg - i0;
+            const l = lerp(p.slots[Math.min(i0, K2 - 1)], p.slots[Math.min(i0 + 1, K2 - 1)], tt);
+            const q = pathAt(p, l);
+            const grow = smooth(0, 1.5, sg) * (1 - smooth(K2 - 1.2, K2, sg));
+            const f = l / p.len;
+            const z = Z + (0.08 + p.z0 + f * 0.12 + p.depth * 0.03) * S;
+            const hsh = fract(Math.sin((k + 1) * 12.9898 + pi * 78.233) * 43758.5453);
+            const det = hsh < 0.16 && q.r * S > 0.12 ? 10 : 0;
+            const kind = q.r * S < 0.06 ? 2 : (hsh > 0.78 && f < 0.6 ? 4 : 0);
+            glyphs.add(X + q.x * S, Y + q.y * S, z, q.r * 2 * S * grow, q.a + Math.sin(k * 2.3 + pi) * 0.04, kind + det, 1.5 + 0.2 * Math.sin(k * 1.7 + pi));
+          }
+        }
+      }
+      // foam band rows (big wave only)
+      {
+        const { S, X, Y, Z } = big.userData;
+        for (const b of bandRows) {
+          const s = b.s + Math.sin(t * 0.3 + b.s * 60) * 0.0006;
+          const P = PROF.at(s), N = PROF.outward(s), T = PROF.tan(s);
+          glyphs.add(X + (P.x - N.x * b.d) * S, Y + (P.y - N.y * b.d) * S, Z + 0.05 * S, b.rr * 2 * S, Math.atan2(T.y, T.x) + b.rot, 0, 1.5);
+        }
+      }
+      // spray drifting from the crest over the trough
+      {
+        const { S, X, Y, Z } = big.userData;
+        for (const sp of spray) {
+          const ph = fract(sp.ph + t * 0.035);
+          const x = X + (0.15 + sp.x * 1.3 + ph * 0.25) * S;
+          const y = Y + (1.25 - sp.y * 0.55 - ph * 0.35) * S;
+          const z = Z + (0.3 - sp.z * 2.2) * S;
+          const sz = (0.05 + sp.sz * 0.07) * Math.sin(Math.PI * ph);
+          if (y < Y + 0.55 * S) continue;
+          glyphs.add(x, y, z, sz * S * 0.1, 0, 2, 1);
+        }
+      }
+      // hostiles
+      const { S, X, Y, Z } = big.userData;
+      const mtnTarget = new THREE.Vector3().copy(mtn.position).add(new THREE.Vector3(19 * mtn.scale.x, 9 * mtn.scale.x, 30));
+      for (const h of hostiles) {
+        const a = tau - h.t0;
+        if (a < 0) continue;
+        const mains = clawSets[0].mains;
+        const p = mains[h.claw % mains.length];
+        const RIDE = 1.1, FLY = 1.6, BURST = 0.7;
+        const tipQ = pathAt(p, p.len * 0.82);
+        const tipW = new THREE.Vector3(X + tipQ.x * S, Y + tipQ.y * S, Z + 0.32 * S);
+        if (a < RIDE) {
+          const q = pathAt(p, p.len * 0.82 * easeInOut(a / RIDE));
+          glyphs.add(X + q.x * S, Y + q.y * S, Z + 0.34 * S, Math.max(q.r * 2 * S, 0.42), q.a, 1, 1.4);
+        } else if (a < RIDE + FLY) {
+          const f = (a - RIDE) / FLY;
+          const A = tipW.clone().project(cam), B = mtnTarget.clone().project(cam);
+          const e = easeInOut(f);
+          const nx = lerp(A.x, B.x, e), ny = lerp(A.y, B.y, e) + Math.sin(Math.PI * e) * 0.12;
+          for (let g2 = 3; g2 >= 0; g2--) {
+            const eg = easeInOut(Math.max(0, f - g2 * 0.035));
+            const gx = lerp(A.x, B.x, eg), gy = lerp(A.y, B.y, eg) + Math.sin(Math.PI * eg) * 0.32;
+            const w = unprojectAtDepth(cam, gx, gy, 30 + g2 * 0.2);
+            const px = (15 - 5 * eg) * (1 - g2 * 0.22);
+            glyphs.add(w.x, w.y, w.z, px * worldPerPx(cam, 30), -0.6 + eg * 2.5, g2 === 0 ? 1 : 1, 1.4);
+          }
+        } else if (a < RIDE + FLY + BURST) {
+          // it hits the rampart, turns cold, and shatters into harmless spray
+          const f = (a - RIDE - FLY) / BURST;
+          const B = mtnTarget.clone().project(cam);
+          const wpp = worldPerPx(cam, 30);
+          if (f < 0.22) {
+            const w = unprojectAtDepth(cam, B.x, B.y, 30);
+            glyphs.add(w.x, w.y, w.z, (13 + 5 * Math.sin(Math.PI * f / 0.22)) * wpp, 1.9, 3, 1.4);
+          }
+          for (let k = 0; k < 7; k++) {
+            const ang = k / 7 * Math.PI * 2 + 0.3;
+            const e = easeOut(clamp((f - 0.12) / 0.88, 0, 1));
+            if (e <= 0) continue;
+            const rr = 0.075 * e;
+            const w = unprojectAtDepth(cam, B.x + Math.cos(ang) * rr * 0.62, B.y + Math.sin(ang) * rr - e * e * 0.045, 30);
+            glyphs.add(w.x, w.y, w.z, (11 * (1 - e * 0.7)) * wpp, ang, k % 2 ? 3 : 2, 1.3);
+          }
+        }
+      }
+      glyphs.end();
+    },
+  };
+  return view;
+}
+
+/* helpers: place things in screen space at a given view depth */
+const _v = new THREE.Vector3(), _d = new THREE.Vector3();
+function unprojectAtDepth(cam, nx, ny, depth) {
+  _v.set(nx, ny, 0.5).unproject(cam);
+  _d.copy(_v).sub(cam.position).normalize();
+  const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd);
+  const k = depth / _d.dot(fwd);
+  return cam.position.clone().addScaledVector(_d, k);
+}
+function worldPerPx(cam, depth) {
+  return 2 * depth * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) / (U.uGRes.value.y || 800);
+}
+
+/* =====================================================================
+   VIEW 2 — The firewall seen through a load balancer
+   ===================================================================== */
+const GROUND_FRAG = /* glsl */`
+uniform vec4 uLanes; // x0, z0, spread, lane width
+varying vec3 vW;
+float h21(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
+void main(){
+  clr();
+  vec2 p = vW.xz;
+  // horizontal field bands (rice paddies become rack rows), gently wavy
+  float zz = -p.y + sin(p.x * 0.045) * 1.4 + sin(p.x * 0.011 + 1.0) * 3.5;
+  float bw = 4.2;
+  float bi = floor(zz / bw), fz = fract(zz / bw);
+  float cw = 16.0 + 14.0 * h21(vec2(bi, 3.0));
+  float cxf = p.x / cw + h21(vec2(bi, 1.0));
+  float cx = floor(cxf);
+  float r = h21(vec2(bi, cx));
+  int ink = r < 0.36 ? 5 : (r < 0.6 ? 3 : (r < 0.84 ? -1 : (r < 0.93 ? 2 : 4)));
+  block(ink);
+  // racks: short dashes along the band in some fields
+  float fwz = max(fwidth(zz / bw), 1e-4);
+  float near = 1.0 - smoothstep(0.05, 0.16, fwz);
+  if (r > 0.84 && r < 0.93) {
+    float rk = abs(fract(p.x * 0.9) - 0.5);
+    float rowL = step(abs(fz - 0.5), 0.12) * step(rk, 0.3);
+    blockMix(1, rowL * near);
+  }
+  float fade = 1.0 - smoothstep(0.1, 0.3, fwz);
+  float lz = clamp((fwz * 0.9 - min(fz, 1.0 - fz)) / fwz + 0.5, 0.0, 1.0);
+  blockMix(0, lz * fade);
+  float fwx = max(fwidth(cxf), 1e-4);
+  float fx = fract(cxf);
+  float lx = clamp((fwx * 0.9 - min(fx, 1.0 - fx)) / fwx + 0.5, 0.0, 1.0);
+  blockMix(0, lx * near);
+  // the far plain flattens into one pale tone, as in a print
+  blockMix(5, smoothstep(0.2, 0.45, fwz));
+  // the near plain: one pale field with tufts of grass, like the cooper's field
+  float dist = length(vW.xz - cameraPosition.xz);
+  float nearF = 1.0 - smoothstep(26.0, 34.0, dist + (fbm3(vec3(p * 0.08, 4.0)) - 0.5) * 8.0);
+  if (nearF > 0.0) {
+    blockMix(5, nearF);
+    vec2 tc = p / vec2(2.3, 1.6);
+    vec2 ti = floor(tc), tf = fract(tc) - 0.5;
+    float hr = h21(ti + 7.0);
+    vec2 o = vec2(h21(ti + 3.0), h21(ti + 5.0)) - 0.5;
+    vec2 q = tf - o * 0.5;
+    float tuft = 0.0;
+    if (hr > 0.55) {
+      for (int k = -1; k <= 1; k++) {
+        vec2 a = vec2(float(k) * 0.07, 0.0), b = vec2(float(k) * 0.16, 0.22);
+        vec2 pa = q - a, ba = b - a; float hh = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+        tuft = max(tuft, 1.0 - smoothstep(0.012, 0.03, length(pa - ba * hh)));
+      }
+    }
+    blockMix(0, tuft * nearF * 0.9);
+  }
+  // lanes: one queue in from the right, five lanes out to the rampart
+  float dz = uLanes.y - p.y;
+  float fwp = max(fwidth(p.x), 1e-4);
+  if (dz > 0.0) {
+    for (int i = 0; i < 5; i++) {
+      float cx2 = uLanes.x + (float(i) - 2.0) * uLanes.z * dz / 100.0;
+      blockMix(4, clamp((uLanes.w - abs(p.x - cx2)) / fwp + 0.5, 0.0, 1.0));
+    }
+  } else {
+    float cx2 = uLanes.x - dz * 0.95;
+    blockMix(4, clamp((uLanes.w * 1.3 - abs(p.x - cx2)) / fwp + 0.5, 0.0, 1.0));
+  }
+  washAt(vW);
+  emit(1.0);
+}`;
+const RING_FRAG = /* glsl */`
+uniform float uR, uDep, uStaves, uTh;
+varying vec3 vW; varying vec3 vN; varying vec3 vL;
+void main(){
+  clr();
+  vec3 n = normalize(vN); if (!gl_FrontFacing) n = -n;
+  float b = band(n, vW, 0.15, 0.3, 0.4);
+  float rad = length(vL.xz);
+  bool inner = rad < uR - uTh * 0.5 && abs(abs(vL.y) - uDep * 0.5) > 0.01;
+  float hy = abs(vL.y);
+  float side = step(hy, uDep * 0.5 - 0.03);
+  block(side < 0.5 ? 3 : (inner ? (b > 0.5 ? 2 : 1) : (b > 0.5 ? 5 : 4)));   // pale rim, Prussian inside
+  // staves on the inner surface
+  float ang = atan(vL.z, vL.x) / 6.28318 * uStaves;
+  float fa = abs(fract(ang) - 0.5), fwa = max(fwidth(ang), 1e-4);
+  float stave = clamp((fwa * 0.7 - (0.5 - fa)) / fwa + 0.5, 0.0, 1.0) * side * (1.0 - smoothstep(0.12, 0.3, fwa));
+  blockMix(inner ? 3 : 0, stave * (inner ? 1.0 : 0.6));
+  // two Prussian hoops near each rim
+  float outer = inner ? 0.0 : 1.0;
+  float h1 = step(uDep * 0.5 - 0.85, hy) * step(hy, uDep * 0.5 - 0.42);
+  float h2 = step(abs(hy - uDep * 0.08), 0.22);
+  blockMix(b > 0.5 ? 2 : 1, max(h1, h2) * side * outer);
+  float fwh = max(fwidth(hy), 1e-4);
+  float e1 = clamp(1.2 - abs(hy - (uDep * 0.5 - 0.85)) / fwh, 0.0, 1.0) + clamp(1.2 - abs(hy - (uDep * 0.5 - 0.42)) / fwh, 0.0, 1.0)
+           + clamp(1.2 - abs(abs(hy - uDep * 0.08) - 0.22) / fwh, 0.0, 1.0);
+  blockMix(0, e1 * side * outer);
+  washAt(vW);
+  emit(1.0);
+}`;
+function buildView2() {
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(34, 1.6, 0.5, 6000);
+  scene.add(skyDome());
+  const LX = 0.6, LZ = -1.0;
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400, 1, 1).rotateX(-Math.PI / 2),
+    mat(GROUND_FRAG, { uLanes: { value: new THREE.Vector4(LX, LZ, 14, 0.42) } }));
+  ground.frustumCulled = false;
+  scene.add(ground);
+  const mtn = buildMountain({ R0: 70, Ht: 32, tiers: 10, Rtop: 6, snow: 0.78, lw: 1.1, seed: 9, lit: SD, shade: AD });
+  scene.add(mtn);
+  // kasumi: flat mist bands across the sky
+  const kas1 = cardMesh(560, 50, [[-9.5, 2.0, 0.32, 0.34], [-4.0, 9.0, -0.35, 0.38]], AP, { lw: 1.4 });
+  const kas2 = cardMesh(400, 40, [[-7.5, 6.5, 0.0, 0.5]], AP, { lw: 1.4 });
+  scene.add(kas1, kas2);
+  // the balancer: a barrel hoop of staves standing on its rim, yawed to show its inside
+  const R = 7.2, th = 0.6, dep = 4.4;
+  const prof = [new THREE.Vector2(R - th, -dep / 2), new THREE.Vector2(R, -dep / 2), new THREE.Vector2(R, dep / 2), new THREE.Vector2(R - th, dep / 2), new THREE.Vector2(R - th, -dep / 2)];
+  const ringGeo = new THREE.LatheGeometry(prof, 144).toNonIndexed();
+  ringGeo.computeVertexNormals();
+  const ringMesh = new THREE.Mesh(ringGeo, mat(RING_FRAG, { uR: { value: R }, uDep: { value: dep }, uStaves: { value: 30 }, uTh: { value: th } }, { extra: { side: THREE.DoubleSide } }));
+  const ringRot = new THREE.Group();
+  ringRot.add(withHull(ringMesh, 2.0, true));
+  ringRot.rotation.x = Math.PI / 2;
+  ringRot.position.set(0, R - 0.15, 0);
+  const ringYaw = new THREE.Group();
+  ringYaw.add(ringRot);
+  scene.add(ringYaw);
+  // ports on the rim
+  const ports = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), celMat(AP, AM, { thr: 0.2 }), 5);
+  {
+    const mm = new THREE.Matrix4();
+    for (let i = 0; i < 5; i++) {
+      const a = Math.PI / 2 + (i - 2) * 0.2;
+      mm.compose(new THREE.Vector3(Math.cos(a) * (R + 0.3), R - 0.15 + Math.sin(a) * (R + 0.3), -dep * 0.5 + 0.9), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), a - Math.PI / 2), new THREE.Vector3(1.0, 0.6, 1.1));
+      ports.setMatrixAt(i, mm);
+    }
+  }
+  ringYaw.add(withHull(ports, 1.5, true));
+  // the cooper: an operator daemon inside the ring, mallet raised
+  const op = buildFigure({ lit: AM, shade: AD, hatLit: SL, hatShade: SD, lw: 1.6 });
+  op.scale.setScalar(1.9);
+  const arm = new THREE.Group();
+  {
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 1.0, 8), celMat(SL, SD));
+    handle.position.y = 0.5;
+    const head = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.5, 12), celMat(AP, AM));
+    head.rotation.z = Math.PI / 2; head.position.y = 1.0;
+    arm.add(withHull(handle, 1.3), withHull(head, 1.4));
+    arm.position.set(0.25, 1.05, 0.2);
+    op.add(arm);
+  }
+  ringYaw.add(op);
+  const glyphs = new Glyphs(900);
+  scene.add(glyphs.mesh);
+
+  const view = {
+    scene, cam, inks: DAY2, order: [K, AP, SL, AM, SD, AD, SKY],
+    bok: { [SKY]: [0.42, 1.0, 0.1, 1.0] },
+    grain: { [SKY]: 0.45, [AM]: 0.22, [AD]: 0.16, [AP]: 0.24, [SL]: 0.26, [SD]: 0.2 },
+    wash: [0.42, 0.2, 0.3, 0.55],
+    title: ['The firewall', 'seen through', 'a load balancer'],
+    chrome: 'tr', seed: 202,
+    lightDir: new THREE.Vector3(0.55, 0.62, 0.45).normalize(), lightBox: { c: new THREE.Vector3(-4, 0, -2), r: 30 },
+    layout(portrait) {
+      this.portrait = portrait;
+      ringYaw.rotation.y = -0.42;
+      mtn.position.set(10, -3.5, -420);
+      const a = -Math.PI / 2 - 0.3;   // on the inner surface, near the bottom, standing upright
+      op.position.set(Math.cos(a) * (R - th) * 0.99, R - 0.15 + Math.sin(a) * (R - th) * 0.99 - 0.05, 0.6);
+      op.rotation.set(0, 1.25, 0);
+      if (!portrait) {
+        kas1.position.set(-150, 150, -1100); kas2.position.set(260, 110, -1080);
+        this.camBase = { pos: new THREE.Vector3(-1.5, 3.4, 30), look: new THREE.Vector3(2.4, 7.0, -10), fov: 34 };
+      } else {
+        kas1.position.set(-40, 330, -1100); kas2.position.set(90, 250, -1080);
+        this.camBase = { pos: new THREE.Vector3(-0.8, 1.3, 41), look: new THREE.Vector3(0.9, 3.4, 0), fov: 56 };
+      }
+      [kas1, kas2].forEach(m => m.lookAt(0, 0, 0));
+    },
+    update(t, tau) {
+      const cb = this.camBase;
+      cam.fov = cb.fov;
+      cam.position.set(cb.pos.x + Math.sin(t * 0.21) * 0.4, cb.pos.y + Math.sin(t * 0.15 + 2) * 0.15, cb.pos.z);
+      cam.lookAt(cb.look); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+      // mallet: anticipation, strike, small rebound
+      const ph = fract(t * 0.9);
+      const swing = ph < 0.55 ? -0.4 - 1.0 * easeOut(ph / 0.55) : (ph < 0.68 ? -1.4 + 2.1 * Math.pow((ph - 0.55) / 0.13, 2) : 0.7 - 1.1 * easeOut((ph - 0.68) / 0.32));
+      arm.rotation.z = swing;
+      // packet stream: one queue in, dealt round-robin to five lanes
+      glyphs.begin();
+      const N = 320, gap = 0.7, speed = 3.0;
+      for (let i = 0; i < N; i++) {
+        const sd = ((i * gap + t * speed) % (N * gap)) - 46;
+        let x, z;
+        if (sd < 0) { const f = -sd; x = LX + f * 0.95 + Math.sin(i * 2.7) * 0.18; z = LZ + f + Math.sin(i * 1.3) * 0.25; }
+        else { const lane = i % 5; x = LX + (lane - 2) * 14 * sd / 100; z = LZ - sd; }
+        if (z < -300 || z > 26) continue;
+        glyphs.add(x, 0.28 + (i % 3) * 0.05, z, sd < 0 ? 0.34 : 0.4, Math.sin(i * 3.1) * 0.08, (i % 7 === 3) ? 4 : 0, 1.45);
+      }
+      glyphs.end();
+    },
+  };
+  return view;
+}
+
+/* =====================================================================
+   VIEW 3 — Night patrol under a red moon
+   ===================================================================== */
+const WALL_FRAG = /* glsl */`
+uniform float uLit, uShade, uCourse, uLantern; uniform vec3 uLanternPos;
+varying vec3 vW; varying vec3 vN; varying vec3 vL;
+void main(){
+  clr();
+  vec3 n = normalize(vN); if (!gl_FrontFacing) n = -n;
+  float b = band(n, vW, 0.2, 0.3, 0.5);
+  block(int(b > 0.5 ? uLit : uShade));
+  // masonry courses with offset joints (world space)
+  vec3 p = vW;
+  float isTop = step(0.7, abs(n.y));
+  vec2 m = isTop > 0.5 ? vec2(p.x / 2.4, p.z / 1.5) : vec2((abs(n.x) > 0.7 ? p.z : p.x) / 2.1, p.y / uCourse);
+  float row = floor(m.y);
+  m.x += mod(row, 2.0) * 0.5 + (fbm3(vec3(row, 0.0, 1.0)) - 0.5) * 0.4;
+  vec2 f = abs(fract(m) - 0.5);
+  vec2 fw = max(fwidth(m), vec2(1e-4));
+  float fade = 1.0 - smoothstep(0.12, 0.3, max(fw.x, fw.y));
+  float jx = clamp((fw.x * 0.75 - (0.5 - f.x)) / fw.x + 0.5, 0.0, 1.0);
+  float jy = clamp((fw.y * 0.75 - (0.5 - f.y)) / fw.y + 0.5, 0.0, 1.0);
+  blockMix(0, max(jx, jy) * fade * 0.9);
+  // lantern light: hard banded rings, like a carved halo
+  if (uLantern > 0.0) {
+    float dl = length(vW - uLanternPos) / uLantern + (fbm3(vW * 0.9) - 0.5) * 0.1;
+    float l1 = 1.0 - step(1.0, dl), l2 = 1.0 - step(0.55, dl);
+    INK[10] = max(INK[10], l1 * 0.42 + l2 * 0.4);
+  }
+  washAt(vW);
+  emit(1.0);
+}`;
+const HALO_FRAG = /* glsl */`
+varying vec2 vUv;
+void main(){
+  float r = length(vUv - 0.5) * 2.0;
+  float a = (1.0 - step(1.0, r)) * 0.3 + (1.0 - step(0.6, r)) * 0.3 + (1.0 - step(0.28, r)) * 0.38;
+  o0 = vec4(0.0); o1 = vec4(0.0); o2 = vec4(0.0, 0.0, 0.0, a);
+}`;
+const SEA_NIGHT_EXTRA = /* glsl */`
+uniform vec3 uMoonDir;
+`;
+function buildView3() {
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(46, 1.6, 0.3, 6000);
+  scene.add(skyDome());
+  const sea = seaMesh({ amp: 0.5, lines: 2.4, foam: 0.0, thr: 0.86, freq: 1.5, speed: 0.6, lit: AM, shade: AD, lineLit: AP, lineShade: AM, moon: true });
+  scene.add(sea);
+  const moon = cardMesh(150, 150, [[0, 0, 0, 0.94]], DH, { lw: 1.7, ring: 0.1 });
+  const kas1 = cardMesh(380, 64, [[-4.4, 1.2, 0.34, 0.36], [-1.6, 4.4, -0.32, 0.4], [-5.2, -3.4, -0.1, 0.3]], SD, { lw: 1.4 });
+  const kas2 = cardMesh(260, 50, [[-3.2, 2.6, 0.12, 0.5], [0.6, 3.6, -0.3, 0.32]], SD, { lw: 1.4 });
+  scene.add(moon, kas1, kas2);
+  // the rampart: outer face toward the sea (+z), walkway on top, merlons on the sea edge
+  const TOP = 12, TH = 5.5, X0 = -60, LEN = 340;
+  const wallMat = (lit, shade, lantern = 0) => mat(WALL_FRAG, { uLit: { value: lit }, uShade: { value: shade }, uCourse: { value: 1.0 }, uLantern: { value: lantern }, uLanternPos: { value: new THREE.Vector3(0, -100, 0) } });
+  const stoneMat = wallMat(SL, SD, 3.6);
+  const wall = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(LEN, TOP, TH), stoneMat);
+  body.position.set(X0 + LEN / 2, TOP / 2, -TH / 2);
+  wall.add(withHull(body, 1.8, true));
+  const NM = 124, PITCH = 2.7;
+  const merlons = new THREE.InstancedMesh(new THREE.BoxGeometry(1.45, 1.7, 0.85), stoneMat, NM);
+  { const mm = new THREE.Matrix4(); for (let i = 0; i < NM; i++) { mm.compose(new THREE.Vector3(X0 + 1 + i * PITCH, TOP + 0.6 + 0.85, -0.43), new THREE.Quaternion(), new THREE.Vector3(1, 1, 1)); merlons.setMatrixAt(i, mm); } }
+  wall.add(withHull(merlons, 1.5, true));
+  const parapet = new THREE.Mesh(new THREE.BoxGeometry(LEN, 0.6, 0.85), stoneMat);
+  parapet.position.set(X0 + LEN / 2, TOP + 0.3, -0.43);
+  wall.add(withHull(parapet, 1.5, true));
+  const lip = new THREE.Mesh(new THREE.BoxGeometry(LEN, 0.4, 0.5), stoneMat);
+  lip.position.set(X0 + LEN / 2, TOP + 0.2, -TH + 0.25);
+  wall.add(withHull(lip, 1.4, true));
+  // the next tiers of the rampart rise behind, stepping toward the datacentre
+  for (let i = 0; i < 3; i++) {
+    const h = TOP + 4.5 + 7 * i;
+    const tier = new THREE.Mesh(new THREE.BoxGeometry(LEN, h, 10), wallMat(AD, AD));
+    tier.position.set(X0 + LEN / 2 + 6 * i, h / 2, -TH - 3 - 5 - i * 12);
+    wall.add(withHull(tier, 1.5, true));
+    const crn = new THREE.InstancedMesh(new THREE.BoxGeometry(1.4, 1.4, 0.8), wallMat(SD, AD), NM);
+    { const mm = new THREE.Matrix4(); for (let k = 0; k < NM; k++) { mm.compose(new THREE.Vector3(X0 + 2 + 6 * i + k * PITCH, h + 0.7, -TH - 3 - 0.4 - i * 12), new THREE.Quaternion(), new THREE.Vector3(1, 1, 1)); crn.setMatrixAt(k, mm); } }
+    wall.add(withHull(crn, 1.3, true));
+  }
+  scene.add(wall);
+  // datacentre on the summit, far away up the tiers
+  const peak = buildMountain({ R0: 120, Ht: 70, tiers: 9, Rtop: 10, snow: 0.86, lw: 1.1, seed: 13, lit: SD, shade: AD, dcLit: AP, dcShade: AM });
+  scene.add(peak);
+  // the patrol daemon with a lantern held out on a pole
+  const patrol = buildFigure({ lit: AM, shade: AD, hatLit: SL, hatShade: SD, lw: 1.6 });
+  patrol.scale.setScalar(1.35);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 2.2, 6), celMat(SL, SD));
+  pole.position.set(0.0, 1.55, 0.75); pole.rotation.x = 0.95;
+  patrol.add(withHull(pole, 1.2));
+  const lantern = new THREE.Group();
+  const lanBody = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.5, 14), mat(`void main(){ clr(); emit(1.0); }`));
+  lantern.add(withHull(lanBody, 1.3));
+  const halo = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 3.6), mat(HALO_FRAG, {}, { extra: { transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendEquation: THREE.AddEquation } }));
+  halo.renderOrder = 10;
+  lantern.add(halo);
+  scene.add(patrol, lantern);
+  const glyphs = new Glyphs(200);
+  scene.add(glyphs.mesh);
+  // hostile probes: pop up in the crenels ahead of the patrol and drop back
+  const probes = [];
+  { const r = mulberry32(77); for (let i = 0; i < 9; i++) probes.push({ k: 8 + i * 2 + Math.floor(r() * 2), t0: i * 0.75 + r() * 0.4, dur: 1.5 + r() * 0.8 }); }
+  const floaters = [];
+  { const r = mulberry32(78); for (let i = 0; i < 12; i++) floaters.push({ x: 10 + r() * 120, z: 14 + r() * 50, ph: r() * 6 }); }
+
+  const view = {
+    scene, cam, inks: NIGHT, order: [K, AP, SL, AM, SD, AD, SKY, DH, ICE, HOT],
+    bok: { [SKY]: [0.25, 1.0, 0.72, 1.0] },
+    grain: { [SKY]: 0.3, [AM]: 0.2, [AD]: 0.2, [SL]: 0.22, [SD]: 0.2 },
+    wash: [0.4, 0.2, 0.28, 0.75],
+    title: ['Night patrol', 'under a red', 'moon'],
+    chrome: 'tl', seed: 303,
+    lightDir: new THREE.Vector3(0.28, 0.62, 0.73).normalize(), lightBox: { c: new THREE.Vector3(-10, TOP, -3), r: 40 },
+    layout(portrait) {
+      this.portrait = portrait;
+      this.camBase = portrait
+        ? { pos: new THREE.Vector3(-52, TOP + 3.6, -3.6), look: new THREE.Vector3(10, TOP + 2.0, 2.5), fov: 66, along0: -28, moonYaw: 0.1, moonEl: 0.42 }
+        : { pos: new THREE.Vector3(-55, TOP + 3.6, -3.4), look: new THREE.Vector3(20, TOP + 3.4, 8.5), fov: 44, along0: -24, moonYaw: 0.24, moonEl: 0.2 };
+      const cb = this.camBase;
+      const fwd = cb.look.clone().sub(cb.pos).normalize();
+      const dir = fwd.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -cb.moonYaw);
+      dir.y += cb.moonEl; dir.normalize();
+      moon.position.copy(cb.pos).addScaledVector(dir, 1000);
+      kas1.position.copy(moon.position).add(new THREE.Vector3(-40, -55, -60));
+      kas2.position.copy(moon.position).add(new THREE.Vector3(-90, 70, -120));
+      [moon, kas1, kas2].forEach(m => m.lookAt(cb.pos));
+      sea.material.uniforms.uMoonDir.value.copy(dir);
+      peak.position.set(80, -2, -260);
+    },
+    update(t, tau) {
+      const cb = this.camBase;
+      cam.fov = cb.fov;
+      cam.position.set(cb.pos.x + Math.sin(t * 0.19) * 0.25, cb.pos.y + Math.sin(t * 0.13 + 1) * 0.1, cb.pos.z);
+      cam.lookAt(cb.look); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+      // the patrol walks toward the viewer along the walkway
+      const along = cb.along0 - tau * 0.9;
+      const bob = Math.abs(Math.sin(tau * 3.4));
+      patrol.position.set(along, TOP + bob * 0.07, -2.6);
+      patrol.rotation.set(0, -Math.PI / 2, Math.sin(tau * 3.4) * 0.03);
+      patrol.updateMatrixWorld();
+      const lw = new THREE.Vector3(0.0, 2.5, 1.8).applyMatrix4(patrol.matrixWorld);
+      lantern.position.copy(lw); lantern.position.y += Math.sin(tau * 3.4) * 0.05;
+      halo.lookAt(cam.position);
+      stoneMat.uniforms.uLanternPos.value.copy(lantern.position);
+      glyphs.begin();
+      for (const p of probes) {
+        const a = fract((tau - p.t0) / 7) * 7;
+        if (a > p.dur) continue;
+        const u = a / p.dur;
+        const up = u < 0.3 ? easeOut(u / 0.3) : (u < 0.7 ? 1 : 1 - easeInOut((u - 0.7) / 0.3));
+        const x = X0 + 1 + (p.k + 0.5) * PITCH;
+        glyphs.add(x, TOP + 0.6 + 0.3 + up * 2.6, 0.2, 0.95 * (0.4 + 0.6 * up), Math.sin(a * 5) * 0.12 * (1 - up), 1, 1.45);
+      }
+      for (const f of floaters) {
+        glyphs.add(f.x, 0.5 + Math.sin(t * 1.2 + f.ph) * 0.15, f.z, 1.7, Math.sin(t + f.ph) * 0.2, 1, 1.45);
+      }
+      glyphs.end();
+    },
+  };
+  return view;
+}
+
+/* =====================================================================
+   VIEW 4 — Clear morning, every packet verified (after "Fine wind, clear morning")
+   ===================================================================== */
+function buildView4() {
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(12, 1.6, 2, 9000);
+  scene.add(skyDome());
+  // the firewall itself fills the print; cold, not red: everything here has been verified
+  const mtn = buildMountain({ R0: 360, Ht: 150, tiers: 12, Rtop: 12, snow: 0.74, lw: 1.6, seed: 21, lit: AM, shade: AD, dcLit: AP, dcShade: AM, base: 0.08, tierLine: 1.2 });
+  scene.add(mtn);
+  // the datacentre plain at the foot: a dark band of racks with lit windows
+  const plain = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000).rotateX(-Math.PI / 2), mat(`
+varying vec3 vW;
+void main(){
+  clr();
+  block(4);
+  vec2 g = vW.xz / vec2(9.0, 22.0);
+  vec2 f = fract(g), i = floor(g);
+  float w = step(0.3, f.x) * step(f.x, 0.6) * step(0.4, f.y) * step(f.y, 0.62) * step(0.45, fract(sin(dot(i, vec2(12.9898, 78.233))) * 43758.5453));
+  vec2 fw = fwidth(g);
+  blockMix(3, w * (1.0 - smoothstep(0.2, 0.45, max(fw.x, fw.y))));
+  emit(1.0);
+}`));
+  plain.position.y = -2; plain.frustumCulled = false;
+  scene.add(plain);
+  const glyphs = new Glyphs(1400);
+  scene.add(glyphs.mesh);
+  // mackerel sky: rows of packet-shaped cloudlets, laid out in view angles so they read as streams
+  const clouds = [];
+  {
+    const r = mulberry32(404);
+    for (let row = 0; row < 11; row++) {
+      const el = 0.16 - row * 0.0125;                 // radians above the view centre
+      const sz = 1.0 - row * 0.05;
+      for (let az = -0.62; az < 0.62; az += 0.016 + r() * 0.012) {
+        const curve = Math.sin(az * 5.0 + row * 0.7) * 0.006;
+        if (r() < 0.35 + row * 0.02) continue;
+        clouds.push({ az, el: el + curve + (r() - 0.5) * 0.004, sz: sz * (0.75 + r() * 0.5), asp: 1.4 + r() * 0.9, ph: r() });
+      }
+    }
+  }
+  const _f = new THREE.Vector3(), _r = new THREE.Vector3(), _u = new THREE.Vector3();
+  const view = {
+    scene, cam, inks: DAY, order: [K, AP, SL, AM, SD, AD, SKY],
+    bok: { [SKY]: [0.3, 1.0, 0.0, 1.0] },
+    grain: { [SKY]: 0.5, [AM]: 0.22, [AD]: 0.18, [AP]: 0.26, [SL]: 0.2 },
+    wash: [0.42, 0.2, 0.3, 0.5],
+    title: ['Clear morning,', 'every packet', 'verified'],
+    chrome: 'tl', seed: 404,
+    lightDir: new THREE.Vector3(-0.8, 0.35, -0.3).normalize(), lightBox: { c: new THREE.Vector3(90, 40, -1100), r: 400 },
+    layout(portrait) {
+      this.portrait = portrait;
+      mtn.position.set(portrait ? 0 : 90, -2, -1100);
+      this.camBase = portrait
+        ? { pos: new THREE.Vector3(0, 5, 40), look: new THREE.Vector3(0, 5 + 1140 * Math.tan(THREE.MathUtils.degToRad(7.0)), -1100), fov: 30 }
+        : { pos: new THREE.Vector3(0, 5, 40), look: new THREE.Vector3(40, 5 + 1140 * Math.tan(THREE.MathUtils.degToRad(4.3)), -1100), fov: 11.5 };
+    },
+    update(t, tau) {
+      const cb = this.camBase;
+      cam.fov = cb.fov;
+      cam.position.set(cb.pos.x + Math.sin(t * 0.17) * 6.0, cb.pos.y + Math.sin(t * 0.11 + 1) * 1.0, cb.pos.z);
+      cam.lookAt(cb.look); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+      glyphs.begin();
+      cam.getWorldDirection(_f); _r.crossVectors(_f, cam.up).normalize(); _u.crossVectors(_r, _f).normalize();
+      const k = Math.tan(THREE.MathUtils.degToRad(cb.fov / 2)) / Math.tan(THREE.MathUtils.degToRad(5.75));
+      const D = 2600, scale = this.portrait ? 1.6 : 1.0;
+      const half = Math.tan(THREE.MathUtils.degToRad(cb.fov / 2)) * cam.aspect * 1.08;
+      for (const c of clouds) {
+        let az = c.az / 0.62 * half + t * 0.0016;
+        az = ((az + half) % (2 * half) + 2 * half) % (2 * half) - half;
+        const el = c.el * 0.62 * k;
+        const x = cb.pos.x + (_f.x + _r.x * az + _u.x * el) * D, y = cb.pos.y + (_f.y + _r.y * az + _u.y * el) * D, z = cb.pos.z + (_f.z + _r.z * az + _u.z * el) * D;
+        glyphs.add(x, y, z, 7.5 * c.sz * scale, 0, c.ph < 0.16 ? 4 : 0, c.asp);
+      }
+      glyphs.end();
+    },
+  };
+  return view;
+}
+
+/* =====================================================================
+   PRINT (composite) pass
+   ===================================================================== */
+const COMP_FRAG = /* glsl */`
+precision highp float;
+uniform sampler2D tG0, tG1, tG2, tChrome, tPaper, tGrain, tNoise;
+uniform vec2 uRes; uniform float uDpr;
+uniform vec4 uSheet, uImg;
+uniform vec3 uPaper, uVoid;
+uniform vec3 uInk[11];
+uniform vec2 uOff[11];
+uniform vec4 uBok[11];
+uniform float uPr[11];
+uniform float uDen[11];
+uniform float uGrainAmt[11];
+uniform vec3 uFillInk;
+uniform vec4 uChromePr;     // key, fill, seal, seal press pulse
+uniform float uSlide;
+uniform vec4 uWash;         // at, soft, contour, strength
+uniform float uSeed;
+out vec4 fragColor;
+
+float chan(int k, vec2 uv){
+  if (k == 0) return textureLod(tG0, uv, 0.0).r;
+  if (k == 1) return textureLod(tG0, uv, 0.0).g;
+  if (k == 2) return textureLod(tG0, uv, 0.0).b;
+  if (k == 3) return textureLod(tG1, uv, 0.0).r;
+  if (k == 4) return textureLod(tG1, uv, 0.0).g;
+  if (k == 5) return textureLod(tG1, uv, 0.0).b;
+  if (k == 6) return textureLod(tG1, uv, 0.0).a;
+  if (k == 7) return textureLod(tG2, uv, 0.0).r;
+  if (k == 8) return textureLod(tG2, uv, 0.0).g;
+  if (k == 9) return textureLod(tG2, uv, 0.0).b;
+  return textureLod(tG2, uv, 0.0).a;
+}
+float nz(vec2 p){ return textureLod(tNoise, p, 0.0).r; }
+float inRect(vec2 p, vec4 r){ return step(r.x, p.x) * step(p.x, r.x + r.z) * step(r.y, p.y) * step(p.y, r.y + r.w); }
+float reveal(float pr, vec2 iuv, float k){
+  if (pr >= 1.0) return 1.0;
+  if (pr <= 0.0) return 0.0;
+  float s = iuv.x * 0.7 + (1.0 - iuv.y) * 0.3;
+  s += (textureLod(tNoise, iuv * vec2(2.3, 1.7) + k * 0.19, 0.0).g - 0.5) * 0.22;
+  float f = pr * 1.4 - 0.2;
+  return smoothstep(f + 0.05, f - 0.05, s);
+}
+vec3 paperAt(vec2 p){
+  float fib = textureLod(tPaper, p / 720.0, 0.0).r - 0.5;
+  float mott = textureLod(tPaper, p / 1900.0, 0.0).g - 0.5;
+  return uPaper * (1.0 + fib * 0.12 + mott * 0.05);
+}
+vec3 printAt(vec2 p){
+  vec3 paper = paperAt(p);
+  float fib = textureLod(tPaper, p / 720.0, 0.0).r - 0.5;
+  vec2 iuv = (p - uImg.xy) / uImg.zw;
+  float inImg = inRect(p, uImg);
+  float inImgO = inRect(p, uImg + vec4(-2.5, -2.5, 5.0, 5.0));
+  vec3 filt = vec3(1.0);
+  // chrome (cartouche + seal) reserves its area from the scene blocks
+  vec4 chK = texture(tChrome, iuv + uOff[0]);
+  float reserve = max(texture(tChrome, iuv).g, texture(tChrome, iuv).b);
+  // light (lantern) also reserves: computed first
+  vec2 wob = (vec2(textureLod(tNoise, p / 23.0, 0.0).b, textureLod(tNoise, p / 23.0 + 0.5, 0.0).b) - 0.5) * 1.6 / uImg.zw;
+  float light = chan(10, iuv + uOff[10]) * uDen[10] * reveal(uPr[10], iuv, 10.0);
+  // blocks
+  for (int k = 0; k < 9; k++) {
+    if (uDen[k] <= 0.0) continue;
+    vec2 uv = iuv + uOff[k] + wob * (k == 0 ? 0.45 : 1.0 + float(k) * 0.13);
+    vec2 ov = 2.5 / uImg.zw;
+    float inside = inRect(uv, vec4(-ov, 1.0 + 2.0 * ov)) * inImgO;
+    float m = chan(k, uv);
+    float d = k == 0 ? smoothstep(0.12, 0.5, m) : smoothstep(0.32, 0.68, m);
+    vec4 b = uBok[k];
+    float by = iuv.y + (textureLod(tNoise, vec2(iuv.x * 1.1, 0.37 + float(k) * 0.1), 0.0).r - 0.5) * 0.06;
+    d *= mix(b.z, b.w, smoothstep(b.x, b.y, by));
+    vec2 gu = vec2(p.x / 900.0 + float(k) * 0.31, p.y / 260.0 + float(k) * 0.57);
+    float g = textureLod(tGrain, gu, 0.0).r;
+    d *= mix(1.0, 0.55 + 0.45 * g, uGrainAmt[k]);
+    float press = textureLod(tGrain, p / 1400.0 + float(k) * 0.21, 0.0).g;
+    d *= 0.9 + 0.12 * press;
+    d *= 1.0 - max(fib, 0.0) * (k == 0 ? 0.15 : 0.4);
+    if (k > 0) d *= 1.0 - light * 0.92;
+    d *= reveal(uPr[k], iuv, float(k));
+    d *= inside * (1.0 - reserve);
+    d = clamp(d * uDen[k], 0.0, 1.0);
+    filt *= mix(vec3(1.0), uInk[k], d);
+  }
+  // light tint
+  filt *= mix(vec3(1.0), uInk[10], clamp(light * 0.55, 0.0, 1.0) * inImg * (1.0 - reserve));
+  // ink wash: noisy fill plus a separate broken contour just outside it
+  {
+    vec2 uv = iuv + uOff[9];
+    float v = chan(9, uv);
+    float pr = reveal(uPr[9], iuv, 9.0);
+    float mott = textureLod(tNoise, p / 140.0, 0.0).g;
+    float fill = smoothstep(uWash.x, uWash.x + uWash.y, v);
+    fill *= 1.0 - smoothstep(0.5, 0.85, mott) * 0.3;
+    float wobl = (textureLod(tNoise, p / 31.0, 0.0).b - 0.5) * 0.09;
+    float fwv = max(fwidth(v), 1e-4);
+    float line = 1.0 - smoothstep(0.0, fwv * 1.4, abs(v - (uWash.z + wobl)));
+    line *= step(0.35, textureLod(tNoise, p / 55.0 + 0.3, 0.0).b);
+    float w = max(fill * uWash.w, line * min(uWash.w + 0.2, 1.0)) * pr * inImg * (1.0 - reserve) * (1.0 - light);
+    w *= 1.0 - max(fib, 0.0) * 0.5;
+    filt *= mix(vec3(1.0), uInk[9], clamp(w, 0.0, 1.0));
+  }
+  // chrome: cartouche fill, key text and border, the seal
+  {
+    float cf = texture(tChrome, iuv + uOff[3] * 0.8).g;
+    float ck = chK.r;
+    float cs = texture(tChrome, iuv + uOff[6] * 0.6).b;
+    float fillD = cf * uChromePr.y * (0.86 + 0.14 * textureLod(tGrain, p / 300.0, 0.0).r);
+    filt *= mix(vec3(1.0), uFillInk, clamp(fillD, 0.0, 1.0) * inImg);
+    float speck = smoothstep(0.18, 0.42, textureLod(tNoise, p / 7.0, 0.0).a + fib * 0.6);
+    float sealD = cs * uChromePr.z * speck * (1.0 + uChromePr.w * 0.25);
+    filt *= mix(vec3(1.0), uInk[6], clamp(sealD, 0.0, 1.0));
+    filt *= mix(vec3(1.0), uInk[0], clamp(ck * uChromePr.x, 0.0, 1.0) * inImg);
+  }
+  // image border: a single key line, printed with the key block
+  {
+    vec4 r = uImg; vec2 q = p - uOff[0] * uImg.zw;
+    float dx = min(abs(q.x - r.x), abs(q.x - r.x - r.z)), dy = min(abs(q.y - r.y), abs(q.y - r.y - r.w));
+    float onX = step(r.y - 1.0, q.y) * step(q.y, r.y + r.w + 1.0), onY = step(r.x - 1.0, q.x) * step(q.x, r.x + r.z + 1.0);
+    float bl = max((1.0 - smoothstep(0.9, 1.8, dx)) * onX, (1.0 - smoothstep(0.9, 1.8, dy)) * onY);
+    filt *= mix(vec3(1.0), uInk[0], bl * 0.95 * uChromePr.x);
+  }
+  return paper * filt;
+}
+float sheetMask(vec2 p, vec4 S, float seed){
+  float dk = (textureLod(tNoise, p / 90.0 + seed, 0.0).r - 0.5) * 3.0 + (textureLod(tNoise, p / 9.0 + seed, 0.0).b - 0.5) * 1.6;
+  float dx = min(p.x - S.x, S.x + S.z - p.x), dy = min(p.y - S.y, S.y + S.w - p.y);
+  float d = min(dx, dy) + dk;
+  return clamp(d, 0.0, 1.0);
+}
+float sheetDist(vec2 p, vec4 S){
+  vec2 c = S.xy + S.zw * 0.5, h = S.zw * 0.5;
+  vec2 q = abs(p - c) - h;
+  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+}
+void main(){
+  vec2 p = gl_FragCoord.xy / uDpr;
+  vec2 uv = gl_FragCoord.xy / uRes;
+  // gallery wall: void with a soft falloff
+  vec3 col = uVoid * (1.0 + 0.18 * (1.0 - length(uv - 0.5) * 1.2)) + (textureLod(tNoise, p / 300.0, 0.0).r - 0.5) * 0.01;
+  // shadow of the sheet
+  float sd = sheetDist(p + vec2(-3.0, 5.0), uSheet);
+  col *= 1.0 - 0.55 * (1.0 - smoothstep(-6.0, 22.0, sd));
+  float m = sheetMask(p, uSheet, 0.0);
+  if (m > 0.0) col = mix(col, printAt(p), m);
+  // the next sheet slides in over the print
+  if (uSlide > 0.0) {
+    float off = (1.0 - uSlide) * (uSheet.x + uSheet.z + 40.0);
+    vec4 S2 = vec4(uSheet.x + off, uSheet.y, uSheet.z, uSheet.w);
+    float sd2 = sheetDist(p + vec2(10.0, 4.0), S2);
+    col *= 1.0 - 0.5 * (1.0 - smoothstep(-10.0, 34.0, sd2)) * step(p.x, S2.x + 20.0);
+    float m2 = sheetMask(p, S2, 0.37);
+    if (m2 > 0.0) col = mix(col, paperAt(p - vec2(off, 0.0)), m2);
+  }
+  fragColor = vec4(col, 1.0);
+}`;
+const COMP_VERT = /* glsl */`void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+const vec3s = n => Array.from({ length: n }, () => new THREE.Vector3());
+const compMat = new THREE.ShaderMaterial({
+  glslVersion: THREE.GLSL3,
+  vertexShader: COMP_VERT, fragmentShader: COMP_FRAG,
+  depthTest: false, depthWrite: false,
+  uniforms: {
+    tG0: { value: gbuf.textures[0] }, tG1: { value: gbuf.textures[1] }, tG2: { value: gbuf.textures[2] },
+    tChrome: { value: null }, tPaper: { value: paperTex }, tGrain: { value: grainTex }, tNoise: { value: noiseTex },
+    uRes: { value: new THREE.Vector2() }, uDpr: { value: 1 },
+    uSheet: { value: new THREE.Vector4() }, uImg: { value: new THREE.Vector4() },
+    uPaper: { value: new THREE.Vector3(...hex3(PAPER_HEX)) }, uVoid: { value: new THREE.Vector3(...hex3('#100C2A')) },
+    uInk: { value: vec3s(NCH) }, uOff: { value: Array.from({ length: NCH }, () => new THREE.Vector2()) },
+    uBok: { value: Array.from({ length: NCH }, () => new THREE.Vector4(0, 1, 1, 1)) },
+    uPr: { value: new Array(NCH).fill(1) }, uDen: { value: new Array(NCH).fill(1) }, uGrainAmt: { value: new Array(NCH).fill(0.1) },
+    uFillInk: { value: new THREE.Vector3() }, uChromePr: { value: new THREE.Vector4(1, 1, 1, 0) },
+    uSlide: { value: 0 }, uWash: { value: new THREE.Vector4(0.42, 0.2, 0.3, 0.55) }, uSeed: { value: 0 },
+  },
+});
+const compScene = new THREE.Scene();
+{
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
+  const m = new THREE.Mesh(g, compMat); m.frustumCulled = false; compScene.add(m);
+}
+const compCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+/* ---------- views ---------- */
+const views = [buildView1(), buildView2(), buildView3(), buildView4()];
+views.forEach(v => {
+  const r = mulberry32(v.seed);
+  v.offPx = Array.from({ length: NCH }, (_, k) => {
+    const mag = k === K ? 0.5 : (k === HOT ? 2.6 : 1.2 + r() * 1.6);
+    const a = r() * Math.PI * 2;
+    return [Math.cos(a) * mag, Math.sin(a) * mag];
+  });
+  v.used = new Array(NCH).fill(0);
+  v.order.forEach(c => v.used[c] = 1); v.used[WASH] = 1;
+});
+
+/* ---------- layout ---------- */
+let W = 1, H = 1, DPR = 1, portrait = false;
+const sheet = { x: 0, y: 0, w: 1, h: 1 }, img = { x: 0, y: 0, w: 1, h: 1 };
+let fontsReady = false;
+function layoutSizes() {
+  W = window.innerWidth; H = window.innerHeight;
+  DPR = Math.min(window.devicePixelRatio || 1, LOW ? 1 : 2);
+  portrait = W / H < 0.8;
+  const m = Math.round(clamp(Math.min(W, H) * 0.03, 9, 30));
+  sheet.x = m; sheet.y = m; sheet.w = W - 2 * m; sheet.h = H - 2 * m;
+  const b = Math.round(clamp(Math.min(sheet.w, sheet.h) * 0.035, 11, 30));
+  img.x = sheet.x + b; img.y = sheet.y + b; img.w = sheet.w - 2 * b; img.h = sheet.h - 2 * b;
+}
+
+/* ---------- print chrome: cartouche + seal, drawn per view ---------- */
+function drawChrome(v, vi) {
+  const cw = Math.max(2, Math.round(img.w * DPR)), ch = Math.max(2, Math.round(img.h * DPR));
+  const cv = v.chromeCanvas || (v.chromeCanvas = document.createElement('canvas'));
+  if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
+  const g = cv.getContext('2d');
+  g.globalCompositeOperation = 'source-over';
+  g.fillStyle = '#000'; g.fillRect(0, 0, cw, ch);
+  const s = DPR * (portrait ? 0.82 : 1.0) * clamp(Math.min(img.h, img.w * 1.3) / 800, 0.8, 1.25);
+  const pad = 12 * s, boxW = 124 * s;
+  const fs1 = 8.4 * s, lh1 = fs1 * 1.5;
+  let fs2 = 15.5 * s;
+  g.font = `600 ${fs2}px "Schibsted Grotesk", system-ui, sans-serif`;
+  const maxW = Math.max(...v.title.map(l => g.measureText(l).width));
+  if (maxW > boxW - pad * 1.8) fs2 *= (boxW - pad * 1.8) / maxW;
+  const lh2 = fs2 * 1.2;
+  const boxH = pad + 2 * lh1 + 12 * s + v.title.length * lh2 + 10 * s + lh1 + pad * 0.5;
+  const margin = 14 * s;
+  const x0 = v.chrome === 'tr' ? cw - margin - boxW : margin, y0 = margin;
+  g.globalCompositeOperation = 'lighter';
+  g.fillStyle = 'rgb(0,255,0)'; g.fillRect(x0, y0, boxW, boxH);
+  g.strokeStyle = 'rgb(255,0,0)';
+  g.lineWidth = 2.2 * s; g.strokeRect(x0 + 1.1 * s, y0 + 1.1 * s, boxW - 2.2 * s, boxH - 2.2 * s);
+  g.lineWidth = 0.8 * s; g.strokeRect(x0 + 4.6 * s, y0 + 4.6 * s, boxW - 9.2 * s, boxH - 9.2 * s);
+  g.fillStyle = 'rgb(255,0,0)'; g.textBaseline = 'alphabetic';
+  g.font = `500 ${fs1}px "Martian Mono", ui-monospace, monospace`;
+  let y = y0 + pad + fs1 + 2 * s;
+  const tx = x0 + pad * 0.95;
+  for (const l of ['Thirty-six views', 'of the firewall']) { g.fillText(l, tx, y); y += lh1; }
+  y += 1 * s; g.fillRect(tx, y - fs1 * 0.4, boxW - pad * 1.9, 0.9 * s); y += 9 * s + fs2 * 0.85;
+  g.font = `600 ${fs2}px "Schibsted Grotesk", system-ui, sans-serif`;
+  for (const l of v.title) { g.fillText(l, tx, y); y += lh2; }
+  g.font = `500 ${fs1}px "Martian Mono", ui-monospace, monospace`;
+  g.fillText(`No. ${vi + 1}`, tx, y0 + boxH - pad * 0.75);
+  // the seal: a vermilion square with a carved stepped-rampart monogram
+  const S = 42 * s, sx = v.chrome === 'tr' ? x0 + boxW - S - 2 * s : x0 + 2 * s, sy = y0 + boxH + 9 * s;
+  g.globalCompositeOperation = 'source-over';
+  g.fillStyle = 'rgb(0,0,255)';
+  g.beginPath(); g.roundRect(sx, sy, S, S, 3 * s); g.fill();
+  g.fillStyle = '#000'; g.strokeStyle = '#000';
+  g.lineWidth = 1.5 * s; g.strokeRect(sx + 3.4 * s, sy + 3.4 * s, S - 6.8 * s, S - 6.8 * s);
+  const cx = sx + S / 2, u = S / 36;
+  g.lineWidth = 2.3 * u; g.lineCap = 'square';
+  g.beginPath();
+  g.moveTo(cx - 11 * u, sy + 27 * u); g.lineTo(cx + 11 * u, sy + 27 * u);
+  g.moveTo(cx - 7.5 * u, sy + 21 * u); g.lineTo(cx + 7.5 * u, sy + 21 * u);
+  g.moveTo(cx - 4 * u, sy + 15 * u); g.lineTo(cx + 4 * u, sy + 15 * u);
+  g.moveTo(cx, sy + 8 * u); g.lineTo(cx, sy + 15 * u);
+  g.moveTo(cx - 11 * u, sy + 27 * u); g.lineTo(cx - 11 * u, sy + 23 * u);
+  g.moveTo(cx + 11 * u, sy + 27 * u); g.lineTo(cx + 11 * u, sy + 23 * u);
+  g.stroke();
+  g.fillRect(cx - 2.2 * u, sy + 7 * u, 4.4 * u, 2.4 * u);
+  if (!v.chromeTex) { v.chromeTex = new THREE.CanvasTexture(cv); v.chromeTex.minFilter = THREE.LinearFilter; v.chromeTex.generateMipmaps = false; }
+  v.chromeTex.needsUpdate = true;
+}
+
+function resize() {
+  layoutSizes();
+  renderer.setPixelRatio(DPR);
+  renderer.setSize(W, H, false);
+  const gs = LOW ? 0.8 : Math.min(DPR, 1.5);
+  const gw = Math.max(4, Math.round(img.w * gs)), gh = Math.max(4, Math.round(img.h * gs));
+  gbuf.setSize(gw, gh);
+  U.uGRes.value.set(gw, gh);
+  const cu = compMat.uniforms;
+  cu.uRes.value.set(W * DPR, H * DPR); cu.uDpr.value = DPR;
+  cu.uSheet.value.set(sheet.x, H - sheet.y - sheet.h, sheet.w, sheet.h);
+  cu.uImg.value.set(img.x, H - img.y - img.h, img.w, img.h);
+  views.forEach((v, i) => { v.cam.aspect = img.w / img.h; v.layout(portrait); v.cam.updateProjectionMatrix(); drawChrome(v, i); });
+  dirty = true;
+}
+
+/* ---------- frame ---------- */
+const STAMP0 = 0.0, STAMP_GAP = 0.17, STAMP_DUR = 0.3, SLIDE0 = 6.4, SLIDE1 = 6.95;
+function viewAt(t) {
+  const cyc = VIEW_DUR * views.length;
+  const tm = (((t + T_OFF) % cyc) + cyc) % cyc;
+  const vi = Math.min(Math.floor(tm / VIEW_DUR), views.length - 1);
+  return { vi, tau: tm - vi * VIEW_DUR };
+}
+function renderFrame(t) {
+  const { vi, tau } = viewAt(t);
+  const v = views[vi];
+  U.uTime.value = t;
+  v.update(t, tau);
+  // light + shadow map
+  const ld = v.lightDir, lb = v.lightBox;
+  U.uLight.value.copy(ld);
+  lightCam.left = -lb.r; lightCam.right = lb.r; lightCam.top = lb.r; lightCam.bottom = -lb.r;
+  lightCam.near = 1; lightCam.far = 260;
+  lightCam.position.copy(lb.c).addScaledVector(ld, 120);
+  lightCam.lookAt(lb.c); lightCam.updateProjectionMatrix(); lightCam.updateMatrixWorld();
+  U.uShadowMat.value.multiplyMatrices(lightCam.projectionMatrix, lightCam.matrixWorldInverse);
+  v.scene.overrideMaterial = shadowOverride;
+  renderer.setRenderTarget(shadowRT); renderer.clear(true, true, true);
+  renderer.render(v.scene, lightCam);
+  v.scene.overrideMaterial = null;
+  // separations
+  renderer.setRenderTarget(gbuf); renderer.setClearColor(0x000000, 0); renderer.clear(true, true, true);
+  renderer.render(v.scene, v.cam);
+  // print
+  const cu = compMat.uniforms;
+  const sc = Math.sqrt(img.h / 800);
+  for (let k = 0; k < NCH; k++) {
+    const ink = hex3(v.inks[k]), pap = hex3(PAPER_HEX);
+    cu.uInk.value[k].set(Math.min(1, ink[0] / pap[0]), Math.min(1, ink[1] / pap[1]), Math.min(1, ink[2] / pap[2]));
+    const o = v.offPx[k];
+    cu.uOff.value[k].set(o[0] * sc / img.w, o[1] * sc / img.h);
+    const b = v.bok[k] || [0, 1, 1, 1];
+    cu.uBok.value[k].set(b[0], b[1], b[2], b[3]);
+    cu.uDen.value[k] = v.used[k] ? 1 : 0;
+    cu.uGrainAmt.value[k] = v.grain[k] ?? 0.1;
+    cu.uPr.value[k] = 0;
+  }
+  v.order.forEach((c, i) => { cu.uPr.value[c] = clamp((tau - (STAMP0 + i * STAMP_GAP)) / STAMP_DUR, 0, 1); });
+  const washS = STAMP0 + v.order.length * STAMP_GAP + 0.02;
+  cu.uPr.value[WASH] = clamp((tau - washS) / 0.45, 0, 1);
+  const sealS = washS + 0.42;
+  const sealP = clamp((tau - sealS) / 0.1, 0, 1);
+  const pulse = Math.max(0, 1 - Math.abs(tau - sealS - 0.1) / 0.18);
+  cu.uChromePr.value.set(cu.uPr.value[K], cu.uPr.value[AP] || cu.uPr.value[SL], sealP, pulse);
+  const fi = hex3(v.inks[AP]), pap = hex3(PAPER_HEX);
+  cu.uFillInk.value.set(fi[0] / pap[0], fi[1] / pap[1], fi[2] / pap[2]);
+  cu.uWash.value.set(...v.wash);
+  cu.uSlide.value = easeInOut(clamp((tau - SLIDE0) / (SLIDE1 - SLIDE0), 0, 1));
+  cu.tChrome.value = v.chromeTex;
+  renderer.setRenderTarget(null);
+  renderer.setViewport(0, 0, W, H);
+  renderer.render(compScene, compCam);
+}
+
+/* ---------- loop + hooks ---------- */
+let t = 0, playing = true, dirty = true, last = performance.now(), ready = false;
+const pp = document.getElementById('playpause');
+function setPlaying(p) {
+  playing = p; last = performance.now(); dirty = true;
+  pp.textContent = p ? 'Pause' : 'Play';
+  pp.setAttribute('aria-pressed', String(!p));
+}
+function renderAt() { if (!ready) return; renderFrame(t); dirty = false; }
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min((now - last) / 1000, 0.1); last = now;
+  if (playing) t += dt;
+  if (playing || dirty) renderAt();
+}
+window.addEventListener('resize', resize);
+
+/* ---------- notes UI ---------- */
+const notes = document.getElementById('notes'), showBtn = document.getElementById('show-notes');
+function setNotes(v) { notes.hidden = !v; showBtn.hidden = v; }
+document.getElementById('hide-notes').addEventListener('click', () => { setNotes(false); showBtn.focus(); });
+showBtn.addEventListener('click', () => { setNotes(true); document.getElementById('hide-notes').focus(); });
+pp.addEventListener('click', () => setPlaying(!playing));
+window.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'h' || e.key === 'H') { setNotes(notes.hidden); }
+  else if (e.code === 'Space' || e.key === ' ') {
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'BUTTON' || ae.tagName === 'A')) return;
+    e.preventDefault(); setPlaying(!playing);
+  }
+});
+
+/* ---------- start (after fonts, so the cartouche text is rasterised correctly) ---------- */
+const fontWait = Promise.all([
+  document.fonts.load('500 12px "Martian Mono"'),
+  document.fonts.load('600 16px "Schibsted Grotesk"'),
+]).catch(() => {});
+await Promise.race([fontWait, new Promise(r => setTimeout(r, 3500))]);
+resize();
+ready = true;
+window.__seek = (tt) => { t = Number(tt) || 0; setPlaying(false); renderAt(); };
+window.__play = () => setPlaying(true);
+if (Number.isFinite(T_PARAM)) { t = T_PARAM; setPlaying(false); }
+else if (REDUCED) { t = HERO_T; setPlaying(false); }
+else setPlaying(true);
+renderAt();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

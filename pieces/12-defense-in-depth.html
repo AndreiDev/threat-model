@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Defense in depth</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+
+  /* geometry (desktop) */
+  --pw:168px; --ph:520px;     /* petal size */
+  --r0:70px; --reach:440px;   /* closed offset, travel when open */
+  --twist:30deg;
+  --persp:1000px;
+  --R:820px;                  /* hoop and tunnel radius */
+  --cx:55%; --cy:47%;         /* vanishing point */
+  /* motion knobs (reduced motion turns ramps into cuts) */
+  --w:.3; --w2:.12; --slamon:1; --zk:1;
+}
+
+/* ---------- typed custom properties ---------- */
+@property --p      { syntax:'<number>'; inherits:true;  initial-value:0; }
+@property --depth  { syntax:'<number>'; inherits:true;  initial-value:0; }
+@property --open   { syntax:'<number>'; inherits:true;  initial-value:0; }
+@property --u      { syntax:'<number>'; inherits:false; initial-value:-9; }
+@property --fx     { syntax:'<number>'; inherits:false; initial-value:0; }
+@property --os     { syntax:'<number>'; inherits:false; initial-value:0; }
+@property --lop    { syntax:'<number>'; inherits:false; initial-value:0; }
+@property --blur   { syntax:'<number>'; inherits:false; initial-value:0; }
+@property --bright { syntax:'<number>'; inherits:false; initial-value:1; }
+@property --sl     { syntax:'<number>'; inherits:false; initial-value:0; }
+@property --hold   { syntax:'<number>'; inherits:false; initial-value:0; }
+@property --hx     { syntax:'<number>'; inherits:false; initial-value:0; }
+@property --k      { syntax:'<number>'; inherits:false; initial-value:0; }
+
+/* ---------- per-layer temperature: the cold ramp, colder and brighter with depth ---------- */
+.t-intro   { --tE:#8C93C4; }
+.t-edge    { --tA:#2F4FA8; --tB:#1B1747; --tE:#4FA3E0; --ink:#E8F7FF; --ink2:#9BE8FF; --fbg:rgb(16 12 42 / .45); --rot:0deg;  }
+.t-identity{ --tA:#3A66BE; --tB:#1F2A73; --tE:#6FBDEB; --ink:#E8F7FF; --ink2:#BCEBFF; --fbg:rgb(16 12 42 / .38); --rot:14deg; }
+.t-sandbox { --tA:#4FA3E0; --tB:#2A4C9E; --tE:#9BE8FF; --ink:#F4FBFF; --ink2:#DDF5FF; --fbg:rgb(16 12 42 / .32); --rot:27deg; }
+.t-policy  { --tA:#86D3F5; --tB:#3F78BF; --tE:#C9F3FF; --ink:#12103A; --ink2:#1B2A6A; --fbg:rgb(232 247 255 / .45); --rot:6deg;  }
+.t-secrets { --tA:#B4EEFF; --tB:#62B3E8; --tE:#E8F7FF; --ink:#12103A; --ink2:#22408F; --fbg:rgb(232 247 255 / .55); --rot:20deg; }
+.t-core    { --tE:#E8F7FF; --rot:0deg; }
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+html{scrollbar-width:none}
+html::-webkit-scrollbar{display:none}
+body{background:var(--void);color:var(--frost);
+  font-family:"Schibsted Grotesk",system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+
+/* the scroll track: its height is the duration of the descent */
+.scroll{position:relative;height:760vh}
+
+/* sticky full-viewport stage; one scroll-driven animation feeds --p and --depth to everything */
+.stage{position:sticky;top:0;height:100vh;width:100%;overflow:hidden;z-index:1;
+  perspective:var(--persp);perspective-origin:var(--cx) var(--cy);
+  background:
+    radial-gradient(ellipse 62% 58% at var(--cx) 42%, rgba(47,79,168,.22), rgba(47,79,168,0) 72%),
+    radial-gradient(ellipse 22% 20% at var(--cx) var(--cy), rgba(79,163,224,.10), rgba(79,163,224,0) 70%),
+    var(--void);
+  --p:0; --depth:0;
+  animation:drive linear both;
+  animation-timeline:scroll(root);}
+@keyframes drive{ from{ --p:0; --depth:0 } to{ --p:1; --depth:9400 } }
+
+.fog-hot{position:absolute;inset:0;pointer-events:none;opacity:0;mix-blend-mode:screen;
+  background:radial-gradient(34% 30% at var(--cx) var(--cy), rgba(255,122,47,.5), rgba(240,48,106,.16) 45%, rgba(240,48,106,0) 72%);
+  animation:fogHot linear both;animation-timeline:scroll(root);animation-range:43% 56%;}
+@keyframes fogHot{ 0%{opacity:0} 45%{opacity:.9} 100%{opacity:0} }
+
+/* camera: the world is pushed along Z by --depth, with a slight bank */
+.world{position:absolute;left:var(--cx);top:var(--cy);width:0;height:0;transform-style:preserve-3d;
+  transform:translateZ(calc(var(--depth) * 1px)) rotateX(calc((var(--p) - .5) * 3deg)) rotateZ(calc((var(--p) - .5) * 7deg));}
+
+/* tunnel ribs along Z: trig places them, a fake light from the upper left shades them */
+.rib{position:absolute;left:-1.5px;top:0;width:3px;height:600px;transform-origin:50% 0;
+  --ang:calc(var(--i) / 10 * 1turn + 18deg);
+  opacity:calc(clamp(0, calc((var(--depth) - var(--zs) * var(--zk) + 5600) / 4400), 1) * (.4 + .24 * cos(var(--ang) + 45deg)));
+  background:linear-gradient(180deg, rgba(155,232,255,.95), rgba(79,163,224,.2));
+  transform:translateZ(calc(var(--zs) * var(--zk) * -1px)) rotate(var(--ang)) translateY(calc(var(--R) * -1)) rotateX(-90deg);}
+
+/* each layer's hoop: lit ring + tick ring, fading with distance */
+.hoop{position:absolute;left:0;top:0;width:calc(var(--R) * 2);height:calc(var(--R) * 2);
+  margin:calc(var(--R) * -1) 0 0 calc(var(--R) * -1);border-radius:50%;
+  --u:calc((var(--depth) - var(--z)) / 1500);
+  --hx:clamp(0, calc((var(--u) + 4.4) / 3.8), 1);
+  opacity:calc(var(--hx) * var(--hx) * clamp(0, calc((.12 - var(--u)) / .3), 1));
+  box-shadow:0 0 54px -10px color-mix(in oklab, var(--tE) 70%, transparent), inset 0 0 54px -10px color-mix(in oklab, var(--tE) 70%, transparent);
+  transform:translateZ(calc(var(--z) * var(--zk) * -1px)) rotate(var(--rot));}
+.hoop::before{content:"";position:absolute;inset:0;border-radius:50%;
+  background:conic-gradient(from 135deg, color-mix(in oklab, var(--tE) 22%, transparent), var(--tE) 25%, var(--frost) 50%, var(--tE) 75%, color-mix(in oklab, var(--tE) 22%, transparent));
+  -webkit-mask:radial-gradient(farthest-side, #0000 calc(100% - 5px), #000 calc(100% - 4px));
+          mask:radial-gradient(farthest-side, #0000 calc(100% - 5px), #000 calc(100% - 4px));}
+.hoop::after{content:"";position:absolute;inset:22px;border-radius:50%;opacity:.75;
+  background:repeating-conic-gradient(from 0deg, color-mix(in oklab, var(--tE) 80%, transparent) 0 1.1deg, transparent 1.1deg 7.5deg);
+  -webkit-mask:radial-gradient(farthest-side, #0000 calc(100% - 14px), #000 calc(100% - 13px));
+          mask:radial-gradient(farthest-side, #0000 calc(100% - 14px), #000 calc(100% - 13px));}
+
+/* a defensive layer: everything derives from the camera's distance u, in layer spacings */
+.layer{position:absolute;left:0;top:0;width:0;height:0;
+  --u:calc((var(--depth) - var(--z)) / 1500);
+  --fx:clamp(0, calc((var(--u) + 3.4) / 3), 1);
+  --os:clamp(0, calc((var(--u) + var(--w)) / var(--w)), 1);
+  --open:calc(var(--os) * var(--os) * (3 - 2 * var(--os)) + clamp(0, calc(var(--u) / var(--w2)), 1) * .4);
+  --lop:calc(var(--fx) * var(--fx) * clamp(0, calc((.22 - var(--u)) / .14), 1));
+  --blur:clamp(0, calc((-.35 - var(--u)) * 2.4), 6);
+  --bright:calc(1 - clamp(0, calc((-.4 - var(--u)) * .2), .4));
+  transform:translateZ(calc(var(--z) * var(--zk) * -1px));
+  filter:blur(calc(var(--blur) * 1px)) brightness(var(--bright));
+  opacity:var(--lop);}
+/* sandbox: seems to open, slams shut on the payload, holds, then reopens */
+.layer.sandbox{
+  --sl:calc((clamp(0, calc((var(--p) - .455) / .02), 1) - clamp(0, calc((var(--p) - .522) / .032), 1)) * var(--slamon));
+  --hold:calc(clamp(0, calc((var(--p) - .43) / .02), 1) * clamp(0, calc((.566 - var(--p)) / .02), 1));
+  --open:calc((var(--os) * var(--os) * (3 - 2 * var(--os)) + clamp(0, calc(var(--u) / var(--w2)), 1) * .4) * (1 - var(--sl)) - .17 * var(--sl));
+  --lop:max(calc(var(--fx) * var(--fx) * clamp(0, calc((.22 - var(--u)) / .14), 1)), var(--hold));
+  --bright:calc(1 - clamp(0, calc((-.4 - var(--u)) * .2), .4) + var(--sl) * .5);}
+
+.petal{position:absolute;left:0;top:0;width:var(--pw);height:var(--ph);
+  margin:calc(var(--ph) / -2) 0 0 calc(var(--pw) / -2);border-radius:8px;
+  --ang:calc(var(--i) / var(--n) * 1turn + var(--rot));
+  --lit:calc(.5 + .5 * cos(var(--ang) + 45deg));
+  background:
+    linear-gradient(162deg, rgb(232 247 255 / calc(var(--lit) * .42)), rgb(232 247 255 / 0) 60%),
+    linear-gradient(rgb(16 12 42 / calc((1 - var(--lit)) * .4)), rgb(16 12 42 / calc((1 - var(--lit)) * .4))),
+    linear-gradient(172deg, var(--tA), var(--tB));
+  border:1.5px solid color-mix(in oklab, var(--frost) calc(var(--lit) * 75%), var(--tE));
+  box-shadow:0 0 calc(8px + var(--lit) * 26px) color-mix(in oklab, var(--tE) 65%, transparent), inset 0 0 24px rgb(16 12 42 / .3);
+  backface-visibility:hidden;
+  transform:rotate(var(--ang)) translateY(calc(-1 * (var(--r0) + var(--open) * var(--reach)))) rotate(calc(var(--open) * var(--twist)));}
+/* faint record lines in the lower part of each panel */
+.petal::before{content:"";position:absolute;left:14px;right:14px;top:34%;height:48%;opacity:.35;
+  background:repeating-linear-gradient(180deg, var(--ink2) 0 1px, transparent 1px 14px);}
+/* panel face: real content, turned upright on the lower half of the iris */
+.face{position:absolute;left:10px;right:10px;top:12px;padding:8px 9px 8px;border-radius:5px;background:var(--fbg);
+  color:var(--ink);transform:rotate(calc(clamp(0, calc(cos(var(--ang)) * -1000), 1) * 180deg));}
+.face code{display:block;font:500 15px/1.22 "Martian Mono",ui-monospace,monospace;font-stretch:75%;overflow-wrap:anywhere}
+.face small{display:block;margin-top:4px;font:500 12.5px/1.25 "Schibsted Grotesk",system-ui,sans-serif;color:var(--ink2)}
+
+/* hot panels: the disguised request and the replayed token, slipping through */
+.petal.hot{
+  background:linear-gradient(172deg, #FFD36B, #FF7A2F 45%, #F0306A);
+  border-color:#FFF6E0;
+  box-shadow:0 0 30px rgba(255,122,47,.65), 0 0 70px rgba(240,48,106,.35);
+  --ink:#2A0A2E; --ink2:#5A1236; --fbg:rgb(255 246 224 / .5);}
+
+/* the attack payload, glowing deep in the tunnel until it is caught */
+.payload{position:absolute;left:0;top:0;width:170px;height:170px;margin:-85px 0 0 -85px;border-radius:50%;
+  background:radial-gradient(circle at 50% 42%, #FFF6E0 0%, #FFD36B 22%, #FF7A2F 46%, #F0306A 68%, rgba(155,29,143,0) 86%);
+  filter:blur(2px);opacity:0;
+  box-shadow:0 0 60px rgba(255,122,47,.6), 0 0 120px rgba(240,48,106,.4);
+  animation:payloadSeq linear both;animation-timeline:scroll(root);animation-range:4% 50%;}
+@keyframes payloadSeq{
+  0%  {opacity:0;  transform:scale(.55)}
+  16% {opacity:.9; transform:scale(.8)}
+  80% {opacity:1;  transform:scale(1.05)}
+  90% {opacity:1;  transform:scale(1.6)}
+  97% {opacity:1;  transform:scale(.9)}
+  100%{opacity:0;  transform:scale(.25)}
+}
+
+/* cooling fragments: pre-placed shards on the same scroll timeline, white-hot to ice */
+.frag{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;border-radius:4px;opacity:0;--k:0;
+  background:color-mix(in oklab, var(--ice) calc(var(--k) * 100%), var(--heat-5));
+  box-shadow:0 0 22px color-mix(in oklab, var(--ice) calc(var(--k) * 100%), var(--heat-3));
+  filter:blur(calc(var(--k) * 2px));
+  transform:translate(calc(cos(var(--a)) * var(--k) * var(--spread)), calc(sin(var(--a)) * var(--k) * var(--spread)))
+            scale(calc(1.1 - var(--k) * .6)) rotate(calc(var(--k) * var(--spin)));
+  animation:shatter linear both;animation-timeline:scroll(root);animation-range:46% 62%;}
+@keyframes shatter{ 0%{--k:0;opacity:0} 8%{opacity:1} 65%{opacity:.95} 100%{--k:1;opacity:0} }
+
+/* the core: your data, frost-white and calm */
+.core-wrap{position:absolute;left:0;top:0;width:0;height:0;
+  --u:calc((var(--depth) - var(--z)) / 1500);
+  --fx:clamp(0, calc((var(--u) + 3.4) / 3), 1);
+  --blur:clamp(0, calc((-.35 - var(--u)) * 2.4), 6);
+  opacity:calc(var(--fx) * var(--fx));
+  filter:blur(calc(var(--blur) * 1px));
+  transform:translateZ(calc(var(--z) * var(--zk) * -1px));}
+.core{position:absolute;left:0;top:0;width:420px;height:262px;margin:-131px 0 0 -210px;border-radius:16px;
+  background:linear-gradient(160deg, rgba(255,255,255,.55), rgba(255,255,255,0) 50%), linear-gradient(180deg, #E8F7FF, #BDEBFF);
+  border:1.5px solid #FFFFFF;
+  box-shadow:0 0 60px rgba(155,232,255,.55), 0 0 140px rgba(79,163,224,.3);
+  color:#1B1747;padding:24px 26px;font:500 17px/1.75 "Martian Mono",ui-monospace,monospace;font-stretch:75%;}
+.core b{display:block;font-size:24px;font-stretch:112.5%;font-weight:300;letter-spacing:-.01em;margin-bottom:10px}
+.core span{color:#2F4FA8}
+
+/* ---------- captions: sticky cards revealed by view() timelines ---------- */
+.caps{position:absolute;inset:0;z-index:3;pointer-events:none}
+.cap-sec{position:absolute;left:0;right:0;top:calc(var(--a) * 660vh);height:calc((var(--b) - var(--a)) * 660vh + 100vh);
+  view-timeline-name:--cap;view-timeline-axis:block}
+.cap{position:sticky;top:32px;margin-left:36px;width:392px;padding:18px 20px 16px;border-radius:14px;
+  background:rgb(16 12 42 / .88);backdrop-filter:blur(18px) saturate(1.15);-webkit-backdrop-filter:blur(18px) saturate(1.15);
+  border:1px solid rgb(140 147 196 / .24);border-left:3px solid var(--tE);
+  box-shadow:0 18px 50px rgb(6 4 18 / .55);
+  opacity:0;animation:capIn linear both;animation-timeline:--cap;}
+@keyframes capIn{
+  entry 80%  { opacity:0; translate:0 18px }
+  entry 100% { opacity:1; translate:0 0 }
+  exit 0%    { opacity:1; translate:0 0 }
+  exit 22%   { opacity:0; translate:0 -12px }
+}
+.cap h2{margin:0 0 8px;font:300 30px/1.08 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.02em;color:var(--frost)}
+.cap p{margin:0;color:#C9CEEA;font-size:15px;line-height:1.5}
+.cap .lines{display:flex;flex-direction:column;gap:5px;margin-top:12px;padding:10px 12px;border-radius:9px;background:rgb(8 6 24 / .55);border:1px solid rgb(140 147 196 / .16)}
+.cap .lines code{font:400 13.5px/1.3 "Martian Mono",ui-monospace,monospace;font-stretch:75%;color:var(--ice);white-space:nowrap}
+.cap .lines code.deny{color:var(--heat-3)}
+.cap .lines code.warn{color:var(--heat-4)}
+.cap .lines code b{display:inline-block;min-width:7.5ch;color:var(--mist);font-weight:400}
+
+/* the catch flash */
+.catch{position:fixed;left:var(--cx);top:68%;transform:translate(-50%,-50%);z-index:7;pointer-events:none;
+  text-align:center;opacity:0;padding:14px 26px;border-radius:14px;width:max-content;max-width:calc(100vw - 48px);
+  background:rgba(10,7,26,.8);border:1px solid rgba(255,122,47,.45);
+  box-shadow:0 0 50px rgba(240,48,106,.4), inset 0 0 30px rgba(255,122,47,.12);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  animation:catchIn linear both;animation-timeline:scroll(root);animation-range:47% 55.5%;}
+@keyframes catchIn{ 0%{opacity:0;transform:translate(-50%,-50%) scale(.82)} 34%{opacity:1;transform:translate(-50%,-50%) scale(1)} 72%{opacity:1;transform:translate(-50%,-50%) scale(1)} 100%{opacity:0;transform:translate(-50%,-50%) scale(1.1)} }
+.catch .big{font:300 30px/1.1 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em;color:var(--heat-5);text-shadow:0 0 26px rgba(255,122,47,.8)}
+.catch .sub{margin-top:8px;color:var(--heat-4);font-size:15px}
+
+/* intro hint */
+.hint{position:fixed;left:var(--cx);bottom:7vh;transform:translateX(-50%);z-index:4;pointer-events:none;text-align:center;
+  animation:hintOut linear both;animation-timeline:scroll(root);animation-range:0% 6%;}
+@keyframes hintOut{ 0%{opacity:1} 100%{opacity:0} }
+.hint .t{font:300 18px/1 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;color:var(--frost)}
+.hint .c{margin-top:10px;font-size:22px;color:var(--ice);animation:bob 1.8s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0);opacity:.6}50%{transform:translateY(7px);opacity:1}}
+
+/* depth gauge: layer names beside ticks; camera marker and the attack's hot marker */
+.gauge{position:fixed;right:16px;top:50%;transform:translateY(-50%);z-index:6;pointer-events:none;
+  width:148px;height:330px;padding:16px 14px;border-radius:12px;
+  background:rgb(16 12 42 / .62);border:1px solid rgb(140 147 196 / .18);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.g-rail{position:absolute;right:20px;top:18px;bottom:18px;width:2px;background:rgb(78 90 140 / .6);border-radius:2px}
+.g-tick{position:absolute;right:-4px;top:calc(var(--f) * 100%);width:10px;height:2px;margin-top:-1px;background:var(--mist)}
+.g-tick span{position:absolute;right:18px;top:50%;transform:translateY(-50%);white-space:nowrap;
+  font:500 12.5px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist);
+  animation:gOn linear both;animation-timeline:scroll(root);
+  animation-range:calc(var(--f) * 100% - 9%) calc(var(--f) * 100% + 5%);}
+@keyframes gOn{ 0%{color:var(--mist)} 30%{color:var(--frost)} 75%{color:var(--frost)} 100%{color:var(--mist)} }
+.g-cam{position:absolute;left:50%;top:0;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;
+  border:2px solid var(--frost);background:var(--void);box-shadow:0 0 10px rgba(155,232,255,.7);
+  animation:gCam linear both;animation-timeline:scroll(root);}
+@keyframes gCam{ from{top:0%} to{top:100%} }
+.g-atk{position:absolute;left:50%;top:4%;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;
+  background:var(--heat-3);box-shadow:0 0 12px var(--heat-3), 0 0 22px var(--heat-2);
+  animation:gAtk linear both;animation-timeline:scroll(root);}
+@keyframes gAtk{
+  0%    {top:4%; background:var(--heat-3); box-shadow:0 0 12px var(--heat-3), 0 0 22px var(--heat-2)}
+  47.87% {top:47.87%; background:var(--heat-5); box-shadow:0 0 16px var(--heat-4), 0 0 30px var(--heat-3)}
+  52%   {top:47.87%; background:var(--heat-1); box-shadow:0 0 8px var(--heat-1)}
+  60%   {top:47.87%; background:var(--steel); box-shadow:0 0 0 transparent}
+  100%  {top:47.87%; background:var(--steel); box-shadow:0 0 0 transparent}
+}
+
+/* ===== reduced motion: ramps become cuts, no slam, no shards, no auto-scroll ===== */
+.rm{--w:.001; --w2:.001; --slamon:0; --twist:0deg}
+.rm .frag{display:none}
+.rm .hint .c{animation:none}
+
+/* ===== fallback without scroll-driven animations: a still, exploded side view ===== */
+.nofx{--zk:.3}
+.nofx .scroll{height:100vh}
+.nofx .stage{animation:none;--depth:0;--p:.5;perspective:1700px}
+.nofx .world{left:50%;top:45%;transform:translateZ(-2350px) rotateX(9deg) rotateY(-56deg) translateZ(1450px)}
+.nofx .layer{--lop:.95;--open:.55;--blur:0;--bright:1}
+.nofx .layer.sandbox{--open:-.08}
+.nofx .core-wrap{opacity:1;filter:none}
+.nofx .hoop{opacity:.8}
+.nofx .rib{opacity:.35}
+.nofx .payload{animation:none;opacity:1;transform:scale(.7)}
+.nofx .frag{animation:none;opacity:.9;--k:.35}
+.nofx .caps,.nofx .hint,.nofx .catch,.nofx .g-cam,.nofx .fog-hot{display:none}
+.nofx .g-atk{animation:none;top:47.87%;background:var(--steel);box-shadow:none}
+.nofx .g-tick span{animation:none;color:var(--frost)}
+
+/* ---------- mobile portrait: narrower FOV and smaller rings so they still wrap ---------- */
+@media (max-aspect-ratio:3/4){
+  :root{ --pw:112px; --ph:380px; --r0:50px; --reach:300px; --persp:760px; --R:560px; --cx:50%; --cy:52%; }
+  .face{left:6px;right:6px;top:9px;padding:6px 6px}
+  .face code{font-size:11.5px}
+  .face small{font-size:10px}
+  .payload{width:130px;height:130px;margin:-65px 0 0 -65px}
+  .core{width:270px;height:200px;margin:-100px 0 0 -135px;padding:18px 18px;font-size:14px}
+  .core b{font-size:19px}
+  .cap{top:12px;margin:0 12px;width:auto;padding:13px 15px 12px}
+  .cap h2{font-size:22px}
+  .cap p{font-size:13.5px;line-height:1.45}
+  .cap .lines{margin-top:9px;padding:8px 10px}
+  .cap .lines code{font-size:12px}
+  .catch{top:63%;padding:12px 18px}
+  .catch .big{font-size:22px}
+  .catch .sub{font-size:13px}
+  .gauge{right:6px;width:26px;height:220px;padding:0;top:54%}
+  .g-rail{right:12px;top:12px;bottom:12px}
+  .g-tick span{display:none}
+}
+
+/* ---------- notes card (shared contract) ---------- */
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+.fallback-note{display:none}
+.nofx .fallback-note{display:block;color:var(--heat-4)}
+</style>
+</head>
+<body>
+<div class="scroll">
+  <div class="stage" aria-hidden="true">
+    <div class="fog-hot"></div>
+    <div class="world">
+      <i class="rib" style="--i:0;--zs:0"></i><i class="rib" style="--i:1;--zs:0"></i><i class="rib" style="--i:2;--zs:0"></i><i class="rib" style="--i:3;--zs:0"></i><i class="rib" style="--i:4;--zs:0"></i><i class="rib" style="--i:5;--zs:0"></i><i class="rib" style="--i:6;--zs:0"></i><i class="rib" style="--i:7;--zs:0"></i><i class="rib" style="--i:8;--zs:0"></i><i class="rib" style="--i:9;--zs:0"></i><i class="rib" style="--i:0;--zs:600"></i><i class="rib" style="--i:1;--zs:600"></i><i class="rib" style="--i:2;--zs:600"></i><i class="rib" style="--i:3;--zs:600"></i><i class="rib" style="--i:4;--zs:600"></i><i class="rib" style="--i:5;--zs:600"></i><i class="rib" style="--i:6;--zs:600"></i><i class="rib" style="--i:7;--zs:600"></i><i class="rib" style="--i:8;--zs:600"></i><i class="rib" style="--i:9;--zs:600"></i><i class="rib" style="--i:0;--zs:1200"></i><i class="rib" style="--i:1;--zs:1200"></i><i class="rib" style="--i:2;--zs:1200"></i><i class="rib" style="--i:3;--zs:1200"></i><i class="rib" style="--i:4;--zs:1200"></i><i class="rib" style="--i:5;--zs:1200"></i><i class="rib" style="--i:6;--zs:1200"></i><i class="rib" style="--i:7;--zs:1200"></i><i class="rib" style="--i:8;--zs:1200"></i><i class="rib" style="--i:9;--zs:1200"></i><i class="rib" style="--i:0;--zs:1800"></i><i class="rib" style="--i:1;--zs:1800"></i><i class="rib" style="--i:2;--zs:1800"></i><i class="rib" style="--i:3;--zs:1800"></i><i class="rib" style="--i:4;--zs:1800"></i><i class="rib" style="--i:5;--zs:1800"></i><i class="rib" style="--i:6;--zs:1800"></i><i class="rib" style="--i:7;--zs:1800"></i><i class="rib" style="--i:8;--zs:1800"></i><i class="rib" style="--i:9;--zs:1800"></i><i class="rib" style="--i:0;--zs:2400"></i><i class="rib" style="--i:1;--zs:2400"></i><i class="rib" style="--i:2;--zs:2400"></i><i class="rib" style="--i:3;--zs:2400"></i><i class="rib" style="--i:4;--zs:2400"></i><i class="rib" style="--i:5;--zs:2400"></i><i class="rib" style="--i:6;--zs:2400"></i><i class="rib" style="--i:7;--zs:2400"></i><i class="rib" style="--i:8;--zs:2400"></i><i class="rib" style="--i:9;--zs:2400"></i><i class="rib" style="--i:0;--zs:3000"></i><i class="rib" style="--i:1;--zs:3000"></i><i class="rib" style="--i:2;--zs:3000"></i><i class="rib" style="--i:3;--zs:3000"></i><i class="rib" style="--i:4;--zs:3000"></i><i class="rib" style="--i:5;--zs:3000"></i><i class="rib" style="--i:6;--zs:3000"></i><i class="rib" style="--i:7;--zs:3000"></i><i class="rib" style="--i:8;--zs:3000"></i><i class="rib" style="--i:9;--zs:3000"></i><i class="rib" style="--i:0;--zs:3600"></i><i class="rib" style="--i:1;--zs:3600"></i><i class="rib" style="--i:2;--zs:3600"></i><i class="rib" style="--i:3;--zs:3600"></i><i class="rib" style="--i:4;--zs:3600"></i><i class="rib" style="--i:5;--zs:3600"></i><i class="rib" style="--i:6;--zs:3600"></i><i class="rib" style="--i:7;--zs:3600"></i><i class="rib" style="--i:8;--zs:3600"></i><i class="rib" style="--i:9;--zs:3600"></i><i class="rib" style="--i:0;--zs:4200"></i><i class="rib" style="--i:1;--zs:4200"></i><i class="rib" style="--i:2;--zs:4200"></i><i class="rib" style="--i:3;--zs:4200"></i><i class="rib" style="--i:4;--zs:4200"></i><i class="rib" style="--i:5;--zs:4200"></i><i class="rib" style="--i:6;--zs:4200"></i><i class="rib" style="--i:7;--zs:4200"></i><i class="rib" style="--i:8;--zs:4200"></i><i class="rib" style="--i:9;--zs:4200"></i><i class="rib" style="--i:0;--zs:4800"></i><i class="rib" style="--i:1;--zs:4800"></i><i class="rib" style="--i:2;--zs:4800"></i><i class="rib" style="--i:3;--zs:4800"></i><i class="rib" style="--i:4;--zs:4800"></i><i class="rib" style="--i:5;--zs:4800"></i><i class="rib" style="--i:6;--zs:4800"></i><i class="rib" style="--i:7;--zs:4800"></i><i class="rib" style="--i:8;--zs:4800"></i><i class="rib" style="--i:9;--zs:4800"></i><i class="rib" style="--i:0;--zs:5400"></i><i class="rib" style="--i:1;--zs:5400"></i><i class="rib" style="--i:2;--zs:5400"></i><i class="rib" style="--i:3;--zs:5400"></i><i class="rib" style="--i:4;--zs:5400"></i><i class="rib" style="--i:5;--zs:5400"></i><i class="rib" style="--i:6;--zs:5400"></i><i class="rib" style="--i:7;--zs:5400"></i><i class="rib" style="--i:8;--zs:5400"></i><i class="rib" style="--i:9;--zs:5400"></i><i class="rib" style="--i:0;--zs:6000"></i><i class="rib" style="--i:1;--zs:6000"></i><i class="rib" style="--i:2;--zs:6000"></i><i class="rib" style="--i:3;--zs:6000"></i><i class="rib" style="--i:4;--zs:6000"></i><i class="rib" style="--i:5;--zs:6000"></i><i class="rib" style="--i:6;--zs:6000"></i><i class="rib" style="--i:7;--zs:6000"></i><i class="rib" style="--i:8;--zs:6000"></i><i class="rib" style="--i:9;--zs:6000"></i><i class="rib" style="--i:0;--zs:6600"></i><i class="rib" style="--i:1;--zs:6600"></i><i class="rib" style="--i:2;--zs:6600"></i><i class="rib" style="--i:3;--zs:6600"></i><i class="rib" style="--i:4;--zs:6600"></i><i class="rib" style="--i:5;--zs:6600"></i><i class="rib" style="--i:6;--zs:6600"></i><i class="rib" style="--i:7;--zs:6600"></i><i class="rib" style="--i:8;--zs:6600"></i><i class="rib" style="--i:9;--zs:6600"></i><i class="rib" style="--i:0;--zs:7200"></i><i class="rib" style="--i:1;--zs:7200"></i><i class="rib" style="--i:2;--zs:7200"></i><i class="rib" style="--i:3;--zs:7200"></i><i class="rib" style="--i:4;--zs:7200"></i><i class="rib" style="--i:5;--zs:7200"></i><i class="rib" style="--i:6;--zs:7200"></i><i class="rib" style="--i:7;--zs:7200"></i><i class="rib" style="--i:8;--zs:7200"></i><i class="rib" style="--i:9;--zs:7200"></i><i class="rib" style="--i:0;--zs:7800"></i><i class="rib" style="--i:1;--zs:7800"></i><i class="rib" style="--i:2;--zs:7800"></i><i class="rib" style="--i:3;--zs:7800"></i><i class="rib" style="--i:4;--zs:7800"></i><i class="rib" style="--i:5;--zs:7800"></i><i class="rib" style="--i:6;--zs:7800"></i><i class="rib" style="--i:7;--zs:7800"></i><i class="rib" style="--i:8;--zs:7800"></i><i class="rib" style="--i:9;--zs:7800"></i><i class="rib" style="--i:0;--zs:8400"></i><i class="rib" style="--i:1;--zs:8400"></i><i class="rib" style="--i:2;--zs:8400"></i><i class="rib" style="--i:3;--zs:8400"></i><i class="rib" style="--i:4;--zs:8400"></i><i class="rib" style="--i:5;--zs:8400"></i><i class="rib" style="--i:6;--zs:8400"></i><i class="rib" style="--i:7;--zs:8400"></i><i class="rib" style="--i:8;--zs:8400"></i><i class="rib" style="--i:9;--zs:8400"></i>
+      <div class="hoop t-edge" style="--z:1500"></div>
+      <div class="layer t-edge" style="--z:1500;--n:10">
+        <div class="petal" style="--i:0"><div class="face"><code>403 GET /.env</code><small>path blocked</small></div></div>
+        <div class="petal" style="--i:1"><div class="face"><code>429 POST /login</code><small>rate limited</small></div></div>
+        <div class="petal hot" style="--i:2"><div class="face"><code>200 POST /v1/agent</code><small>base64 body, no rule matched</small></div></div>
+        <div class="petal" style="--i:3"><div class="face"><code>403 ?id=1' OR 1=1--</code><small>SQL injection</small></div></div>
+        <div class="petal" style="--i:4"><div class="face"><code>403 /../../etc/passwd</code><small>path traversal</small></div></div>
+        <div class="petal" style="--i:5"><div class="face"><code>429 198.51.100.7</code><small>600 requests a minute</small></div></div>
+        <div class="petal" style="--i:6"><div class="face"><code>403 &lt;script&gt;alert(1)</code><small>cross-site scripting</small></div></div>
+        <div class="petal" style="--i:7"><div class="face"><code>403 sqlmap/1.8</code><small>known scanner</small></div></div>
+        <div class="petal" style="--i:8"><div class="face"><code>413 POST /upload</code><small>body too large</small></div></div>
+        <div class="petal" style="--i:9"><div class="face"><code>429 /v1/agent</code><small>token bucket empty</small></div></div>
+      </div>
+      <div class="hoop t-identity" style="--z:3000"></div>
+      <div class="layer t-identity" style="--z:3000;--n:10">
+        <div class="petal" style="--i:0"><div class="face"><code>ci-runner</code><small>scope repo:read</small></div></div>
+        <div class="petal" style="--i:1"><div class="face"><code>agent-7f3a</code><small>expires in 15 min</small></div></div>
+        <div class="petal" style="--i:2"><div class="face"><code>oidc github</code><small>aud sts.amazonaws.com</small></div></div>
+        <div class="petal" style="--i:3"><div class="face"><code>deploy-bot</code><small>scope deploy:staging</small></div></div>
+        <div class="petal" style="--i:4"><div class="face"><code>reviewer</code><small>mfa webauthn</small></div></div>
+        <div class="petal hot" style="--i:5"><div class="face"><code>ghs_…9Kq2</code><small>valid, replayed from a leaked log</small></div></div>
+        <div class="petal" style="--i:6"><div class="face"><code>agent-2c91</code><small>expired, denied</small></div></div>
+        <div class="petal" style="--i:7"><div class="face"><code>admin:org</code><small>scope not granted</small></div></div>
+        <div class="petal" style="--i:8"><div class="face"><code>session</code><small>bound to one device</small></div></div>
+        <div class="petal" style="--i:9"><div class="face"><code>api key</code><small>standing keys disabled</small></div></div>
+      </div>
+      <div class="hoop t-sandbox" style="--z:4500"></div>
+      <div class="layer sandbox t-sandbox" style="--z:4500;--n:10">
+        <div class="payload"></div>
+        <div class="petal" style="--i:0"><div class="face"><code>--network=none</code><small>no egress</small></div></div>
+        <div class="petal" style="--i:1"><div class="face"><code>/workspace rw</code><small>scratch copy</small></div></div>
+        <div class="petal" style="--i:2"><div class="face"><code>/home ro</code><small>read-only mount</small></div></div>
+        <div class="petal" style="--i:3"><div class="face"><code>/etc ro</code><small>read-only mount</small></div></div>
+        <div class="petal" style="--i:4"><div class="face"><code>uid 1000</code><small>not root</small></div></div>
+        <div class="petal" style="--i:5"><div class="face"><code>cap-drop ALL</code><small>no capabilities</small></div></div>
+        <div class="petal" style="--i:6"><div class="face"><code>seccomp</code><small>default profile</small></div></div>
+        <div class="petal" style="--i:7"><div class="face"><code>pids 256</code><small>fork bombs capped</small></div></div>
+        <div class="petal" style="--i:8"><div class="face"><code>mem 4 GiB</code><small>cpu 2</small></div></div>
+        <div class="petal" style="--i:9"><div class="face"><code>ttl 30 min</code><small>then destroyed</small></div></div>
+        <div class="frag" style="--a:12deg;--spread:420px;--spin:220deg"></div>
+        <div class="frag" style="--a:48deg;--spread:540px;--spin:-180deg"></div>
+        <div class="frag" style="--a:85deg;--spread:360px;--spin:300deg"></div>
+        <div class="frag" style="--a:122deg;--spread:500px;--spin:-240deg"></div>
+        <div class="frag" style="--a:158deg;--spread:450px;--spin:160deg"></div>
+        <div class="frag" style="--a:196deg;--spread:600px;--spin:-320deg"></div>
+        <div class="frag" style="--a:232deg;--spread:390px;--spin:260deg"></div>
+        <div class="frag" style="--a:270deg;--spread:520px;--spin:-200deg"></div>
+        <div class="frag" style="--a:305deg;--spread:470px;--spin:340deg"></div>
+        <div class="frag" style="--a:338deg;--spread:560px;--spin:-150deg"></div>
+        <div class="frag" style="--a:28deg;--spread:300px;--spin:400deg"></div>
+        <div class="frag" style="--a:104deg;--spread:620px;--spin:-280deg"></div>
+        <div class="frag" style="--a:180deg;--spread:330px;--spin:210deg"></div>
+        <div class="frag" style="--a:215deg;--spread:560px;--spin:-360deg"></div>
+        <div class="frag" style="--a:292deg;--spread:340px;--spin:300deg"></div>
+        <div class="frag" style="--a:352deg;--spread:480px;--spin:-220deg"></div>
+      </div>
+      <div class="hoop t-policy" style="--z:5900"></div>
+      <div class="layer t-policy" style="--z:5900;--n:10">
+        <div class="petal" style="--i:0"><div class="face"><code>allow pytest</code><small>test runner</small></div></div>
+        <div class="petal" style="--i:1"><div class="face"><code>allow ruff check</code><small>linter</small></div></div>
+        <div class="petal" style="--i:2"><div class="face"><code>allow git diff</code><small>read-only git</small></div></div>
+        <div class="petal" style="--i:3"><div class="face"><code>deny curl | sh</code><small>piped installs</small></div></div>
+        <div class="petal" style="--i:4"><div class="face"><code>deny ssh</code><small>no remote shells</small></div></div>
+        <div class="petal" style="--i:5"><div class="face"><code>pin numpy==2.1.3</code><small>hash-locked</small></div></div>
+        <div class="petal" style="--i:6"><div class="face"><code>npm.acme.dev</code><small>internal mirror only</small></div></div>
+        <div class="petal" style="--i:7"><div class="face"><code>@acme/* internal</code><small>no public look-alikes</small></div></div>
+        <div class="petal" style="--i:8"><div class="face"><code>deny write .env</code><small>secret files</small></div></div>
+        <div class="petal" style="--i:9"><div class="face"><code>new dependency</code><small>needs human review</small></div></div>
+      </div>
+      <div class="hoop t-secrets" style="--z:7300"></div>
+      <div class="layer t-secrets" style="--z:7300;--n:10">
+        <div class="petal" style="--i:0"><div class="face"><code>lease aws 10m</code><small>scoped to one task</small></div></div>
+        <div class="petal" style="--i:1"><div class="face"><code>lease db-ro 15m</code><small>read-only role</small></div></div>
+        <div class="petal" style="--i:2"><div class="face"><code>HSM signs</code><small>key never exported</small></div></div>
+        <div class="petal" style="--i:3"><div class="face"><code>rotate 24 h</code><small>database password</small></div></div>
+        <div class="petal" style="--i:4"><div class="face"><code>audit on</code><small>every read logged</small></div></div>
+        <div class="petal" style="--i:5"><div class="face"><code>vault:db/creds/ro</code><small>a reference, not a value</small></div></div>
+        <div class="petal" style="--i:6"><div class="face"><code>no env secrets</code><small>injected at call time</small></div></div>
+        <div class="petal" style="--i:7"><div class="face"><code>sts ttl 900s</code><small>assume-role</small></div></div>
+        <div class="petal" style="--i:8"><div class="face"><code>revoke on exit</code><small>lease ends with the task</small></div></div>
+        <div class="petal" style="--i:9"><div class="face"><code>KMS sealed</code><small>unseal needs two people</small></div></div>
+      </div>
+      <div class="hoop t-core" style="--z:9100"></div>
+      <div class="core-wrap" style="--z:9100">
+        <div class="core">
+          <b>Your data</b>
+          <span>repo</span> main, read-only<br>
+          <span>customers</span> 2.4M rows<br>
+          <span>secrets</span> sealed
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="caps" aria-hidden="true">
+    <section class="cap-sec" style="--a:0;--b:0.035">
+      <div class="cap t-intro">
+        <h2>Defense in depth</h2>
+        <p>Six layers stand between an AI coding agent and your data. One disguised attack is about to try all of them.</p>
+      </div>
+    </section>
+    <section class="cap-sec" style="--a:0.095;--b:0.2">
+      <div class="cap t-edge">
+        <h2>Edge</h2>
+        <p>Rate limits and a web application firewall drop the obvious junk. This payload is base64-wrapped, so no signature matches and it slips through.</p>
+        <div class="lines">
+          <code><b>allow</b> POST /v1/agent</code>
+          <code class="deny"><b>block</b> ?id=1' OR 1=1--</code>
+          <code class="warn"><b>pass</b> base64 body, no rule matched</code>
+        </div>
+      </div>
+    </section>
+    <section class="cap-sec" style="--a:0.26;--b:0.355">
+      <div class="cap t-identity">
+        <h2>Identity</h2>
+        <p>Every call needs a scoped token that expires in minutes. This one is valid. It was also lifted from a public CI log.</p>
+        <div class="lines">
+          <code><b>scope</b> repo:read, ttl 15m</code>
+          <code class="warn"><b>pass</b> replayed ghs_…9Kq2</code>
+        </div>
+      </div>
+    </section>
+    <section class="cap-sec" style="--a:0.405;--b:0.52">
+      <div class="cap t-sandbox">
+        <h2>Sandbox</h2>
+        <p>The agent works in a container with no network and read-only mounts. The disguise stops mattering: there is nowhere to send anything.</p>
+        <div class="lines">
+          <code><b>network</b> none</code>
+          <code><b>mounts</b> /home ro, /etc ro</code>
+          <code class="deny"><b>payload</b> contained</code>
+        </div>
+      </div>
+    </section>
+    <section class="cap-sec" style="--a:0.58;--b:0.665">
+      <div class="cap t-policy">
+        <h2>Policy</h2>
+        <p>Commands and dependencies come from allow-lists. Piped installs are denied, and internal package names can’t be shadowed from public npm.</p>
+        <div class="lines">
+          <code><b>allow</b> pytest, ruff check</code>
+          <code class="deny"><b>deny</b> curl | sh</code>
+          <code><b>scope</b> @acme/* internal only</code>
+        </div>
+      </div>
+    </section>
+    <section class="cap-sec" style="--a:0.725;--b:0.8">
+      <div class="cap t-secrets">
+        <h2>Secrets vault</h2>
+        <p>Keys never leave the vault. The agent gets credentials that expire in 10 minutes, scoped to one task.</p>
+        <div class="lines">
+          <code><b>lease</b> aws, ttl 10m</code>
+          <code><b>sign</b> inside the HSM</code>
+        </div>
+      </div>
+    </section>
+    <section class="cap-sec" style="--a:0.865;--b:1">
+      <div class="cap t-core">
+        <h2>Your data</h2>
+        <p>Cold and untouched. No single layer had to be perfect.</p>
+        <div class="lines">
+          <code><b>repo</b> read-only</code>
+          <code><b>secrets</b> sealed</code>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="catch" aria-hidden="true">
+  <div class="big">Stopped at the sandbox</div>
+  <div class="sub">No network to call out to, nothing writable to keep. It burns out and cools.</div>
+</div>
+
+<div class="hint" aria-hidden="true">
+  <div class="t">Scroll to descend</div>
+  <div class="c">&#8595;</div>
+</div>
+
+<div class="gauge" aria-hidden="true">
+  <div class="g-rail">
+      <div class="g-tick" style="--f:0.1596"><span>Edge</span></div>
+      <div class="g-tick" style="--f:0.3191"><span>Identity</span></div>
+      <div class="g-tick" style="--f:0.4787"><span>Sandbox</span></div>
+      <div class="g-tick" style="--f:0.6277"><span>Policy</span></div>
+      <div class="g-tick" style="--f:0.7766"><span>Secrets vault</span></div>
+      <div class="g-tick" style="--f:0.9681"><span>Your data</span></div>
+    <div class="g-atk"></div>
+    <div class="g-cam"></div>
+  </div>
+</div>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Defense in depth</h1>
+  <p>Scroll to fly down through six layers that guard an AI coding agent. A disguised attack slips past the edge and identity, then breaks against the sandbox and cools; the data at the core stays cold.</p>
+  <ul class="tech">
+    <li>Pure CSS 3D: <code>preserve-3d</code> irises, hoops and tunnel ribs, with no animation JavaScript</li>
+    <li><code>animation-timeline: scroll(root)</code> drives one typed <code>@property --depth</code>; each layer derives its fog, aperture and fade from it with <code>calc()</code> and <code>clamp()</code></li>
+    <li><code>view()</code> timelines on sticky sections bring each caption in</li>
+    <li>CSS trig: <code>sin()</code> and <code>cos()</code> with <code>--i</code> place every petal, rib and shard, and fake a light from the upper left</li>
+    <li class="fallback-note">Your browser lacks scroll-driven animations, so this is a still, exploded view of the six layers.</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="true">Play</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<script>
+(() => {
+'use strict';
+/* JS here only scrolls the page (hooks, play) and runs the notes card. All motion is CSS. */
+const $ = id => document.getElementById(id);
+const root = document.documentElement;
+const qs = new URLSearchParams(location.search);
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches || qs.has('rm');
+const PERIOD = 24;
+const SUPPORTED = CSS.supports('animation-timeline: scroll()') && CSS.supports('width: calc(sin(1rad) * 1px)') && !qs.has('nofx');
+if (!SUPPORTED) root.classList.add('nofx');
+if (RM) root.classList.add('rm');
+
+const scroller = document.scrollingElement || document.documentElement;
+const range = () => Math.max(1, scroller.scrollHeight - scroller.clientHeight);
+
+/* play: auto-scroll 1/24 of the range per second, looping to the top */
+const ppBtn = $('playpause');
+let playing = false, rafId = null, lastTs = null, pos = 0;
+function setBtn(){ ppBtn.textContent = playing ? 'Pause' : 'Play'; ppBtn.setAttribute('aria-pressed', playing ? 'false' : 'true'); }
+function stop(){ playing = false; lastTs = null; if (rafId){ cancelAnimationFrame(rafId); rafId = null; } setBtn(); }
+function step(ts){
+  if (!playing){ rafId = null; return; }
+  if (lastTs == null){ lastTs = ts; pos = scroller.scrollTop; }
+  const dt = Math.min(.05, (ts - lastTs) / 1000); lastTs = ts;
+  if (Math.abs(scroller.scrollTop - pos) > 3) pos = scroller.scrollTop;   // the user scrolled: follow them
+  pos += range() / PERIOD * dt;
+  if (pos >= range() - .5) pos = 0;
+  scroller.scrollTop = pos;
+  rafId = requestAnimationFrame(step);
+}
+function play(){
+  if (RM || !SUPPORTED) return;               // reduced motion: no auto-scroll
+  if (scroller.scrollTop >= range() - 1) scroller.scrollTop = 0;
+  playing = true; lastTs = null; setBtn();
+  if (!rafId) rafId = requestAnimationFrame(step);
+}
+function toggle(){ playing ? stop() : play(); }
+ppBtn.addEventListener('click', toggle);
+
+const notes = $('notes'), showBtn = $('show-notes');
+$('hide-notes').addEventListener('click', () => { notes.hidden = true; showBtn.hidden = false; showBtn.focus(); });
+showBtn.addEventListener('click', () => { notes.hidden = false; showBtn.hidden = true; });
+addEventListener('keydown', e => {
+  if (e.key === 'h' || e.key === 'H'){ if (e.metaKey || e.ctrlKey || e.altKey) return; if (notes.hidden) showBtn.click(); else $('hide-notes').click(); }
+  else if (e.key === ' ' || e.code === 'Space'){
+    const a = document.activeElement;
+    if (a && (a.tagName === 'BUTTON' || a.tagName === 'A' || a.getAttribute('role') === 'button')) return;
+    e.preventDefault(); toggle();
+  }
+});
+
+/* __seek(t): scrollTop = (t mod 24) / 24 of the scroll range, then wait two frames */
+function seek(t){
+  stop();
+  let tt = (+t || 0) % PERIOD; if (tt < 0) tt += PERIOD;
+  scroller.scrollTop = tt / PERIOD * range();
+  return new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+}
+function boot(){
+  if (qs.has('t')){ const t = parseFloat(qs.get('t')) || 0; scroller.scrollTop = ((t % PERIOD) + PERIOD) % PERIOD / PERIOD * range(); }
+  else scroller.scrollTop = 0;
+  setBtn();
+  window.__seek = seek;
+  window.__play = play;
+}
+const ready = document.fonts && document.fonts.ready
+  ? Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 2500))]) : Promise.resolve();
+ready.then(boot);
+})();
+</script>
+</body>
+</html>

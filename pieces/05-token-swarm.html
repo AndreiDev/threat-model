@@ -1,0 +1,899 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token swarm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--void)}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+
+.fallback{position:fixed;inset:0;display:grid;place-items:center;color:var(--mist);
+  font:400 15px/1.5 "Schibsted Grotesk",system-ui,sans-serif;padding:24px;text-align:center}
+</style>
+</head>
+<body>
+<canvas id="c" role="img" aria-label="Glowing particles that keep re-forming into code braces, a neural network, a shield, a padlock and the word verified. Particles glow hot orange while moving and cool to ice blue once they settle."></canvas>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Token swarm</h1>
+  <p>Every token of an AI coding session is a particle: it runs hot while it flies untrusted, then cools to ice as it settles into code, a model, a shield, a lock and a verified mark.</p>
+  <ul class="tech">
+    <li>Shapes rasterised offscreen, sampled by luminance into 24,576 seeded targets</li>
+    <li>Morph and curl-noise flow run per particle in a hand-written WebGL2 vertex shader</li>
+    <li>Point sprites stretched into soft capsules along their motion, coloured by speed</li>
+    <li>Trails from ghost passes, so each frame stays a pure function of t</li>
+    <li>Your pointer is a probe that pushes tokens aside and heats them up</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<script>
+(() => {
+'use strict';
+
+/* ------------------------------------------------------------------
+   Storyboard (seconds). Loop = 5 segments x 3.8 s = 19 s.
+   Each segment: morph INTO shape b for 1.6 s (per-particle stagger
+   up to 0.55 s, flight 1.05 s), then hold it for 2.2 s.
+     0.0 - 3.8   braces { | }      (first loop: from a hot scatter)
+     3.8 - 7.6   neural network    (wipe follows the data flow)
+     7.6 - 11.4  shield + check    (builds up from the tip)
+    11.4 - 15.2  padlock           (shackle first)
+    15.2 - 19.0  "verified" + check (left to right, like typing)
+   ------------------------------------------------------------------ */
+const N = 24576, TW = 512, TH = N / TW, NS = 5;
+const SEG = 3.8, LOOP = SEG * NS;
+const GHOSTS = 4, GHOST_DT = 1 / 40, GSTRIDE = 8;
+const REDUCED_T = 10.6;           // held shield, used for reduced motion
+
+const qs = new URLSearchParams(location.search);
+const LOW = qs.get('q') === 'low' || qs.has('low');
+
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2', {
+  antialias: false, alpha: false, depth: false, stencil: false,
+  premultipliedAlpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance'
+});
+
+const notes = document.getElementById('notes');
+const showNotes = document.getElementById('show-notes');
+const hideNotes = document.getElementById('hide-notes');
+const playBtn = document.getElementById('playpause');
+
+/* ---------------- state ---------------- */
+let t = 0, playing = true, raf = 0, last = null, ready = false;
+let W = 1, H = 1, dpr = 1, L = null;
+const probe = { x: 0, y: 0, s: 0, target: 0, lastMove: -1e9 };
+
+const tParam = qs.get('t');
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (tParam !== null && isFinite(parseFloat(tParam))) { t = parseFloat(tParam); playing = false; }
+else if (reduced) { t = REDUCED_T; playing = false; }
+
+/* ---------------- seeded PRNG ---------------- */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let r = Math.imul(a ^ a >>> 15, 1 | a);
+    r = r + Math.imul(r ^ r >>> 7, 61 | r) ^ r;
+    return ((r ^ r >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* Hilbert index: samples are taken in curve order, so particle i lands on
+   the "same place along the curve" in every shape and morphs stay coherent. */
+function hilbert(n, x, y) {
+  let d = 0;
+  for (let s = n >> 1; s > 0; s >>= 1) {
+    const rx = (x & s) > 0 ? 1 : 0, ry = (y & s) > 0 ? 1 : 0;
+    d += s * s * ((3 * rx) ^ ry);
+    if (ry === 0) {
+      if (rx === 1) { x = n - 1 - x; y = n - 1 - y; }
+      const tmp = x; x = y; y = tmp;
+    }
+  }
+  return d;
+}
+
+/* ---------------- layout ---------------- */
+let cardCache = null;
+function cardRect() {
+  if (!notes.hidden) {
+    const r = notes.getBoundingClientRect();
+    if (r.width > 0) cardCache = { top: r.top, right: r.right, w: W, h: H };
+  }
+  return cardCache && cardCache.w === W && cardCache.h === H ? cardCache : null;
+}
+function computeLayout() {
+  const portrait = W < 700 && H > W * 1.15;
+  const S = portrait ? Math.min(0.7 * W, 0.42 * H) : 0.6 * Math.min(W, H);
+  let cx = W / 2;
+  const cy = portrait ? H * 0.4 : H * 0.48;
+  if (!portrait) {
+    // keep the widest shapes clear of the notes card (bottom left)
+    const r = cardRect();
+    if (r && r.top < cy + 0.6 * S) cx += Math.max(0, Math.min(r.right + 24 - (cx - 0.66 * S), 0.07 * W));
+  }
+  return { W, H, S, cx, cy, portrait };
+}
+
+/* ---------------- shape rasters ----------------
+   Channels: R = sampling weight, G/R = cold highlight, B/R = blinking caret */
+const MAIN = 'rgb(255,0,0)', ACC = 'rgb(255,255,0)', CARET = 'rgb(255,255,255)';
+const faint = v => `rgb(${v},0,0)`;
+const MONO = '"Martian Mono", ui-monospace, monospace';
+
+function drawBraces(c, l) {
+  const { cx, cy, S } = l;
+  const targetH = S * 1.0;
+  c.font = `400 100px ${MONO}`;
+  const m0 = c.measureText('{');
+  const gh = m0.actualBoundingBoxAscent + m0.actualBoundingBoxDescent;
+  const fs = 100 * targetH / gh;
+  c.font = `400 ${fs}px ${MONO}`;
+  const mb = c.measureText('{'), mc = c.measureText('}');
+  const yb = cy + (mb.actualBoundingBoxAscent - mb.actualBoundingBoxDescent) / 2;
+  const gap = S * 0.46;
+  c.textBaseline = 'alphabetic'; c.textAlign = 'left';
+  c.fillStyle = MAIN;
+  c.fillText('{', cx - gap / 2 - mb.actualBoundingBoxRight, yb);
+  c.fillText('}', cx + gap / 2 + mc.actualBoundingBoxLeft, yb);
+  const cw = S * 0.04, ch = targetH * 0.44;
+  c.fillStyle = CARET;
+  c.fillRect(cx - cw / 2, cy - ch / 2, cw, ch);
+}
+
+function drawNetwork(c, l) {
+  const { cx, cy, S, portrait } = l;
+  const layers = [3, 5, 5, 2];
+  const along = S * (portrait ? 1.42 : 1.24), across = S * (portrait ? 0.96 : 0.92), maxN = 5;
+  const rN = S * 0.052;
+  const pos = (j, i, n) => {
+    const a = (j / (layers.length - 1) - 0.5) * along;
+    const b = (i - (n - 1) / 2) * (across / (maxN - 1));
+    return portrait ? [cx + b, cy + a] : [cx + a, cy + b];
+  };
+  c.lineCap = 'round';
+  c.strokeStyle = faint(78); c.lineWidth = Math.max(1.2, S * 0.0075);
+  for (let j = 0; j < layers.length - 1; j++)
+    for (let i = 0; i < layers[j]; i++)
+      for (let k = 0; k < layers[j + 1]; k++) {
+        const [x0, y0] = pos(j, i, layers[j]), [x1, y1] = pos(j + 1, k, layers[j + 1]);
+        c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
+      }
+  for (let j = 0; j < layers.length; j++)
+    for (let i = 0; i < layers[j]; i++) {
+      const [x, y] = pos(j, i, layers[j]);
+      c.fillStyle = '#000'; c.beginPath(); c.arc(x, y, rN * 1.45, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = MAIN; c.lineWidth = S * 0.018;
+      c.beginPath(); c.arc(x, y, rN, 0, Math.PI * 2); c.stroke();
+      c.fillStyle = ACC; c.beginPath(); c.arc(x, y, rN * 0.46, 0, Math.PI * 2); c.fill();
+    }
+}
+
+function shieldPath(c, cx, cy, w, h) {
+  const X = u => cx + u * w, Y = v => cy + v * h;
+  c.beginPath();
+  c.moveTo(X(0), Y(-0.5));
+  c.bezierCurveTo(X(0.17), Y(-0.41), X(0.34), Y(-0.375), X(0.5), Y(-0.375));
+  c.lineTo(X(0.5), Y(0.0));
+  c.bezierCurveTo(X(0.5), Y(0.25), X(0.3), Y(0.4), X(0), Y(0.5));
+  c.bezierCurveTo(X(-0.3), Y(0.4), X(-0.5), Y(0.25), X(-0.5), Y(0.0));
+  c.lineTo(X(-0.5), Y(-0.375));
+  c.bezierCurveTo(X(-0.34), Y(-0.375), X(-0.17), Y(-0.41), X(0), Y(-0.5));
+  c.closePath();
+}
+
+function drawShield(c, l) {
+  const { cx, cy, S } = l;
+  const w = S * 0.9, h = S * 1.12;
+  c.lineJoin = 'round'; c.lineCap = 'round';
+  shieldPath(c, cx, cy, w, h);
+  c.strokeStyle = MAIN; c.lineWidth = S * 0.05; c.stroke();
+  shieldPath(c, cx, cy - h * 0.012, w * 0.78, h * 0.8);
+  c.strokeStyle = faint(95); c.lineWidth = Math.max(1.2, S * 0.011); c.stroke();
+  c.strokeStyle = ACC; c.lineWidth = S * 0.075;
+  c.beginPath();
+  c.moveTo(cx - S * 0.19, cy + S * 0.0);
+  c.lineTo(cx - S * 0.05, cy + S * 0.14);
+  c.lineTo(cx + S * 0.21, cy - S * 0.15);
+  c.stroke();
+}
+
+function drawLock(c, l) {
+  const { cx, cy, S } = l;
+  const oy = cy + 0.025 * S;
+  const bw = 0.8 * S, bh = 0.6 * S, bx = cx - bw / 2, by = oy - 0.08 * S;
+  const R = 0.25 * S, legTop = by - 0.2 * S;
+  c.lineCap = 'butt'; c.lineJoin = 'round';
+  c.strokeStyle = MAIN; c.lineWidth = 0.075 * S;
+  c.beginPath();
+  c.moveTo(cx - R, by + 0.02 * S); c.lineTo(cx - R, legTop);
+  c.arc(cx, legTop, R, Math.PI, 0);
+  c.lineTo(cx + R, by + 0.02 * S);
+  c.stroke();
+  const rr = 0.09 * S;
+  c.beginPath(); c.roundRect(bx, by, bw, bh, rr);
+  c.fillStyle = faint(34); c.fill();
+  c.strokeStyle = MAIN; c.lineWidth = 0.046 * S; c.stroke();
+  const kx = cx, ky = by + bh * 0.4, kr = 0.068 * S;
+  c.fillStyle = ACC;
+  c.beginPath(); c.arc(kx, ky, kr, 0, Math.PI * 2); c.fill();
+  c.beginPath();
+  c.moveTo(kx - kr * 0.42, ky + kr * 0.4); c.lineTo(kx + kr * 0.42, ky + kr * 0.4);
+  c.lineTo(kx + kr * 0.68, ky + kr * 2.7); c.lineTo(kx - kr * 0.68, ky + kr * 2.7);
+  c.closePath(); c.fill();
+}
+
+function drawVerified(c, l) {
+  const { cx, cy, S, W: vw, portrait } = l;
+  const setFont = fs => {
+    c.font = `250 semi-expanded ${fs}px ${MONO}`;
+    try { c.fontStretch = 'semi-expanded'; } catch (e) {}
+  };
+  setFont(100);
+  const m = c.measureText('verified');
+  const inkW = m.actualBoundingBoxLeft + m.actualBoundingBoxRight;
+  const gap100 = 34, check100 = 54;
+  const targetW = Math.min(portrait ? 1.3 * S : 1.74 * S, 0.86 * vw);
+  const fs = 100 * targetW / (inkW + gap100 + check100);
+  setFont(fs);
+  const mm = c.measureText('verified');
+  const em = fs / 100;
+  const left = cx - targetW / 2;
+  const yb = cy + (mm.actualBoundingBoxAscent - mm.actualBoundingBoxDescent) / 2;
+  c.textBaseline = 'alphabetic'; c.textAlign = 'left';
+  c.fillStyle = MAIN;
+  c.fillText('verified', left + mm.actualBoundingBoxLeft, yb);
+  const x0 = left + inkW * em + gap100 * em;
+  c.strokeStyle = ACC; c.lineWidth = 7.5 * em; c.lineCap = 'round'; c.lineJoin = 'round';
+  c.beginPath();
+  c.moveTo(x0, yb - 30 * em);
+  c.lineTo(x0 + 18 * em, yb - 9 * em);
+  c.lineTo(x0 + check100 * em, yb - 64 * em);
+  c.stroke();
+}
+
+const SHAPES = [drawBraces, drawNetwork, drawShield, drawLock, drawVerified];
+
+/* ---------------- target generation ---------------- */
+const raster = document.createElement('canvas');
+const rctx = raster.getContext('2d', { willReadFrequently: true });
+let keyBuf = null;
+const shapeI = new Float32Array(NS);
+
+function buildTargets() {
+  L = computeLayout();
+  const rs = Math.min(2, Math.sqrt(1.1e6 / (W * H)));
+  const RW = Math.max(16, Math.round(W * rs)), RH = Math.max(16, Math.round(H * rs));
+  raster.width = RW; raster.height = RH;
+  if (!keyBuf || keyBuf.length < RW * RH) keyBuf = new Float64Array(RW * RH);
+  const data = new Float32Array(TW * TH * NS * 4);
+  const G = 1024, cell = (L.S * 2.6 * rs) / G;
+  const gx0 = L.cx * rs - (G / 2) * cell, gy0 = L.cy * rs - (G / 2) * cell;
+  const PSHIFT = 2097152; // 2^21 > max pixel index
+
+  const card = cardRect();
+  const raster1 = (k, ox, oy) => {
+    rctx.setTransform(1, 0, 0, 1, 0, 0);
+    rctx.globalAlpha = 1; rctx.globalCompositeOperation = 'source-over';
+    rctx.fillStyle = '#000'; rctx.fillRect(0, 0, RW, RH);
+    rctx.setTransform(rs, 0, 0, rs, ox * rs, oy * rs);
+    SHAPES[k](rctx, L);
+    return rctx.getImageData(0, 0, RW, RH).data;
+  };
+  // smallest move (up or right) that keeps a shape's lit pixels clear of the notes card
+  const clearCard = img => {
+    if (!card) return null;
+    const m = 14, xr = (card.right + m) * rs, yt = (card.top - m) * rs;
+    let maxYL = -1, minXB = Infinity, minY = Infinity, maxX = -1;
+    for (let y = 0; y < RH; y++) for (let x = 0; x < RW; x++) {
+      if (img[(y * RW + x) * 4] < 24) continue;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (x < xr && y > maxYL) maxYL = y;
+      if (y > yt && x < minXB) minXB = x;
+    }
+    if (maxYL <= yt) return null;
+    const up = (maxYL - yt) / rs, right = (xr - minXB) / rs;
+    const upOk = minY / rs - up >= 10, rightOk = maxX / rs + right <= W - 10;
+    if (rightOk && (right <= up || !upOk)) return [right, 0];
+    if (upOk) return [0, -up];
+    return right < up ? [right, 0] : [0, -up];
+  };
+
+  for (let k = 0; k < NS; k++) {
+    let img = raster1(k, 0, 0);
+    const fix = clearCard(img);
+    if (fix) img = raster1(k, fix[0], fix[1]);
+
+    let n = 0;
+    for (let y = 0; y < RH; y++) {
+      const hy = Math.min(G - 1, Math.max(0, Math.floor((y - gy0) / cell)));
+      for (let x = 0; x < RW; x++) {
+        const p = y * RW + x;
+        if (img[p * 4] > 6) {
+          const hx = Math.min(G - 1, Math.max(0, Math.floor((x - gx0) / cell)));
+          keyBuf[n++] = hilbert(G, hx, hy) * PSHIFT + p;
+        }
+      }
+    }
+    const keys = keyBuf.subarray(0, n).sort();
+    const wts = new Float32Array(n);
+    let total = 0;
+    for (let j = 0; j < n; j++) { const p = keys[j] % PSHIFT; const w = img[p * 4] / 255; wts[j] = w; total += w; }
+
+    const rng = mulberry32(0x9E3779B9 ^ (k * 0x85EBCA6B));
+    let acc = 0, j = 0;
+    const base = k * TH * TW * 4;
+    for (let i = 0; i < N; i++) {
+      const u = (i + rng()) / N * total;
+      while (j < n - 1 && acc + wts[j] < u) { acc += wts[j]; j++; }
+      const p = keys[j] % PSHIFT;
+      const px = p % RW, py = (p / RW) | 0;
+      const x = (px + rng()) / rs, y = (py + rng()) / rs;
+      const r = Math.max(1, img[p * 4]);
+      const o = base + i * 4;
+      data[o] = x / W * 2 - 1;
+      data[o + 1] = 1 - y / H * 2;
+      data[o + 2] = Math.min(1, img[p * 4 + 1] / r);
+      data[o + 3] = Math.min(1, img[p * 4 + 2] / r);
+    }
+    // per-shape brightness: thin shapes pack particles densely, so each one is dimmer
+    const area = total / (rs * rs);              // weighted css px^2
+    const dens = N / Math.max(1, area);          // particles per css px^2 on a full-weight stroke
+    shapeI[k] = Math.min(0.95, Math.max(0.03, 0.95 / (dens * Math.PI * 1.1 * 1.1)));
+  }
+  gl.bindTexture(gl.TEXTURE_2D, targetTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, TW, TH * NS, 0, gl.RGBA, gl.FLOAT, data);
+  ready = true;
+}
+
+/* ---------------- GL ---------------- */
+if (!gl) {
+  const d = document.createElement('div');
+  d.className = 'fallback';
+  d.textContent = 'This piece needs WebGL2, which this browser does not provide.';
+  document.body.appendChild(d);
+  window.__seek = () => {}; window.__play = () => {};
+  return;
+}
+
+const NOISE = `
+vec3 mod289(vec3 x){return x-floor(x*(1./289.))*289.;}
+vec4 mod289(vec4 x){return x-floor(x*(1./289.))*289.;}
+vec2 mod289(vec2 x){return x-floor(x*(1./289.))*289.;}
+vec4 permute(vec4 x){return mod289(((x*34.)+10.)*x);}
+vec3 permute(vec3 x){return mod289(((x*34.)+10.)*x);}
+vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}
+
+// 2D simplex noise (Gustavson / McEwan)
+float snoise2(vec2 v){
+  const vec4 C=vec4(0.211324865405187,0.366025403784439,-0.577350269189626,0.024390243902439);
+  vec2 i=floor(v+dot(v,C.yy));
+  vec2 x0=v-i+dot(i,C.xx);
+  vec2 i1=(x0.x>x0.y)?vec2(1.,0.):vec2(0.,1.);
+  vec4 x12=x0.xyxy+C.xxzz; x12.xy-=i1;
+  i=mod289(i);
+  vec3 p=permute(permute(i.y+vec3(0.,i1.y,1.))+i.x+vec3(0.,i1.x,1.));
+  vec3 m=max(.5-vec3(dot(x0,x0),dot(x12.xy,x12.xy),dot(x12.zw,x12.zw)),0.);
+  m=m*m; m=m*m;
+  vec3 x=2.*fract(p*C.www)-1.;
+  vec3 h=abs(x)-.5;
+  vec3 ox=floor(x+.5);
+  vec3 a0=x-ox;
+  m*=1.79284291400159-0.85373472095314*(a0*a0+h*h);
+  vec3 g; g.x=a0.x*x0.x+h.x*x0.y; g.yz=a0.yz*x12.xz+h.yz*x12.yw;
+  return 130.*dot(m,g);
+}
+
+// 3D simplex noise with analytic gradient
+float snoise3(vec3 v, out vec3 grad){
+  const vec2 C=vec2(1./6.,1./3.);
+  const vec4 D=vec4(0.,.5,1.,2.);
+  vec3 i=floor(v+dot(v,C.yyy));
+  vec3 x0=v-i+dot(i,C.xxx);
+  vec3 g=step(x0.yzx,x0.xyz);
+  vec3 l=1.-g;
+  vec3 i1=min(g.xyz,l.zxy);
+  vec3 i2=max(g.xyz,l.zxy);
+  vec3 x1=x0-i1+C.xxx;
+  vec3 x2=x0-i2+C.yyy;
+  vec3 x3=x0-D.yyy;
+  i=mod289(i);
+  vec4 p=permute(permute(permute(i.z+vec4(0.,i1.z,i2.z,1.))+i.y+vec4(0.,i1.y,i2.y,1.))+i.x+vec4(0.,i1.x,i2.x,1.));
+  float n_=0.142857142857;
+  vec3 ns=n_*D.wyz-D.xzx;
+  vec4 j=p-49.*floor(p*ns.z*ns.z);
+  vec4 x_=floor(j*ns.z);
+  vec4 y_=floor(j-7.*x_);
+  vec4 x=x_*ns.x+ns.yyyy;
+  vec4 y=y_*ns.x+ns.yyyy;
+  vec4 h=1.-abs(x)-abs(y);
+  vec4 b0=vec4(x.xy,y.xy);
+  vec4 b1=vec4(x.zw,y.zw);
+  vec4 s0=floor(b0)*2.+1.;
+  vec4 s1=floor(b1)*2.+1.;
+  vec4 sh=-step(h,vec4(0.));
+  vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy;
+  vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
+  vec3 p0=vec3(a0.xy,h.x);
+  vec3 p1=vec3(a0.zw,h.y);
+  vec3 p2=vec3(a1.xy,h.z);
+  vec3 p3=vec3(a1.zw,h.w);
+  vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+  p0*=norm.x; p1*=norm.y; p2*=norm.z; p3*=norm.w;
+  vec4 m=max(.5-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.);
+  vec4 m2=m*m;
+  vec4 m4=m2*m2;
+  vec4 pdotx=vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3));
+  vec4 temp=m2*m*pdotx;
+  grad=-8.*(temp.x*x0+temp.y*x1+temp.z*x2+temp.w*x3);
+  grad+=m4.x*p0+m4.y*p1+m4.z*p2+m4.w*p3;
+  grad*=105.;
+  return 105.*dot(m4,pdotx);
+}
+
+// divergence-free 2D flow: curl of a scalar potential psi(x, y, t), two octaves
+vec2 curl2(vec2 q, float t){
+  vec3 g1, g2;
+  snoise3(vec3(q, t), g1);
+  snoise3(vec3(q*2.13+vec2(17.3,-4.1), t*1.37), g2);
+  return vec2(g1.y,-g1.x) + 0.42*vec2(g2.y,-g2.x);
+}
+`;
+
+const VS = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
+uniform sampler2D uT;
+uniform float uTime, uSeg, uGhost, uGlow, uAlpha, uAspect, uUnit, uPx, uMaxPt, uPortrait;
+uniform vec2 uRes, uCenter;
+uniform vec4 uProbe;
+uniform float uI[5];
+out vec3 vCol;
+out vec2 vA;
+out vec2 vB;
+out float vR;
+out float vSize;
+
+const float PI = 3.14159265;
+const float SEG = ${SEG.toFixed(3)}, LOOP = ${LOOP.toFixed(3)}, DEP = 0.7, ARR0 = 0.55, ARR = 1.0, AMP = 0.032;
+${NOISE}
+
+uint hashu(uint x){ x^=x>>16; x*=0x7feb352du; x^=x>>15; x*=0x846ca68bu; x^=x>>16; return x; }
+float h01(uint x){ return float(hashu(x)>>8)/16777216.0; }
+
+vec4 tgt(int k, int i){ return texelFetch(uT, ivec2(i & ${TW - 1}, k*${TH} + (i >> ${Math.log2(TW)})), 0); }
+
+// in-out back: a little anticipation on lift-off, a little overshoot on landing
+float easeBack(float p){
+  const float c2 = 1.05*1.525;
+  return p < .5
+    ? (pow(2.*p,2.)*((c2+1.)*2.*p-c2))/2.
+    : (pow(2.*p-2.,2.)*((c2+1.)*(p*2.-2.)+c2)+2.)/2.;
+}
+
+vec3 ironbow(float x){
+  vec3 c0=vec3(58.,15.,107.)/255., c1=vec3(155.,29.,143.)/255., c2=vec3(240.,48.,106.)/255.;
+  vec3 c3=vec3(255.,122.,47.)/255., c4=vec3(255.,211.,107.)/255., c5=vec3(255.,246.,224.)/255.;
+  x=clamp(x,0.,1.)*5.;
+  if(x<1.) return mix(c0,c1,x);
+  if(x<2.) return mix(c1,c2,x-1.);
+  if(x<3.) return mix(c2,c3,x-2.);
+  if(x<4.) return mix(c3,c4,x-3.);
+  return mix(c4,c5,x-4.);
+}
+vec3 coldbow(float x){
+  vec3 c0=vec3(27.,23.,71.)/255., c1=vec3(47.,79.,168.)/255., c2=vec3(79.,163.,224.)/255.;
+  vec3 c3=vec3(155.,232.,255.)/255., c4=vec3(232.,247.,255.)/255.;
+  x=clamp(x,0.,1.)*4.;
+  if(x<1.) return mix(c0,c1,x);
+  if(x<2.) return mix(c1,c2,x-1.);
+  if(x<3.) return mix(c2,c3,x-2.);
+  return mix(c3,c4,x-3.);
+}
+
+float wipe(int b, vec2 r){
+  float w;
+  if (b == 0) w = length(r)/.62;
+  else if (b == 1) w = uPortrait > .5 ? .5 - r.y/1.5 : .5 + r.x/1.4;
+  else if (b == 2) w = .5 + r.y/1.15;
+  else if (b == 3) w = .5 - r.y/1.15;
+  else w = .5 + r.x/(uPortrait > .5 ? 1.35 : 1.7);
+  return clamp(w, 0., 1.);
+}
+
+struct St { vec2 q; float hot; float fly; float acc; float blink; float inten; };
+
+St evalAt(float t, int i, vec4 h, vec4 g){
+  St s;
+  t = max(t, 0.);
+  float cyc = floor(t / LOOP);
+  float sl = t - cyc*LOOP;
+  int b = min(int(sl / SEG), 4);
+  float local = sl - float(b)*SEG;
+  int a = (b + 4) % 5;
+  bool intro = cyc < .5 && b == 0;
+  vec4 TB = tgt(b, i), TA = tgt(a, i);
+  vec2 qb = vec2(TB.x*uAspect, TB.y);
+  vec2 qa = vec2(TA.x*uAspect, TA.y);
+  float accA = TA.z, blA = TA.w, IA = uI[a];
+  if (intro) {
+    // first loop only: tokens start as a hot, swirling cloud of untrusted output
+    // (the braces exploded outward on a spiral, so the first flight is a coherent implosion)
+    vec2 rel = qb - uCenter;
+    float ang = .9 + .6*g.x + t*(.2 + .2*g.y);
+    float sc = 1.4 + .75*g.y*g.y;
+    qa = uCenter + mat2(cos(ang), sin(ang), -sin(ang), cos(ang))*rel*sc;
+    qa += curl2(qa*(1.2/uUnit), t*.5)*uUnit*.07;
+    accA = 0.; blA = 0.; IA = .5;
+  }
+  vec2 rb = (qb - uCenter)/uUnit;
+  vec2 ra = (qa - uCenter)/uUnit;
+  // departure wipes across the old shape, arrival wipes across the new one
+  float d0 = intro ? .3*h.z : DEP*(.84*wipe(b, ra) + .16*h.z);
+  float d1 = ARR0 + ARR*(.86*wipe(b, rb) + .14*g.z);
+  d1 = max(d1, d0 + .38);
+  float raw = (local - d0)/(d1 - d0);
+  float p = clamp(raw, 0., 1.);
+  float e = easeBack(p);
+  float bump = sin(PI*p);
+  vec2 q = mix(qa, qb, e);
+  vec2 d = qb - qa;
+  q += vec2(-d.y, d.x)*(h.y - .5)*.28*bump;
+  if (bump > 0.) {
+    vec2 c = curl2(q*(1.55/uUnit), t*.42 + float(b)*7.31);
+    q += c*uUnit*AMP*bump*(.45 + 1.1*h.x);
+  }
+  float br = 1. - bump;
+  vec2 nq = q*(4.5/uUnit);
+  q += vec2(snoise2(nq + vec2(t*.22, 3.1)), snoise2(nq + vec2(-11.7, t*.22)))*uUnit*.0035*br;
+
+  float heat = 0.;
+  if (raw > 0. && raw < 1.) heat = .3*smoothstep(0., .04, p);
+  else if (raw >= 1.) heat = .3*exp(-(local - d1)/.2);
+  if (intro) heat = max(heat, .42*(1. - smoothstep(.5, .95, p)));
+  float ec = clamp(e, 0., 1.);
+  s.q = q; s.hot = heat; s.fly = bump;
+  s.acc = mix(accA, TB.z, ec);
+  s.blink = mix(blA, TB.w, ec);
+  s.inten = mix(IA, uI[b], ec);
+  return s;
+}
+
+void main(){
+  // glow pass: every GSTRIDE-th particle as a wide, faint sprite (cheap bloom)
+  int i = uGlow > .5 ? (gl_VertexID*${GSTRIDE} + 5) % ${N} : gl_VertexID;
+  uint u = uint(i);
+  vec4 h = vec4(h01(u*8u+1u), h01(u*8u+2u), h01(u*8u+3u), h01(u*8u+4u));
+  vec4 g = vec4(h01(u*8u+5u), h01(u*8u+6u), h01(u*8u+7u), h01(u*8u+8u));
+  St s1 = evalAt(uTime, i, h, g);
+  St s0 = evalAt(uTime - uSeg, i, h, g);
+  vec2 q1 = s1.q, q0 = s0.q;
+
+  float v = length(q1 - q0)/uSeg/uUnit;             // shape-sizes per second
+  float vn = clamp(v/4.4, 0., 1.);
+  float theta = s1.hot + (s1.fly > 0. ? .72*pow(vn, .62) : 0.);
+
+  if (uProbe.z > .001) {
+    vec2 dd = q1 - uProbe.xy; float dl = length(dd);
+    float f = exp(-dl*dl/(uProbe.w*uProbe.w))*uProbe.z;
+    vec2 push = dd/max(dl, 1e-4)*f*uProbe.w*.65;
+    q1 += push; q0 += push;
+    theta = max(theta, .9*f);
+  }
+  theta = clamp(theta, 0., 1.);
+
+  vec2 rb = (q1 - uCenter)/uUnit;
+  float cx = .56 + .36*s1.acc + .07*rb.y + .06*length(rb) + .12*(h.w - .5);
+  vec3 cold = coldbow(cx);
+  if (g.w > .985) cold = mix(cold, vec3(232.,247.,255.)/255., .75);
+  vec3 col = theta < .3
+    ? mix(cold, ironbow(.2)*.9, smoothstep(0., .3, theta))
+    : ironbow(.2 + .8*(theta - .3)/.7);
+  float hotness = smoothstep(.04, .34, theta);
+  float I = mix(s1.inten*(1. + .45*s1.acc), .3, hotness);
+  float ph = fract(uTime*1.05);
+  float off = smoothstep(.48, .54, ph)*(1. - smoothstep(.93, 1., ph));
+  I *= 1. - .85*off*s1.blink;
+
+  vec2 p1 = vec2(q1.x/uAspect, q1.y)*.5*uRes;
+  vec2 p0 = vec2(q0.x/uAspect, q0.y)*.5*uRes;
+  vec2 sg = p1 - p0; float Ls = length(sg);
+  float r = uPx*(1.05 + .8*hotness);
+  float ext = 4.;
+  if (uGlow > .5) { r = uPx*(8. + 5.*hotness); ext = 3.; I *= .06*${GSTRIDE}./8.; }
+  float maxL = max(uMaxPt - ext*r - 2., 0.);
+  if (Ls > maxL) { p0 = p1 - sg*(maxL/Ls); Ls = maxL; }
+  vec2 mid = .5*(p0 + p1);
+  gl_Position = vec4(mid/(.5*uRes), 0., 1.);
+  gl_PointSize = Ls + ext*r + 2.;
+  vA = p0 - mid; vB = p1 - mid; vR = r; vSize = gl_PointSize;
+  float streak = pow(1./(1. + Ls/(r*1.77)), .74);
+  float ghostMask = uGhost > .5 ? smoothstep(.6*uPx, 3.*uPx, Ls) : 1.;
+  vCol = col*I*streak*ghostMask*uAlpha;
+}`;
+
+const FS = `#version 300 es
+precision highp float;
+in vec3 vCol;
+in vec2 vA;
+in vec2 vB;
+in float vR;
+in float vSize;
+out vec4 o;
+void main(){
+  vec2 pc = (gl_PointCoord - .5)*vSize; pc.y = -pc.y;
+  vec2 ba = vB - vA; float L2 = dot(ba, ba);
+  float u = L2 > .01 ? clamp(dot(pc - vA, ba)/L2, 0., 1.) : 1.;
+  vec2 dv = pc - (vA + ba*u);
+  float f = exp(-dot(dv, dv)/(vR*vR));
+  f *= mix(.28, 1., u);
+  if (f < .003) discard;
+  o = vec4(vCol*f, 1.);
+}`;
+
+const BG_VS = `#version 300 es
+void main(){
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  gl_Position = vec4(p*2. - 1., 0., 1.);
+}`;
+const BG_FS = `#version 300 es
+precision highp float;
+uniform vec2 uRes, uC;
+uniform float uS, uPx;
+out vec4 o;
+void main(){
+  vec2 p = gl_FragCoord.xy;
+  vec3 col = vec3(16., 12., 42.)/255.;
+  float d = length(p - uC)/uS;
+  col += vec3(.10, .19, .42)*.12*exp(-d*d*.8);
+  float sp = 28.*uPx;
+  vec2 gq = mod(p - uC + .5*sp, sp) - .5*sp;
+  float dm = 1. - smoothstep(.5*uPx, 1.2*uPx, length(gq));
+  float fade = .3 + .7*exp(-d*d*.22);
+  col += vec3(78., 90., 140.)/255.*dm*.15*fade;
+  vec2 uv = gl_FragCoord.xy/uRes - .5;
+  col *= 1. - .45*dot(uv, uv);
+  float n = fract(sin(dot(p, vec2(12.9898, 78.233)))*43758.5453);
+  col += (n - .5)/255.;
+  o = vec4(col, 1.);
+}`;
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function program(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {};
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let k = 0; k < n; k++) {
+    const info = gl.getActiveUniform(p, k);
+    const name = info.name.replace(/\[0\]$/, '');
+    u[name] = gl.getUniformLocation(p, info.name);
+  }
+  return { p, u };
+}
+
+const P = program(VS, FS);
+const BG = program(BG_VS, BG_FS);
+const vao = gl.createVertexArray();
+gl.bindVertexArray(vao);
+const targetTex = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, targetTex);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+const PT_RANGE = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE)[1] || 64;
+
+/* ---------------- render: a pure function of t ---------------- */
+function render(time, withProbe) {
+  const cw = canvas.width, ch = canvas.height;
+  gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND);
+  const lay = L || computeLayout();
+  gl.useProgram(BG.p);
+  gl.uniform2f(BG.u.uRes, cw, ch);
+  gl.uniform2f(BG.u.uC, lay.cx * dpr, (H - lay.cy) * dpr);
+  gl.uniform1f(BG.u.uS, lay.S * dpr);
+  gl.uniform1f(BG.u.uPx, dpr);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  if (!ready) return;
+
+  const aspect = W / H;
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE);
+  gl.useProgram(P.p);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, targetTex);
+  gl.uniform1i(P.u.uT, 0);
+  gl.uniform1f(P.u.uSeg, GHOST_DT);
+  gl.uniform1f(P.u.uAspect, aspect);
+  gl.uniform1f(P.u.uUnit, L.S / (H / 2));
+  gl.uniform2f(P.u.uCenter, ((L.cx / W) * 2 - 1) * aspect, 1 - (L.cy / H) * 2);
+  gl.uniform2f(P.u.uRes, cw, ch);
+  gl.uniform1f(P.u.uPx, dpr);
+  gl.uniform1f(P.u.uMaxPt, Math.min(PT_RANGE, 80 * dpr));
+  gl.uniform1f(P.u.uPortrait, L.portrait ? 1 : 0);
+  gl.uniform1fv(P.u.uI, shapeI);
+  if (withProbe && probe.s > 0.002) {
+    gl.uniform4f(P.u.uProbe, ((probe.x / W) * 2 - 1) * aspect, 1 - (probe.y / H) * 2, probe.s, 0.2 * L.S / (H / 2));
+  } else {
+    gl.uniform4f(P.u.uProbe, 0, 0, 0, 1);
+  }
+  gl.uniform1f(P.u.uTime, time);
+  gl.uniform1f(P.u.uAlpha, 1);
+  gl.uniform1f(P.u.uGhost, 0);
+  gl.uniform1f(P.u.uGlow, 1);
+  gl.drawArrays(gl.POINTS, 0, N / GSTRIDE);
+  gl.uniform1f(P.u.uGlow, 0);
+  for (let j = GHOSTS - 1; j >= 0; j--) {
+    gl.uniform1f(P.u.uTime, time - j * GHOST_DT);
+    gl.uniform1f(P.u.uAlpha, Math.pow(0.52, j));
+    gl.uniform1f(P.u.uGhost, j > 0 ? 1 : 0);
+    gl.drawArrays(gl.POINTS, 0, N);
+  }
+}
+
+/* ---------------- sizing ---------------- */
+let dprCap = 2;
+function resize() {
+  W = Math.max(1, innerWidth); H = Math.max(1, innerHeight);
+  dpr = LOW ? 1 : Math.min(dprCap, window.devicePixelRatio || 1);
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+}
+let rebuildTimer = 0;
+window.addEventListener('resize', () => {
+  resize();
+  if (!playing) render(t, false);
+  clearTimeout(rebuildTimer);
+  rebuildTimer = setTimeout(() => {
+    if (!fontsDone) return;
+    buildTargets();
+    if (!playing) render(t, false);
+  }, 160);
+});
+
+/* ---------------- loop ---------------- */
+function frame(now) {
+  raf = 0;
+  if (!playing) return;
+  const dt = last === null ? 0 : Math.min(0.1, (now - last) / 1000);
+  last = now;
+  t += dt;
+  // adaptive resolution: if the GPU can't hold ~50fps, render fewer device pixels
+  if (dt > 0) {
+    perf.sum += dt; perf.n++;
+    if (perf.n >= 90) {
+      if (perf.sum / perf.n > 1 / 48 && dpr > 1) { dprCap = Math.max(1, dpr - 0.5); resize(); }
+      perf.sum = 0; perf.n = 0;
+    }
+  }
+  const idle = (now - probe.lastMove) > 900;
+  const target = idle ? 0 : probe.target;
+  probe.s += (target - probe.s) * Math.min(1, dt * (target > probe.s ? 10 : 3));
+  render(t, true);
+  raf = requestAnimationFrame(frame);
+}
+function setPlaying(v) {
+  playing = v;
+  playBtn.textContent = v ? 'Pause' : 'Play';
+  playBtn.setAttribute('aria-pressed', String(!v));
+  if (v) { last = null; if (!raf) raf = requestAnimationFrame(frame); }
+  else render(t, false);
+}
+
+let pendingSeek = null;
+const perf = { sum: 0, n: 0 };
+window.__seek = (time) => {
+  t = +time || 0;
+  probe.s = 0; probe.target = 0;
+  playing = false;
+  playBtn.textContent = 'Play';
+  playBtn.setAttribute('aria-pressed', 'true');
+  if (raf) { cancelAnimationFrame(raf); raf = 0; }
+  if (!ready) pendingSeek = t;
+  render(t, false);
+};
+window.__play = () => setPlaying(true);
+
+/* ---------------- input ---------------- */
+canvas.addEventListener('pointermove', e => {
+  probe.x = e.clientX; probe.y = e.clientY; probe.target = 1; probe.lastMove = performance.now();
+});
+canvas.addEventListener('pointerdown', e => {
+  probe.x = e.clientX; probe.y = e.clientY; probe.target = 1; probe.lastMove = performance.now();
+});
+canvas.addEventListener('pointerleave', () => { probe.target = 0; });
+
+playBtn.addEventListener('click', () => setPlaying(!playing));
+function setNotes(show) {
+  notes.hidden = !show; showNotes.hidden = show;
+  (show ? hideNotes : showNotes).focus({ preventScroll: true });
+}
+hideNotes.addEventListener('click', () => setNotes(false));
+showNotes.addEventListener('click', () => setNotes(true));
+window.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'h' || e.key === 'H') { setNotes(notes.hidden); e.preventDefault(); }
+  else if (e.key === ' ' || e.code === 'Space') {
+    const a = document.activeElement;
+    if (a && (a.tagName === 'BUTTON' || a.tagName === 'A')) return;
+    e.preventDefault(); setPlaying(!playing);
+  }
+});
+
+/* ---------------- boot ---------------- */
+resize();
+L = computeLayout();
+playBtn.textContent = playing ? 'Pause' : 'Play';
+playBtn.setAttribute('aria-pressed', String(!playing));
+render(t, false);
+if (playing) raf = requestAnimationFrame(frame);
+
+let fontsDone = false;
+const fontLoad = Promise.all([
+  document.fonts.load(`400 100px "Martian Mono"`, '{}'),
+  document.fonts.load(`250 100px "Martian Mono"`, 'verified')
+]).then(() => document.fonts.ready).catch(() => {});
+Promise.race([fontLoad, new Promise(r => setTimeout(r, 4000))]).then(() => {
+  fontsDone = true;
+  buildTargets();
+  if (pendingSeek !== null) { t = pendingSeek; pendingSeek = null; }
+  if (!playing) render(t, false);
+});
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Approve once</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--void)}
+.layer{position:fixed;left:0;top:0;width:100vw;height:100vh;display:block;pointer-events:none}
+#bg{z-index:0}
+#fg{z-index:3}
+.glass{position:fixed;left:0;top:0;width:10px;height:10px;transform-origin:0 0;pointer-events:none;display:none}
+#g-body{z-index:1}
+.pill{z-index:2}
+#g-lens{z-index:4;pointer-events:auto;cursor:grab;touch-action:none;border-radius:50%}
+#g-lens.drag{cursor:grabbing}
+#fx{position:absolute;width:0;height:0;overflow:hidden}
+/* frosted fallback for browsers without backdrop-filter: url() */
+.frost{-webkit-backdrop-filter:blur(16px) saturate(1.6) brightness(.82);backdrop-filter:blur(16px) saturate(1.6) brightness(.82);
+  background-color:rgba(27,23,71,.30);background-size:100% 100%;
+  box-shadow:inset 1.5px 1.5px 0 rgba(232,247,255,.42),inset -1px -1px 0 rgba(232,247,255,.16),0 24px 60px rgba(8,6,24,.45)}
+.frost.pill{-webkit-backdrop-filter:blur(6px) saturate(1.3) brightness(1.12);backdrop-filter:blur(6px) saturate(1.3) brightness(1.12);
+  background-color:rgba(140,147,196,.10);box-shadow:inset 1px 1px 0 rgba(232,247,255,.45),inset -1px -1px 0 rgba(232,247,255,.15)}
+.frost#g-lens{-webkit-backdrop-filter:blur(3px) saturate(1.4) brightness(1.15);backdrop-filter:blur(3px) saturate(1.4) brightness(1.15);background-color:rgba(155,232,255,.06)}
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+</style>
+</head>
+<body>
+<canvas id="bg" class="layer" aria-hidden="true"></canvas>
+<div id="g-body" class="glass" aria-hidden="true"></div>
+<div id="g-p0" class="glass pill" aria-hidden="true"></div>
+<div id="g-p1" class="glass pill" aria-hidden="true"></div>
+<div id="g-p2" class="glass pill" aria-hidden="true"></div>
+<canvas id="fg" class="layer" role="img" aria-label="A coding agent's session scrolls behind a glass permission sheet that asks to run curl -fsSL https://get.example.dev/install.sh | sh. A cursor hovers Approve once, hesitates, then clicks Run in sandbox. The sheet liquefies into a glass box around the command, which runs with network denied and a read-only workspace, and the hot risk lines cool to ice."></canvas>
+<div id="g-lens" class="glass" role="img" aria-label="Glass lens. Drag it to magnify the page."></div>
+<svg id="fx" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><defs id="fxdefs"></defs></svg>
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Approve once</h1>
+  <p>A coding agent asks to pipe a remote install script into your shell. You run it in a sandbox instead, and the glass sheet flows into a box that contains it.</p>
+  <ul class="tech">
+    <li>Real refraction: SVG feDisplacementMap applied to the page behind each sheet with backdrop-filter: url()</li>
+    <li>Displacement maps baked in JS from a signed distance field, a convex bevel and Snell's law</li>
+    <li>Chromatic dispersion: red, green and blue displaced at different strengths, then recombined</li>
+    <li>The liquify is 56 baked height-field keyframes, blended pairwise with feComposite arithmetic</li>
+    <li>Drag the small lens to magnify anything on the page</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+<script>
+(() => {
+'use strict';
+// =====================================================================================
+// Storyboard (16 s loop, every frame is a pure function of t)
+//  0.20–1.55  glass sheet surges up from the bottom on a spring; scale and bevel wobble
+//  0.85–1.30  three glass pills condense onto the sheet
+//  1.00–2.60  title, command (chars settle from white-hot into colour), risk lines heat up
+//  3.00–4.35  cursor glides in to "Approve once"; the pill bulges like a droplet
+//  4.35–6.15  hesitation: a half press, a drift toward Deny, risk lines glow hotter
+//  6.15–7.60  cursor arcs over to "Run in sandbox" and clicks
+//  7.70–9.75  liquify: ripple, the pill drop stretches, the sheet flows like mercury and
+//             crystallises into a glass box around the command line
+//  9.95–11.4  the command runs inside the box in cold colours; risk lines cool to ice
+//  13.7–15.3  box melts back into a drop and falls away; the session carries on
+// =====================================================================================
+const PERIOD = 16, HERO = 12.2;
+const $ = id => document.getElementById(id);
+const qs = new URLSearchParams(location.search);
+const bgc = $('bg'), fgc = $('fg'), bx = bgc.getContext('2d'), fx = fgc.getContext('2d');
+const defs = $('fxdefs');
+const NS = 'http://www.w3.org/2000/svg';
+
+// ---------- palette ----------
+const HX = s => [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)];
+const K = {
+  void: HX('#100C2A'), deep: HX('#1B1747'), steel: HX('#4E5A8C'), mist: HX('#8C93C4'),
+  ice: HX('#9BE8FF'), frost: HX('#E8F7FF'), c1: HX('#2F4FA8'), c2: HX('#4FA3E0'),
+  h0: HX('#3A0F6B'), h1: HX('#9B1D8F'), h2: HX('#F0306A'), h3: HX('#FF7A2F'), h4: HX('#FFD36B'), h5: HX('#FFF6E0')
+};
+const HEAT = [K.h0, K.h1, K.h2, K.h3, K.h4, K.h5];
+const COLD = [K.deep, K.c1, K.c2, K.ice, K.frost];
+const mixc = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const css = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+function ramp(st, x) { x = clamp(x, 0, 1) * (st.length - 1); const i = Math.min(st.length - 2, Math.floor(x)); return mixc(st[i], st[i + 1], x - i); }
+const ironbow = x => ramp(HEAT, x), coldbow = x => ramp(COLD, x);
+
+// ---------- math ----------
+function clamp(x, a, b) { return x < a ? a : x > b ? b : x; }
+const lerp = (a, b, t) => a + (b - a) * t;
+const sm = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const eio = t => (t = clamp(t, 0, 1), t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const eout = t => 1 - Math.pow(1 - clamp(t, 0, 1), 3);
+const ein = t => Math.pow(clamp(t, 0, 1), 3);
+const bump = (a, b, c, x) => sm(a, b, x) * (1 - sm(b, c, x));
+const mod = (t, p) => ((t % p) + p) % p;
+function spring(t, z, w) { if (t <= 0) return 0; const wd = w * Math.sqrt(1 - z * z); return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + z * w / wd * Math.sin(wd * t)); }
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+// ---------- signed distance helpers ----------
+function sdRR(x, y, cx, cy, hw, hh, r) {
+  const qx = Math.abs(x - cx) - hw + r, qy = Math.abs(y - cy) - hh + r;
+  const ox = qx > 0 ? qx : 0, oy = qy > 0 ? qy : 0;
+  return Math.sqrt(ox * ox + oy * oy) + Math.min(Math.max(qx, qy), 0) - r;
+}
+function smin(a, b, k) { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; }
+function sdPoly(px, py, V) {
+  const n = V.length / 2; let d = (px - V[0]) ** 2 + (py - V[1]) ** 2, s = 1;
+  for (let i = 0, j = n - 1; i < n; j = i, i++) {
+    const vix = V[2 * i], viy = V[2 * i + 1], vjx = V[2 * j], vjy = V[2 * j + 1];
+    const ex = vjx - vix, ey = vjy - viy, wx = px - vix, wy = py - viy;
+    const t = clamp((wx * ex + wy * ey) / (ex * ex + ey * ey), 0, 1);
+    const bx_ = wx - ex * t, by_ = wy - ey * t; d = Math.min(d, bx_ * bx_ + by_ * by_);
+    const c1 = py >= viy, c2 = py < vjy, c3 = ex * wy > ey * wx;
+    if ((c1 && c2 && c3) || (!c1 && !c2 && !c3)) s = -s;
+  }
+  return s * Math.sqrt(d);
+}
+// convex bevel height profile, x = 0 at the rim, 1 where the bevel meets the flat top
+const prof = (x, p) => Math.pow(1 - Math.pow(1 - x, p), 1 / p);
+
+// ---------- capability ----------
+const ua = navigator.userAgent;
+const isChromium = !!(navigator.userAgentData && navigator.userAgentData.brands && navigator.userAgentData.brands.some(b => /Chromium|Google Chrome|Microsoft Edge/.test(b.brand)))
+  || (/\b(Chrome|Chromium)\/\d+/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua));
+let REFRACT = qs.get('glass') !== 'frost' && isChromium && !!(window.CSS && CSS.supports && CSS.supports('backdrop-filter', 'url(#x)'));
+
+// =====================================================================================
+// Geometry. Everything on the sheet is in sheet-local px; the sheet's screen position
+// and its rise/fall transform are applied separately, so moving it never needs a re-bake.
+// =====================================================================================
+const CMD = 'curl -fsSL https://get.example.dev/install.sh | sh';
+function makeGeom(mode, s, vw) {
+  const G = { mode, s };
+  if (mode === 'd') {
+    const w = 600 * s, h = 424 * s;
+    G.sheet = { w, h, r: 34 * s };
+    G.glyph = { x: 32 * s, y: 29 * s, sz: 30 * s };
+    G.title = { x: 76 * s, y: 50 * s, size: 20 * s };
+    G.sub = { x: 76 * s, y: 72 * s, size: 13.5 * s };
+    G.well = { x: 32 * s, y: 94 * s, w: 536 * s, h: 56 * s, r: 15 * s };
+    G.cmd = { x: 50 * s, y: 127 * s, size: 13.5 * s, lines: ['$ ' + CMD], lh: 22 * s };
+    G.label = { x: 32 * s, y: 186 * s, size: 13 * s };
+    G.risk = { x: 58 * s, y0: 218 * s, dy: 30 * s, size: 16 * s, bx: 42 * s };
+    G.pills = [[32, 334, 178, 50], [222, 334, 120, 50], [354, 334, 214, 50]].map(a => ({ x: a[0] * s, y: a[1] * s, w: a[2] * s, h: a[3] * s }));
+    G.pillFont = 15.5 * s;
+    G.cube = { x0: 24 * s, y0: 44 * s, w: 528 * s, h: 240 * s, dx: 44 * s, dy: 38 * s, rc: 16 * s };
+    G.ct = { pad: 30 * s, size: 13 * s, small: 12.5 * s, files: 11.5 * s, rows: [38, 80, 120, 150, 180, 207].map(v => v * s), cmdLines: ['$ ' + CMD], wide: true };
+    G.riskFinal = { x: 58 * s, y0: 326 * s, dy: 29 * s, noteX: 384 * s, size: 15.5 * s, bx: 42 * s };
+    G.punch = { x: 34 * s, y: 424 * s, size: 18 * s, small: 14 * s, lh: 24 * s };
+    G.bevel = 44 * s; G.ratio = 1.0; G.pexp = 2.2; G.grow = 2.1;
+    G.pad = 30 * s;
+  } else {
+    const w = vw - 20 * s, h = 418 * s;
+    G.sheet = { w, h, r: 38 * s };
+    G.glyph = { x: 22 * s, y: 24 * s, sz: 28 * s };
+    G.title = { x: 60 * s, y: 43 * s, size: 17 * s };
+    G.sub = { x: 60 * s, y: 63 * s, size: 12.5 * s };
+    G.well = { x: 20 * s, y: 82 * s, w: w - 40 * s, h: 72 * s, r: 15 * s };
+    G.cmd = { x: 34 * s, y: 112 * s, size: 12 * s, lines: ['$ curl -fsSL https://get.example.dev/', '  install.sh | sh'], lh: 24 * s };
+    G.label = { x: 20 * s, y: 184 * s, size: 12.5 * s };
+    G.risk = { x: 42 * s, y0: 212 * s, dy: 26 * s, size: 15 * s, bx: 28 * s };
+    G.pills = [[20, 288, (w / s - 40 - 10) * 0.6, 48], [20 + (w / s - 40 - 10) * 0.6 + 10, 288, (w / s - 40 - 10) * 0.4, 48], [20, 346, w / s - 40, 48]].map(a => ({ x: a[0] * s, y: a[1] * s, w: a[2] * s, h: a[3] * s }));
+    G.pillFont = 15 * s;
+    G.cube = { x0: 12 * s, y0: 40 * s, w: w - 46 * s, h: 232 * s, dx: 22 * s, dy: 24 * s, rc: 15 * s };
+    G.ct = { pad: 24 * s, size: 10.6 * s, small: 11.5 * s, files: 10 * s, rows: [34, 64, 82, 112, 134, 156, 180, 196].map(v => v * s), cmdLines: ['$ curl -fsSL https://get.example.dev/', '  install.sh | sh'], wide: false };
+    G.riskFinal = { x: 42 * s, y0: 306 * s, dy: 25 * s, noteX: 0, size: 14 * s, bx: 28 * s };
+    G.punch = { x: 20 * s, y: 392 * s, size: 15 * s, small: 12.5 * s, lh: 20 * s };
+    G.bevel = 36 * s; G.ratio = 1.0; G.pexp = 2.2; G.grow = 1.55;
+    G.pad = 26 * s;
+  }
+  const C = G.cube; C.x1 = C.x0 + C.w; C.y1 = C.y0 + C.h;
+  const r = C.rc;
+  // hexagon silhouette of the box seen in three-quarter view, inset by the corner radius
+  C.poly = [C.x0 + r, C.y1 - r, C.x0 + r, C.y0 + r * 0.6, C.x0 + C.dx + r * 0.6, C.y0 - C.dy + r, C.x1 + C.dx - r, C.y0 - C.dy + r, C.x1 + C.dx - r, C.y1 - C.dy - r * 0.6, C.x1 - r * 0.6, C.y1 - r];
+  C.Tc = 70 * s; C.st = 1.75; C.sr = C.st * C.dy / C.dx; C.bw = 18 * s; C.kc = 7 * s;
+  G.box = { x: -G.pad, y: -G.pad, w: G.sheet.w + 2 * G.pad, h: G.sheet.h + 2 * G.pad };
+  G.pm = 14 * s; // pill element margin
+  G.lensR = (mode === 'd' ? 58 : 44) * s;
+  return G;
+}
+
+// =====================================================================================
+// Height fields. Each returns (x, y, out) -> out = [signed distance, height, blur weight]
+// in the glass element's own px space.
+// =====================================================================================
+function fieldSheet(G, bwMul) {
+  const S = G.sheet, bw = G.bevel * bwMul, ox = G.box.x, oy = G.box.y, p = G.pexp, R = G.ratio;
+  return (x, y, o) => {
+    const d = sdRR(x + ox, y + oy, S.w / 2, S.h / 2, S.w / 2, S.h / 2, S.r);
+    o[0] = d; o[1] = d < 0 ? bw * R * prof(Math.min(1, -d / bw), p) : 0;
+    o[2] = sm(0.2 * bw, 0.85 * bw, -d);
+  };
+}
+function distSeg(px, py, ax, ay, bx_, by_) {
+  const ex = bx_ - ax, ey = by_ - ay, t = clamp(((px - ax) * ex + (py - ay) * ey) / (ex * ex + ey * ey), 0, 1);
+  return Math.hypot(px - ax - ex * t, py - ay - ey * t);
+}
+function cubeEval(px, py, C, o) {
+  const d = sdPoly(px, py, C.poly) - C.rc;
+  o[3] = 0;
+  if (d >= 0) { o[0] = d; o[1] = 0; o[2] = 0; return; }
+  const d1 = distSeg(px, py, C.x0 + C.rc, C.y0, C.x1, C.y0), d2 = distSeg(px, py, C.x1, C.y0, C.x1, C.y1 - C.rc), d3 = distSeg(px, py, C.x1, C.y0, C.x1 + C.dx, C.y0 - C.dy);
+  o[3] = (0.95 * Math.exp(-(d1 * d1) / 1.8) + 0.55 * Math.exp(-(d2 * d2) / 1.8) + 0.5 * Math.exp(-(d3 * d3) / 1.5)) * sm(0, C.bw * 0.6, -d);
+  const top = C.Tc - (C.y0 - py) * C.st, right = C.Tc - (px - C.x1) * C.sr;
+  const hp = smin(smin(C.Tc, top, C.kc), right, C.kc);
+  const he = C.Tc * prof(Math.min(1, -d / C.bw), 2.4);
+  const h = smin(hp, he, 5);
+  const wt = sm(-3, 3, C.Tc - top) * sm(-3, 3, right - top);
+  const wr = sm(-3, 3, C.Tc - right) * sm(-3, 3, top - right);
+  const wf = Math.max(0, 1 - wt - wr);
+  const band = (px - C.x0) * 0.8 + (py - C.y0) * 1.4 - C.w * 0.32;
+  o[3] += wf * 0.055 * Math.exp(-(band * band) / (C.w * C.w * 0.012)) * sm(C.bw * 0.5, C.bw * 1.5, -d);
+  o[0] = d; o[1] = h; o[2] = (wf * 0.04 + wt * 0.5 + wr * 0.6) * sm(0.2 * C.bw, 0.9 * C.bw, -d);
+}
+function fieldMorph(G, u) {
+  const S = G.sheet, C = G.cube, s = G.s, ox = G.box.x, oy = G.box.y, p = G.pexp, R = G.ratio;
+  const P2 = G.pills[2];
+  const cL = C.x0, cR = C.x1 + C.dx, cT = C.y0 - C.dy, cB = C.y1;
+  const ccx = (cL + cR) / 2, ccy = (cT + cB) / 2, chw = (cR - cL) / 2, chh = (cB - cT) / 2;
+  const bL = ccx - chw * 0.95, bR = ccx + chw * 0.95, bT = ccy - chh * 0.92, bB = ccy + chh * 0.92;
+  const fT = sm(0.10, 0.50, u), fB = sm(0.05, 0.44, u), fS = sm(0.09, 0.47, u);
+  const L = lerp(0, bL, fS), Rr = lerp(S.w, bR, fS), T = lerp(0, bT, fT), B = lerp(S.h, bB, fB);
+  const mcx = (L + Rr) / 2, mcy = (T + B) / 2;
+  let mhw = (Rr - L) / 2, mhh = (B - T) / 2;
+  if (u > 0.40) { const v = u - 0.40, w = 0.07 * Math.sin(2 * Math.PI * v / 0.17) * Math.exp(-v / 0.12); mhw *= 1 + w; mhh *= 1 - w * 1.15; }
+  const mr = Math.min(lerp(S.r, 0.78 * Math.min(mhw, mhh), sm(0.05, 0.40, u)), Math.min(mhw, mhh) - 0.5);
+  const pcx = P2.x + P2.w / 2, pcy = P2.y + P2.h / 2;
+  const rnd = sm(0.03, 0.26, u), pull = sm(0.22, 0.60, u), gone = sm(0.50, 0.66, u);
+  let dhw = lerp(P2.w / 2 + 5 * s, P2.h * 0.66, rnd), dhh = lerp(P2.h / 2 - 3 * s, P2.h * 0.62, rnd);
+  dhw *= 1 - gone; dhh *= 1 - gone;
+  const dcx = lerp(pcx, mcx, eio(pull)), dcy = lerp(pcy, B - dhh * 0.3, eio(pull));
+  const stretch = 54 * s * bump(0.20, 0.40, 0.62, u);
+  const hasDrop = gone < 0.995;
+  const kk = 42 * s;
+  const bw = lerp(G.bevel, G.bevel * G.grow, sm(0.06, 0.40, u));
+  const ra = 6 * s * (1 - sm(0.0, 0.42, u)), rR = (26 + 860 * u) * s, lam = 46 * s;
+  const bumpK = 1 - sm(0.06, 0.24, u);
+  const c = sm(0.70, 0.97, u);
+  const clear = 1 - 0.42 * sm(0.08, 0.34, u);
+  const tmp = [0, 0, 0, 0];
+  return (x, y, o) => {
+    const px = x + ox, py = y + oy;
+    let d = 0, h = 0, b = 0;
+    if (c < 1) {
+      const dm = sdRR(px, py, mcx, mcy, mhw, mhh, mr);
+      let dd = 1e9;
+      if (hasDrop) { const hh2 = dhh + stretch / 2; dd = sdRR(px, py, dcx, dcy - stretch / 2, dhw, hh2, Math.min(dhw, hh2) - 0.5); }
+      d = hasDrop ? smin(dm, dd, kk) : dm;
+      if (d < 0) {
+        h = bw * R * prof(Math.min(1, -d / bw), p);
+        b = sm(0.2 * bw, 0.85 * bw, -d) * clear;
+        if (bumpK > 0 && dd < 0) h += 12 * s * prof(Math.min(1, -dd / (14 * s)), 2) * bumpK;
+        if (ra > 0.02) {
+          const rd = Math.hypot(px - pcx, py - pcy) - rR, env = Math.exp(-(rd * rd) / (lam * lam * 1.3));
+          if (env > 0.003) { const plate = sm(bw * 0.7, bw * 1.5, -d); h += ra * Math.sin(2 * Math.PI * rd / lam) * env * plate; b *= 1 - 0.92 * env * plate; }
+        }
+      }
+    }
+    if (c > 0) {
+      cubeEval(px, py, C, tmp);
+      if (c >= 1) { d = tmp[0]; h = tmp[1]; b = tmp[2]; }
+      else { d = lerp(d, tmp[0], c); h = lerp(h, tmp[1], c); b = lerp(b, tmp[2], c); if (d >= 0) h = 0; }
+      o[3] = tmp[3] * c * c;
+    }
+    o[0] = d; o[1] = h; o[2] = b;
+  };
+}
+function fieldPill(pw, ph, m, kind) {
+  const cx = pw / 2 + m, cy = ph / 2 + m;
+  let hw = pw / 2, hh = ph / 2, bw = ph * 0.42, pe = 2.6, R = 1.0;
+  // same silhouette in every keyframe so blends never ghost; size changes come from the element transform
+  if (kind === 1) { bw = hh; pe = 2; R = 1.12; }
+  if (kind === 2) { bw = ph * 0.28; pe = 2.6; R = 0.9; }
+  return (x, y, o) => {
+    const d = sdRR(x, y, cx, cy, hw, hh, hh);
+    o[0] = d; o[1] = d < 0 ? bw * R * prof(Math.min(1, -d / bw), pe) : 0; o[2] = sm(0.35 * bw, 1.1 * bw, -d) * 0.85;
+  };
+}
+function fieldLens(Rl, m) {
+  const c = Rl + m, Rs = Rl * 0.72;
+  return (x, y, o) => {
+    const r = Math.hypot(x - c, y - c), d = r - Rl;
+    let h = 0;
+    if (d < 0) h = (Rl * Rl - r * r) / (2 * Rs) + 10 * prof(Math.min(1, -d / 9), 2);
+    o[0] = d; o[1] = h; o[2] = 0;
+  };
+}
+
+// =====================================================================================
+// Baking: height field -> refraction map (R,G = offset via Snell's law, B = blur weight)
+// and a shade image (rim light, specular, fresnel, faint lambert shading, drop shadow).
+// =====================================================================================
+const IOR = 1.5;
+const LV = (() => { const l = [-0.45, -0.70, 0.55], n = Math.hypot(...l); return l.map(v => v / n); })();
+const HV = (() => { const h = [LV[0], LV[1], LV[2] + 1], n = Math.hypot(...h); return h.map(v => v / n); })();
+const L2 = (() => { const n = Math.hypot(-0.55, -0.835); return [-0.55 / n, -0.835 / n]; })();
+const bakeCanvas = document.createElement('canvas');
+function bake(W, H, res, field, P) {
+  const w = Math.max(2, Math.round(W * res)), h = Math.max(2, Math.round(H * res)), n = w * h;
+  const D = new Float32Array(n), Hh = new Float32Array(n), Bw = new Float32Array(n), Xh = new Float32Array(n), o = [0, 0, 0, 0];
+  for (let j = 0, k = 0; j < h; j++) { const y = (j + 0.5) / res; for (let i = 0; i < w; i++, k++) { o[3] = 0; field((i + 0.5) / res, y, o); D[k] = o[0]; Hh[k] = o[1]; Bw[k] = o[2]; Xh[k] = o[3]; } }
+  const out = { w, h };
+  const shI = new ImageData(w, h), sd = shI.data;
+  const mapI = P.mapOnly === false ? null : new ImageData(w, h), md = mapI && mapI.data;
+  const ms = P.maxShift, depth = P.depth, rimW = P.rimW / 1, shOff = Math.round((P.shadowDy || 0) * res) * w;
+  for (let j = 0, k = 0; j < h; j++) for (let i = 0; i < w; i++, k++) {
+    const d = D[k], m = clamp(0.5 - d * res, 0, 1), q = 4 * k;
+    let R = 128, Gc = 128, Bc = 0;
+    let hi = 0, dk = 0;
+    if (m > 0) {
+      const il = i > 0 ? k - 1 : k, ir = i < w - 1 ? k + 1 : k, ju = j > 0 ? k - w : k, jd = j < h - 1 ? k + w : k;
+      const gx = (Hh[ir] - Hh[il]) * res / Math.max(1, ir - il), gy = (Hh[jd] - Hh[ju]) * res / Math.max(1, (jd - ju) / w);
+      const g = Math.sqrt(gx * gx + gy * gy);
+      let oxs = 0, oys = 0;
+      if (g > 1e-5) { const th = Math.atan(g), dl = th - Math.asin(Math.sin(th) / IOR), sft = depth * Math.tan(dl); oxs = gx / g * sft * m; oys = gy / g * sft * m; }
+      R = 127.5 + 127.5 * clamp(oxs / ms, -1, 1); Gc = 127.5 + 127.5 * clamp(oys / ms, -1, 1); Bc = 255 * clamp(Bw[k], 0, 1) * m;
+      const nl = Math.sqrt(gx * gx + gy * gy + 1), nx = -gx / nl, ny = -gy / nl, nz = 1 / nl;
+      const spec = Math.pow(Math.max(0, nx * HV[0] + ny * HV[1] + nz * HV[2]), P.shin);
+      const fres = Math.pow(1 - nz, 3);
+      const lam = nx * LV[0] + ny * LV[1] + nz * LV[2] - LV[2];
+      const ndx = g > 1e-5 ? -gx / g : 0, ndy = g > 1e-5 ? -gy / g : 0;
+      const e = -d / rimW, edge = Math.exp(-e * e);
+      const dir = Math.abs(ndx * L2[0] + ndy * L2[1]);
+      hi = P.kSpec * spec + P.kFres * fres + P.kRim * edge * (0.28 + 0.72 * dir * dir) + P.kLam * Math.max(0, lam) + Xh[k] * 0.85;
+      if (P.kSheen) hi += P.kSheen * (1 - sm(0, 0.55, j / h)) * sm(0, 30, -d);
+      dk = P.kDark * Math.max(0, -lam);
+      if (P.kCaus) { const cd = Math.max(0, ndx * 0.42 + ndy * 0.9); hi += P.kCaus * cd * cd * (1 - nz) * sm(0, 6, -d); }
+      hi = clamp(hi, 0, 1) * m; dk = clamp(dk, 0, 0.5) * m;
+    }
+    if (P.shadow && m < 1) {
+      const kk = k - shOff, ds = kk >= 0 && kk < n ? D[kk] : 99;
+      if (ds > -2) dk = dk + (1 - m) * P.shadow * Math.exp(-Math.max(0, ds) / P.shadowR);
+    }
+    if (md) { md[q] = R; md[q + 1] = Gc; md[q + 2] = Bc; md[q + 3] = 255; }
+    const a = hi + dk * (1 - hi);
+    if (a > 0.003) {
+      sd[q] = (242 * hi + 8 * dk * (1 - hi)) / a; sd[q + 1] = (250 * hi + 6 * dk * (1 - hi)) / a; sd[q + 2] = (255 * hi + 26 * dk * (1 - hi)) / a; sd[q + 3] = 255 * a;
+    }
+  }
+  bakeCanvas.width = w; bakeCanvas.height = h;
+  const bc = bakeCanvas.getContext('2d');
+  if (md) { bc.putImageData(mapI, 0, 0); out.map = bakeCanvas.toDataURL('image/png'); }
+  bc.clearRect(0, 0, w, h); bc.putImageData(shI, 0, 0); out.shade = bakeCanvas.toDataURL('image/png');
+  return out;
+}
+
+// =====================================================================================
+// Glass elements: one SVG filter per keyframe pair. Two baked maps (and two shade images)
+// are blended with feComposite arithmetic, so a morph between neighbouring keyframes is
+// continuous; only k2/k3 change per frame.
+// =====================================================================================
+function svgEl(tag, at, parent) { const e = document.createElementNS(NS, tag); for (const k in at) e.setAttribute(k, at[k]); if (parent) parent.appendChild(e); return e; }
+function tintMatrix(bright, sat, add) {
+  const lr = 0.2126, lg = 0.7152, lb = 0.0722, a = 1 - sat;
+  const m = [lr * a + sat, lg * a, lb * a, lr * a, lg * a + sat, lb * a, lr * a, lg * a, lb * a + sat].map(v => (v * bright).toFixed(4));
+  return `${m[0]} ${m[1]} ${m[2]} 0 ${add[0]} ${m[3]} ${m[4]} ${m[5]} 0 ${add[1]} ${m[6]} ${m[7]} ${m[8]} 0 ${add[2]} 0 0 0 1 0`;
+}
+const GLASS = {};
+function makeGlass(name, el, P) {
+  const g = { name, el, P, frames: [], filters: {}, cur: null, k: -1, W: 0, H: 0, gen: 0 };
+  GLASS[name] = g; return g;
+}
+function glassReset(g, W, H) {
+  for (const id in g.filters) g.filters[id].f.remove();
+  g.filters = {}; g.frames = []; g.cur = null; g.k = -1; g.W = W; g.H = H; g.gen++;
+  g.el.style.width = W + 'px'; g.el.style.height = H + 'px';
+}
+function buildFilter(g, i, j) {
+  const id = `gf-${g.name}-${g.gen}-${i}-${j}`, A = g.frames[i], B = j !== i ? g.frames[j] : null, P = g.P, W = g.W, H = g.H;
+  const f = svgEl('filter', { id, x: 0, y: 0, width: 1, height: 1, primitiveUnits: 'userSpaceOnUse', 'color-interpolation-filters': 'sRGB' });
+  const img = (href, r) => svgEl('feImage', { href, x: 0, y: 0, width: W, height: H, preserveAspectRatio: 'none', result: r }, f);
+  const comps = [];
+  img(A.map, 'mA');
+  if (B) { img(B.map, 'mB'); comps.push(svgEl('feComposite', { in: 'mA', in2: 'mB', operator: 'arithmetic', k1: 0, k2: 1, k3: 0, k4: 0, result: 'm' }, f)); }
+  const M = B ? 'm' : 'mA', sc = 2 * P.maxShift;
+  [['dR', 1 + P.disp], ['dG', 1], ['dB', 1 - P.disp]].forEach(([r, k]) => svgEl('feDisplacementMap', { in: 'SourceGraphic', in2: M, scale: (sc * k).toFixed(2), xChannelSelector: 'R', yChannelSelector: 'G', result: r }, f));
+  svgEl('feColorMatrix', { in: 'dR', type: 'matrix', values: '1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0', result: 'cR' }, f);
+  svgEl('feColorMatrix', { in: 'dG', type: 'matrix', values: '0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0', result: 'cG' }, f);
+  svgEl('feColorMatrix', { in: 'dB', type: 'matrix', values: '0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0', result: 'cB' }, f);
+  svgEl('feComposite', { in: 'cR', in2: 'cG', operator: 'arithmetic', k1: 0, k2: 1, k3: 1, k4: 0, result: 'rg' }, f);
+  svgEl('feComposite', { in: 'rg', in2: 'cB', operator: 'arithmetic', k1: 0, k2: 1, k3: 1, k4: 0, result: 'rgb' }, f);
+  let outName = 'rgb';
+  if (P.sigma > 0) {
+    svgEl('feGaussianBlur', { in: 'rgb', stdDeviation: P.sigma, result: 'bl' }, f);
+    svgEl('feColorMatrix', { in: 'bl', type: 'matrix', values: P.tint, result: 'soft' }, f);
+    svgEl('feColorMatrix', { in: M, type: 'matrix', values: '0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0', result: 'w' }, f);
+    svgEl('feComposite', { in: 'soft', in2: 'w', operator: 'in', result: 'sw' }, f);
+    svgEl('feComposite', { in: 'sw', in2: 'rgb', operator: 'over', result: 'gl' }, f);
+    outName = 'gl';
+  }
+  img(A.shade, 'sA');
+  if (B) { img(B.shade, 'sB'); comps.push(svgEl('feComposite', { in: 'sA', in2: 'sB', operator: 'arithmetic', k1: 0, k2: 1, k3: 0, k4: 0, result: 's' }, f)); }
+  svgEl('feComposite', { in: B ? 's' : 'sA', in2: outName, operator: 'over' }, f);
+  defs.appendChild(f);
+  return (g.filters[i + '-' + j] = { id, f, comps, k: -1 });
+}
+function glassUse(g, i, j, a) {
+  if (!REFRACT) return;
+  if (a <= 0.001) j = i; else if (a >= 0.999) { i = j; a = 0; }
+  const key = i + '-' + j;
+  let F = g.filters[key];
+  if (!F) { if (!g.frames[i] || !g.frames[j]) { ensureBaked(); } F = g.filters[key] || buildFilter(g, i, j); }
+  if (g.cur !== key) { g.el.style.backdropFilter = `url(#${F.id})`; g.el.style.webkitBackdropFilter = `url(#${F.id})`; g.cur = key; }
+  if (F.comps.length && F.k !== a) {
+    const k2 = (1 - a).toFixed(4), k3 = a.toFixed(4);
+    for (const c of F.comps) { c.setAttribute('k2', k2); c.setAttribute('k3', k3); }
+    F.k = a;
+  }
+}
+function placeEl(el, a, d, e, f) { el.style.transform = `matrix(${a},0,0,${d},${e},${f})`; }
+
+const gBody = makeGlass('body', $('g-body'), { maxShift: 44, depth: 33, disp: 0.075, sigma: 8, tint: tintMatrix(0.74, 1.5, [0.04, 0.034, 0.09]) });
+const gPills = [0, 1, 2].map(i => makeGlass('p' + i, $('g-p' + i), { maxShift: 20, depth: 15, disp: 0.07, sigma: 2.2, tint: tintMatrix(1.18, 1.25, [0.035, 0.035, 0.05]) }));
+const gLens = makeGlass('lens', $('g-lens'), { maxShift: 46, depth: 34, disp: 0.06, sigma: 0, tint: '' });
+const SHADE_BODY = { shin: 46, kSpec: 0.7, kFres: 0.22, kRim: 0.85, kLam: 0.14, kDark: 0.10, rimW: 1.15, shadow: 0.3, shadowR: 16, shadowDy: 10, kSheen: 0.045, kCaus: 0.35 };
+const SHADE_PILL = { shin: 30, kSpec: 0.55, kFres: 0.2, kRim: 0.7, kLam: 0.12, kDark: 0.06, rimW: 1.0, shadow: 0.18, shadowR: 7, shadowDy: 3 };
+const SHADE_LENS = { shin: 120, kSpec: 0.35, kFres: 0.3, kRim: 0.9, kLam: 0.06, kDark: 0.06, rimW: 1.1, shadow: 0.3, shadowR: 12, shadowDy: 8 };
+
+// Body keyframes: 0 = sheet at rest, 1 = jelly (thick bevel), 2.. = liquify morph M(u)
+const NM = 56;
+const bakeQueue = [];
+let geomChanged = true;
+function scheduleBake(G) {
+  bakeQueue.length = 0;
+  const bP = Object.assign({}, gBody.P, SHADE_BODY);
+  glassReset(gBody, G.box.w, G.box.h);
+  const res1 = 1;
+  bakeQueue.push(() => { gBody.frames[0] = bake(G.box.w, G.box.h, res1, fieldSheet(G, 1), bP); });
+  G.pills.forEach((pp, i) => {
+    const g = gPills[i], W = pp.w + 2 * G.pm, H = pp.h + 2 * G.pm, pP = Object.assign({}, g.P, SHADE_PILL);
+    glassReset(g, W, H);
+    for (let k = 0; k < 3; k++) bakeQueue.push(() => { g.frames[k] = bake(W, H, 1, fieldPill(pp.w, pp.h, G.pm, k), pP); });
+  });
+  const lw = 2 * (G.lensR + 16);
+  glassReset(gLens, lw, lw);
+  bakeQueue.push(() => { gLens.frames[0] = bake(lw, lw, 1, fieldLens(G.lensR, 16), Object.assign({}, gLens.P, SHADE_LENS)); });
+  bakeQueue.push(() => { gBody.frames[1] = bake(G.box.w, G.box.h, res1, fieldSheet(G, 1.9), bP); });
+  for (let k = 0; k <= NM; k++) {
+    const u = k / NM, res = (k <= 1 || k >= NM - 2) ? 1 : 0.5;
+    bakeQueue.push(() => { gBody.frames[2 + k] = bake(G.box.w, G.box.h, res, fieldMorph(G, u), bP); });
+  }
+}
+let fallbackShades = null;
+function bakeFallbackShades(G) {
+  const bP = Object.assign({ mapOnly: false, maxShift: 1, depth: 0 }, SHADE_BODY);
+  fallbackShades = {
+    sheet: bake(G.box.w, G.box.h, 1, fieldSheet(G, 1), bP).shade,
+    cube: bake(G.box.w, G.box.h, 1, fieldMorph(G, 1), bP).shade,
+  };
+}
+function ensureBaked() { while (bakeQueue.length) bakeQueue.shift()(); }
+function pumpBake() {
+  if (!bakeQueue.length) return;
+  const t0 = performance.now();
+  while (bakeQueue.length && performance.now() - t0 < 20) bakeQueue.shift()();
+  if (bakeQueue.length) setTimeout(pumpBake, 0);
+  else { prebuildFilters(); window.__bakeDone = performance.now(); }
+}
+function prebuildFilters() {
+  if (!REFRACT) return;
+  const pairs = [[gBody, 0, 0], [gBody, 0, 1], [gLens, 0, 0]];
+  for (let k = 0; k < NM; k++) pairs.push([gBody, 2 + k, 3 + k]);
+  gPills.forEach(g => { pairs.push([g, 0, 0], [g, 0, 1], [g, 1, 2]); });
+  for (const [g, i, j] of pairs) if (!g.filters[i + '-' + j] && g.frames[i] && g.frames[j]) buildFilter(g, i, j);
+}
+
+// =====================================================================================
+// Background content: the agent session (transcript, editor, dev server log)
+// =====================================================================================
+const COLS = { s: K.steel, m: K.mist, f: K.frost, i: K.ice, b: K.c2, w: K.h3, h: K.h2, k: K.c2, n: mixc(K.ice, K.mist, 0.4), t: mixc(K.mist, K.ice, 0.35), d: K.c1 };
+function parseLine(str) {
+  const out = []; const re = /\{(\w):([^}]*)\}|([^{]+)/g; let m;
+  while ((m = re.exec(str))) { if (m[1]) out.push([m[2], m[1]]); else out.push([m[3], 'm']); }
+  return out;
+}
+const TRANSCRIPT = [
+  [13.62, ''],
+  [13.72, '{s:›} {m:Task: add the example CLI and wire up} {f:npm run deploy:preview}'],
+  [13.86, '{s:›} {b:Read} {f:README.md}  {s:142 lines}'],
+  [13.97, '{s:›} {b:Read} {f:.devcontainer/Dockerfile}  {s:41 lines}'],
+  [14.07, '{s:›} {b:Read} {f:deploy.config.json}'],
+  [14.17, '{s:›} {b:Read} {f:package.json}'],
+  [14.30, '{s:›} {b:Edit} {f:package.json}  {i:+2} {s:-1}'],
+  [14.38, '{s:    }{i:+ }{n:"deploy:preview"}{m:: }{n:"tsx scripts/deploy-preview.ts"}{m:,}'],
+  [14.50, '{s:›} {b:Edit} {f:scripts/deploy-preview.ts}  {i:+18} {s:-3}'],
+  [14.57, '{s:    }{i:+ }{k:const} {f:args} {m:= [}{n:"deploy"}{m:, }{n:"--preview"}{m:, slug, }{n:"--json"}{m:];}'],
+  [14.62, '{s:    }{i:+ }{k:const} {m:{ stdout } = }{k:await} {f:run}{m:(}{n:"exdev"}{m:, args);}'],
+  [14.67, '{s:    }{i:+ }{k:return} {f:JSON}{m:.parse(stdout) }{k:as} {t:Preview}{m:;}'],
+  [14.72, '{s:    - const url = await legacyDeploy(slug);}'],
+  [14.86, '{s:›} {b:Run} {f:npm test -- --run deploy}'],
+  [15.02, '{i:  ✓} {m:deploy.config parses}  {s:4 ms}'],
+  [15.08, '{i:  ✓} {m:slugify keeps branch names url-safe}  {s:2 ms}'],
+  [15.14, '{i:  ✓} {m:preview target resolves the branch}  {s:11 ms}'],
+  [15.24, '{w:  ✗} {m:deployPreview calls the example CLI}'],
+  [15.30, '{w:      Error: spawn exdev ENOENT}'],
+  [15.36, '{s:      at deployPreview (scripts/deploy-preview.ts:24:28)}'],
+  [15.46, '{m:  Tests  3 passed, 1 failed}'],
+  [15.60, '{s:›} {b:Search} {f:"exdev" in docs/}  {s:3 matches}'],
+  [15.72, '{s:›} {b:Read} {f:docs/setup.md}'],
+  [15.82, '{s:  ┃} {m:Install the CLI first:}'],
+  [15.90, '{s:  ┃} {m:curl -fsSL https://get.example.dev/install.sh | sh}'],
+  [0.12, '{h:●} {f:Permission}  {m:Bash(}{h:curl -fsSL https://get.example.dev/install.sh | sh}{m:)}'],
+  [0.26, '{s:  Waiting for you}'],
+  [7.80, '{i:  You chose: run in sandbox}'],
+  [7.96, '{s:›} {b:Sandbox} {f:node:20-slim}  {m:network off, workspace read-only}'],
+  [9.92, '{s:  ┃} {m:fetched install.sh}  {s:14.2 KB}'],
+  [10.38, '{s:  ┃} {i:network: denied}  {s:2 outbound requests blocked}'],
+  [10.84, '{s:  ┃} {i:filesystem: read-only workspace}'],
+  [11.14, '{s:  ┃} {i:3 files would change}'],
+  [11.24, '{s:  ┃   }{m:~/.bashrc}  {i:+1}'],
+  [11.31, '{s:  ┃   }{m:~/.local/bin/exdev}  {s:new, 38 MB}'],
+  [11.38, '{s:  ┃   }{m:~/.config/exdev/config.toml}  {s:new}'],
+  [12.18, '{s:›} {b:Hash} {f:install.sh}  {m:sha256 9f3c…e71a}'],
+  [12.86, '{i:●} {f:Sandbox run finished. Nothing touched your machine.}'],
+  [13.22, '{s:  Next: review the 3 changes, or pin install.sh by hash.}'],
+].map(([t, s]) => ({ t, segs: parseLine(s) })).sort((a, b) => a.t - b.t);
+
+const EDITOR_SRC = `import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { readFile } from "node:fs/promises";
+
+const run = promisify(execFile);
+
+type Preview = { id: string; url: string; expiresAt: string };
+
+export function slugify(branch: string): string {
+  return branch
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+}
+
+export async function deployPreview(branch: string): Promise<Preview> {
+  const slug = slugify(branch);
+  const config = JSON.parse(await readFile("deploy.config.json", "utf8"));
+  const args = ["deploy", "--preview", slug, "--project", config.project, "--json"];
+  const { stdout } = await run("exdev", args, { timeout: 120_000 });
+  const preview = JSON.parse(stdout) as Preview;
+  console.log(\`Preview for \${branch} is live at \${preview.url}\`);
+  return preview;
+}
+
+export async function cleanupPreviews(maxAgeHours = 72): Promise<number> {
+  const { stdout } = await run("exdev", ["previews", "list", "--json"]);
+  const previews = JSON.parse(stdout) as Preview[];
+  const cutoff = Date.now() - maxAgeHours * 3_600_000;
+  const stale = previews.filter((p) => Date.parse(p.expiresAt) < cutoff);
+  await Promise.all(stale.map((p) => run("exdev", ["previews", "rm", p.id])));
+  return stale.length;
+}`;
+const KW = new Set(['import', 'from', 'const', 'let', 'type', 'export', 'function', 'async', 'await', 'return', 'as', 'new', 'string', 'number']);
+function tokenizeTS(line) {
+  const out = []; const re = /(\/\/.*$)|("(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`)|(\/\^?\[[^/]*\/g)|(\b\d[\d_]*\b)|([A-Za-z_$][\w$]*)|(\s+)|(.)/g; let m;
+  while ((m = re.exec(line))) {
+    if (m[1]) out.push([m[1], 's']); else if (m[2]) out.push([m[2], 'n']); else if (m[3]) out.push([m[3], 'n']); else if (m[4]) out.push([m[4], 'i']);
+    else if (m[5]) out.push([m[5], KW.has(m[5]) ? 'k' : /^[A-Z]/.test(m[5]) ? 't' : 'f']);
+    else if (m[6]) out.push([m[6], 'm']); else out.push([m[7], 'm']);
+  }
+  const merged = []; for (const tk of out) { const l = merged[merged.length - 1]; if (l && l[1] === tk[1]) l[0] += tk[0]; else merged.push(tk.slice()); }
+  return merged;
+}
+const EDITOR = EDITOR_SRC.split('\n').map((l, i) => ({ segs: tokenizeTS(l), add: i >= 17 && i <= 22 }));
+const LOGR = [['GET', '/api/previews', '200'], ['GET', '/assets/index-3f9a2c.js', '200'], ['POST', '/api/deploy', '202'], ['GET', '/api/health', '200'],
+  ['GET', '/previews/feat-checkout', '200'], ['GET', '/favicon.ico', '304'], ['hmr', 'src/components/PreviewList.tsx', ''], ['GET', '/api/previews/9f3c', '404'],
+  ['GET', '/api/session', '200'], ['GET', '/assets/vendor-81be.js', '200'], ['POST', '/api/telemetry', '204'], ['hmr', 'src/routes/deploy.tsx', '']];
+const DEVLOG = Array.from({ length: 32 }, (_, i) => {
+  const r = mulberry32(i * 7919 + 13), e = LOGR[Math.floor(r() * LOGR.length)], ms = 1 + Math.floor(r() * (e[0] === 'POST' ? 60 : 18));
+  const sec = 31 + Math.floor(i / 2), ts = `12:04:${String(sec % 60).padStart(2, '0')}`;
+  const segs = e[0] === 'hmr' ? [[ts + '  ', 's'], ['hmr ', 'b'], ['update ', 'm'], [e[1], 'f']]
+    : [[ts + '  ', 's'], [e[0].padEnd(5), 'b'], [e[1].padEnd(28), 'm'], [e[2] + ' ', e[2] === '200' || e[2] === '202' || e[2] === '204' ? 'i' : 'm'], [String(ms).padStart(3) + ' ms', 's']];
+  return { t: i * 0.5 + 0.21, segs };
+});
+
+// =====================================================================================
+// The story as a pure function of t
+// =====================================================================================
+const TL = { rise: 0.2, pills: [0.86, 0.98, 1.1], title: 1.0, cmd: 1.28, risk: [2.05, 2.3, 2.55], cur0: 3.0, curA: 4.35, hes: 6.15, curS: 7.15, click: 7.6, swap: 7.7, mEnd: 9.75, out: [9.95, 10.4, 10.85, 11.15], cool: [10.0, 10.35, 10.7], punch: 11.6, exit: 13.7, fall: 14.45, gone: 15.4 };
+function morphU(t) { return clamp((t - TL.swap) / (TL.mEnd - TL.swap), 0, 1); }
+function heat(t) {
+  let H = 0.62 * sm(1.9, 2.8, t);
+  H += 0.38 * sm(4.3, 4.9, t) * (1 - sm(6.0, 6.6, t)) + 0.12 * sm(6.6, 7.4, t);
+  H *= 1 - sm(7.7, 10.6, t);
+  return H;
+}
+const coolness = t => sm(8.6, 10.8, t) * (1 - sm(13.9, 15.2, t));
+function sheetXform(t) {
+  // rise on a damped spring, stretch with speed, squash on arrival; fall at the end
+  const tr = t - TL.rise;
+  const Z = 0.7, W = 8.6;
+  let p = spring(tr, Z, W), v = (spring(tr + 0.01, Z, W) - spring(tr - 0.01, Z, W)) / 0.02;
+  if (tr <= 0) { p = 0; v = 0; }
+  let ty = (1 - p) * VH * 0.95, sx = 1, sy = 1;
+  const st = clamp(v * 0.026, -0.1, 0.16);
+  sy = 1 + st; sx = 1 - st * 0.55;
+  const wob = tr > 0 ? 0.035 * Math.sin(tr * 15) * Math.exp(-tr * 3.4) : 0;
+  sx *= 1 + wob; sy *= 1 - wob;
+  sx *= lerp(0.86, 1, sm(0, 0.7, tr)); sy *= lerp(0.92, 1, sm(0, 0.7, tr));
+  if (t > TL.fall) {
+    const tf = t - TL.fall, shrink = 1 - 0.42 * sm(0, 0.55, tf);
+    ty += 1700 * tf * tf * (G.mode === 'd' ? 1 : 1.2) + 60 * G.s * sm(0, 0.3, tf);
+    sy *= shrink * (1 + Math.min(0.24, tf * 0.6)); sx *= shrink * (1 - Math.min(0.16, tf * 0.35));
+  }
+  const jel = tr > 0 ? clamp(Math.abs(v) * 0.16 + 0.85 * Math.exp(-tr * 2.6) * (0.5 + 0.5 * Math.cos(tr * 12)), 0, 1) : 1;
+  return { tx: 0, ty, sx, sy, jel, ox: LAY.SX + G.sheet.w / 2, oy: LAY.SY + G.sheet.h / 2 };
+}
+function toScreen(X, px, py) { return [X.ox + X.tx + X.sx * (LAY.SX + px - X.ox), X.oy + X.ty + X.sy * (LAY.SY + py - X.oy)]; }
+function pillC(i) { const p = G.pills[i]; return [p.x + p.w / 2, p.y + p.h / 2]; }
+function bez(a, c, b, t) { const u = 1 - t; return [u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]; }
+function cursorAt(t) {
+  const s = G.s, Sw = G.sheet.w, Sh = G.sheet.h;
+  const A = pillC(0), Sb = pillC(2);
+  const pA = [A[0] + 22 * s, A[1] + 7 * s], pS = [Sb[0] + 18 * s, Sb[1] + 7 * s];
+  const start = G.mode === 'd' ? [Sw + 280 * s, Sh + 230 * s] : [Sw + 60 * s, Sh + 150 * s];
+  const exitP = G.mode === 'd' ? [Sw + 170 * s, Sh + 320 * s] : [Sw + 80 * s, Sh + 220 * s];
+  let p, a = 1, press = 0;
+  if (t < TL.cur0) { p = start; a = 0; }
+  else if (t < TL.curA) { const k = eio((t - TL.cur0) / (TL.curA - TL.cur0)); p = bez(start, [pA[0] + 300 * s, pA[1] + 70 * s], pA, k); a = sm(TL.cur0, TL.cur0 + 0.3, t); }
+  else if (t < TL.hes) {
+    const tt = t - TL.curA;
+    const settle = 4 * s * Math.sin(tt * 13) * Math.exp(-tt * 6);
+    const nudge = bump(0.55, 0.8, 1.05, tt);
+    const drift = 16 * s * bump(1.2, 1.55, 1.8, tt);
+    p = [pA[0] + settle - 3 * s * nudge + drift, pA[1] + 2 * s * nudge];
+    press = 0.45 * bump(0.6, 0.72, 0.9, tt);
+  }
+  else if (t < TL.curS) { const k = eio((t - TL.hes) / (TL.curS - TL.hes)); p = bez(pA, [(pA[0] + pS[0]) / 2, pA[1] - 56 * s], pS, k); }
+  else if (t < 7.95) { const tt = t - TL.curS; p = [pS[0] + 3 * s * Math.sin(tt * 12) * Math.exp(-tt * 7), pS[1]]; press = bump(TL.click, TL.click + 0.06, TL.click + 0.2, t); }
+  else { const k = ein((t - 7.95) / 1.0); p = [lerp(pS[0], exitP[0], k), lerp(pS[1], exitP[1], k)]; a = 1 - sm(8.5, 8.95, t); }
+  return { p, a, press };
+}
+function pillHover(i, cur) {
+  const pp = G.pills[i], m = 5 * G.s;
+  const dx = Math.max(pp.x - cur.p[0], 0, cur.p[0] - (pp.x + pp.w)), dy = Math.max(pp.y - cur.p[1], 0, cur.p[1] - (pp.y + pp.h));
+  const dist = Math.hypot(dx, dy);
+  return cur.a * sm(0, 1, 1 - (dist - m) / (16 * G.s));
+}
+
+// =====================================================================================
+// Rendering
+// =====================================================================================
+let LAY = { SX: 0, SY: 0 }, G = null;
+let DPR = 1, VW = 0, VH = 0;
+let lens = { x: 0, y: 0, user: false };
+let ADV = {};
+function font(ctx, w, size, fam, stretch) {
+  ctx.font = `${w} ${size}px ${fam === 'g' ? '"Schibsted Grotesk", system-ui, sans-serif' : '"Martian Mono", ui-monospace, monospace'}`;
+  if ('fontStretch' in ctx) ctx.fontStretch = stretch || 'normal';
+}
+function advance(size) { const k = size.toFixed(2); if (!ADV[k]) { font(bx, 400, size, 'm'); ADV[k] = bx.measureText('M').width; } return ADV[k]; }
+function glyph(ctx, ch, x, y, size, col) {
+  // vector stand-ins for symbols Martian Mono does not carry
+  const s = size;
+  ctx.save(); ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = Math.max(1, s * 0.11); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const cx = x + s * 0.35, cy = y - s * 0.36;
+  if (ch === '✓') { ctx.beginPath(); ctx.moveTo(cx - s * .28, cy); ctx.lineTo(cx - s * .06, cy + s * .22); ctx.lineTo(cx + s * .3, cy - s * .26); ctx.stroke(); }
+  else if (ch === '✗') { ctx.beginPath(); ctx.moveTo(cx - s * .22, cy - s * .22); ctx.lineTo(cx + s * .22, cy + s * .22); ctx.moveTo(cx + s * .22, cy - s * .22); ctx.lineTo(cx - s * .22, cy + s * .22); ctx.stroke(); }
+  else if (ch === '●') { ctx.beginPath(); ctx.arc(cx, cy, s * 0.24, 0, 7); ctx.fill(); }
+  else if (ch === '┃') { ctx.fillRect(cx - s * 0.04, y - s * 1.05, s * 0.08, s * 1.45); }
+  ctx.restore();
+}
+const SYM = /[✓✗●┃]/;
+function drawSegs(ctx, segs, x, y, size, alpha, colMap) {
+  const adv = advance(size); let col = 0;
+  for (const [txt, ck] of segs) {
+    const c = css((colMap && colMap[ck]) || COLS[ck] || K.mist, alpha);
+    if (SYM.test(txt)) {
+      for (const ch of txt) { if (SYM.test(ch)) { glyph(ctx, ch, x + col * adv, y, size, c); } else { ctx.fillStyle = c; ctx.fillText(ch, x + col * adv, y); } col++; }
+      continue;
+    }
+    ctx.fillStyle = c; ctx.fillText(txt, x + col * adv, y); col += txt.length;
+  }
+}
+function rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); }
+
+// ---------- colour fields (low-res, scaled up) ----------
+const fieldC = document.createElement('canvas'), fieldX = fieldC.getContext('2d');
+let scrimC = null;
+function drawFields(t, H, Cn) {
+  const fw = Math.ceil(VW / 8), fh = Math.ceil(VH / 8);
+  if (fieldC.width !== fw || fieldC.height !== fh) { fieldC.width = fw; fieldC.height = fh; }
+  const f = fieldX; f.fillStyle = css(K.void); f.fillRect(0, 0, fw, fh);
+  const w2 = 2 * Math.PI / PERIOD;
+  const blob = (x, y, r, col, a) => { const g = f.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, css(col, a)); g.addColorStop(1, css(col, 0)); f.fillStyle = g; f.fillRect(0, 0, fw, fh); };
+  f.globalCompositeOperation = 'lighter';
+  blob(fw * (0.18 + 0.06 * Math.sin(w2 * t)), fh * (0.22 + 0.05 * Math.cos(w2 * t)), fw * 0.55, K.c1, 0.7);
+  blob(fw * (0.86 + 0.05 * Math.cos(w2 * t * 2)), fh * (0.30 + 0.08 * Math.sin(w2 * t)), fw * 0.42, K.c2, 0.38);
+  blob(fw * (0.55 + 0.1 * Math.sin(w2 * t + 2)), fh * (0.95 + 0.04 * Math.cos(w2 * t * 3)), fw * 0.5, K.h0, 0.75);
+  blob(fw * (0.08 + 0.04 * Math.cos(w2 * t + 1)), fh * 0.85, fw * 0.35, K.h0, 0.5);
+  const sc = [(LAY.SX + G.sheet.w * 0.5) / 8, (LAY.SY + G.sheet.h * 0.45) / 8];
+  if (H > 0.01) {
+    blob(sc[0] + fw * 0.03 * Math.sin(w2 * t * 3), sc[1], fw * 0.36, K.h1, 0.45 * H);
+    blob(sc[0] - fw * 0.05, sc[1] + fh * 0.12, fw * 0.22, K.h2, 0.4 * H);
+    blob(sc[0] + fw * 0.12, sc[1] - fh * 0.15, fw * 0.16, K.h3, 0.35 * H * H);
+  }
+  if (Cn > 0.01) {
+    blob(sc[0], sc[1] - fh * 0.06, fw * 0.4, K.c2, 0.45 * Cn);
+    blob(sc[0] + fw * 0.08, sc[1] - fh * 0.14, fw * 0.18, K.ice, 0.3 * Cn);
+  }
+  f.globalCompositeOperation = 'source-over';
+  bx.imageSmoothingEnabled = true; bx.imageSmoothingQuality = 'high';
+  bx.drawImage(fieldC, 0, 0, fw, fh, 0, 0, fw * 8, fh * 8);
+}
+function pane(x, y, w, h, title, right, rightCol) {
+  const s = G.s;
+  rr(bx, x, y, w, h, 12 * s); bx.fillStyle = 'rgba(16,12,42,0.5)'; bx.fill();
+  bx.strokeStyle = 'rgba(78,90,140,0.42)'; bx.lineWidth = 1; bx.stroke();
+  bx.fillStyle = 'rgba(78,90,140,0.16)'; bx.fillRect(x + 1, y + 34 * s, w - 2, 1);
+  font(bx, 500, 12.5 * s, 'g'); bx.fillStyle = css(K.mist, 0.95); bx.textBaseline = 'alphabetic';
+  bx.fillText(title, x + 14 * s, y + 22 * s);
+  if (right) { bx.textAlign = 'right'; bx.fillStyle = css(rightCol || K.steel); bx.fillText(right, x + w - 14 * s, y + 22 * s); bx.textAlign = 'left'; }
+}
+function drawTranscript(t, x, y, w, h) {
+  const s = G.s, size = (G.mode === 'd' ? 12 : 10.5) * s, lh = (G.mode === 'd' ? 20 : 17) * s;
+  pane(x, y, w, h, 'Agent session', t > 0.12 && t < 7.8 ? 'Needs your permission' : t >= 7.8 && t < 12.86 ? 'Running in a sandbox' : 'Working', t > 0.12 && t < 7.8 ? K.h3 : t >= 7.8 && t < 12.86 ? K.ice : K.steel);
+  bx.save(); rr(bx, x, y + 36 * s, w, h - 38 * s, 0); bx.clip();
+  const list = []; for (const L of TRANSCRIPT) list.push({ t: L.t - PERIOD, segs: L.segs }); for (const L of TRANSCRIPT) list.push(L);
+  let P = 0; const e = list.map(L => { const v = eout((t - L.t) / 0.22); P += v; return v; });
+  const yb = y + h - 16 * s;
+  font(bx, 400, size, 'm');
+  for (let j = 0; j < list.length; j++) {
+    if (e[j] <= 0) continue;
+    const yy = yb - (P - (j + 1)) * lh;
+    if (yy < y + 30 * s || yy > yb + lh) continue;
+    const a = e[j] * clamp((yy - y - 40 * s) / (40 * s), 0, 1);
+    drawSegs(bx, list[j].segs, x + 16 * s, yy, size, a * 0.92);
+    const L = list[j];
+    if (L.segs.length === 1 && L.segs[0][0].includes('Waiting for you') && t > 0.26 && t < 7.8) {
+      const cx = x + 16 * s + advance(size) * 17.5, cy = yy - size * 0.36;
+      bx.strokeStyle = css(K.h3, 0.9); bx.lineWidth = 1.6 * s; bx.beginPath(); bx.arc(cx, cy, size * 0.42, t * 7, t * 7 + 4.2); bx.stroke();
+    }
+  }
+  bx.restore();
+}
+function drawEditor(t, x, y, w, h) {
+  const s = G.s, size = (G.mode === 'd' ? 12 : 10.5) * s, lh = (G.mode === 'd' ? 20 : 17) * s;
+  pane(x, y, w, h, 'scripts/deploy-preview.ts', '+18  -3', K.c2);
+  bx.save(); rr(bx, x, y + 36 * s, w, h - 38 * s, 0); bx.clip();
+  const scroll = (G.mode === 'd' ? 4 : 10) * lh * (1 - Math.cos(2 * Math.PI * t / PERIOD)) / 2;
+  font(bx, 400, size, 'm');
+  const adv = advance(size);
+  for (let i = 0; i < EDITOR.length; i++) {
+    const yy = y + 60 * s + i * lh - scroll;
+    if (yy < y + 30 * s || yy > y + h + lh) continue;
+    if (EDITOR[i].add) { bx.fillStyle = 'rgba(155,232,255,0.07)'; bx.fillRect(x + 1, yy - lh * 0.72, w - 2, lh); bx.fillStyle = css(K.ice, 0.8); bx.fillText('+', x + 46 * s, yy); }
+    bx.fillStyle = css(K.steel, 0.9); bx.textAlign = 'right'; bx.fillText(String(i + 1), x + 38 * s, yy); bx.textAlign = 'left';
+    drawSegs(bx, EDITOR[i].segs, x + 62 * s, yy, size, 0.9);
+  }
+  bx.restore();
+}
+function drawDevLog(t, x, y, w, h) {
+  const s = G.s, size = (G.mode === 'd' ? 11.5 : 10) * s, lh = (G.mode === 'd' ? 19 : 16) * s;
+  pane(x, y, w, h, 'npm run dev', 'localhost:5173', K.steel);
+  bx.save(); rr(bx, x, y + 36 * s, w, h - 38 * s, 0); bx.clip();
+  const list = []; for (const L of DEVLOG) list.push({ t: L.t - PERIOD, segs: L.segs }); for (const L of DEVLOG) list.push(L);
+  let P = 0; const e = list.map(L => { const v = eout((t - L.t) / 0.18); P += v; return v; });
+  const yb = y + h - 14 * s;
+  font(bx, 400, size, 'm');
+  for (let j = 0; j < list.length; j++) {
+    if (e[j] <= 0) continue;
+    const yy = yb - (P - (j + 1)) * lh;
+    if (yy < y + 40 * s || yy > yb + lh) continue;
+    drawSegs(bx, list[j].segs, x + 14 * s, yy, size, e[j] * 0.85 * clamp((yy - y - 44 * s) / (30 * s), 0, 1));
+  }
+  bx.restore();
+}
+function drawFilesPane(t, x, y, w, h) {
+  const s = G.s, size = 11.5 * s, lh = 20 * s;
+  pane(x, y, w, h, 'Changes', '2 files', K.steel);
+  font(bx, 400, size, 'm');
+  const rows = [[['M ', 'b'], ['package.json', 'f'], ['  +2 -1', 's']], [['M ', 'b'], ['scripts/deploy-preview.ts', 'f'], ['  +18 -3', 's']], [['? ', 's'], ['docs/sandbox-report.md', 'm']]];
+  rows.forEach((r, i) => { if (y + 58 * s + i * lh < y + h - 8 * s) drawSegs(bx, r, x + 14 * s, y + 58 * s + i * lh, size, i === 2 ? sm(12.9, 13.3, t) * 0.9 : 0.9); });
+}
+
+// ---------- the box interior (drawn behind the glass so the glass refracts it) ----------
+function cubeAppear(t) { const u = morphU(t); return t < TL.exit ? sm(0.62, 0.95, u) : 1 - sm(TL.exit, TL.exit + 0.6, t); }
+function drawCubeInterior(ctx, t, X) {
+  const C = G.cube, s = G.s, ap = cubeAppear(t), sw = swallow(t);
+  if (ap <= 0.001 && sw <= 0.001 && (t < 7.8 || t > TL.exit)) return;
+  ctx.save();
+  ctx.setTransform(DPR * X.sx, 0, 0, DPR * X.sy, DPR * (X.ox + X.tx + X.sx * (LAY.SX - X.ox)), DPR * (X.oy + X.ty + X.sy * (LAY.SY - X.oy)));
+  // ink cloud that carries the swallowed command, growing into the box's back panel
+  const ink = (t < TL.exit ? sm(7.8, 8.25, t) : sw) * (1 - ap);
+  if (ink > 0.002) {
+    const cp = cmdPos(t), cx = (C.x0 + C.x1) / 2, cy = cp.y - cp.size * 0.4 + (cp.lines.length - 1) * cp.lh * 0.5;
+    ctx.save(); ctx.translate(cx, cy); ctx.scale(1, 0.32);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, C.w * 0.66);
+    g.addColorStop(0, `rgba(10,8,30,${0.96 * ink})`); g.addColorStop(0.62, `rgba(10,8,30,${0.82 * ink})`); g.addColorStop(1, 'rgba(10,8,30,0)');
+    ctx.fillStyle = g; ctx.fillRect(-C.w, -C.w, 2 * C.w, 2 * C.w); ctx.restore();
+  }
+  if (ap > 0) {
+    ctx.globalAlpha = ap;
+    // top face
+    ctx.beginPath(); ctx.moveTo(C.x0, C.y0); ctx.lineTo(C.x0 + C.dx, C.y0 - C.dy); ctx.lineTo(C.x1 + C.dx, C.y0 - C.dy); ctx.lineTo(C.x1, C.y0); ctx.closePath();
+    let gr = ctx.createLinearGradient(0, C.y0 - C.dy, 0, C.y0); gr.addColorStop(0, 'rgba(155,232,255,0.16)'); gr.addColorStop(1, 'rgba(78,90,140,0.30)');
+    ctx.fillStyle = gr; ctx.fill();
+    // right face
+    ctx.beginPath(); ctx.moveTo(C.x1, C.y0); ctx.lineTo(C.x1 + C.dx, C.y0 - C.dy); ctx.lineTo(C.x1 + C.dx, C.y1 - C.dy); ctx.lineTo(C.x1, C.y1); ctx.closePath();
+    gr = ctx.createLinearGradient(C.x1, 0, C.x1 + C.dx, 0); gr.addColorStop(0, 'rgba(27,23,71,0.85)'); gr.addColorStop(1, 'rgba(47,79,168,0.35)');
+    ctx.fillStyle = gr; ctx.fill();
+    // front panel
+    const ins = 13 * s;
+    rr(ctx, C.x0 + ins, C.y0 + ins * 0.8, C.w - 2 * ins, C.h - 1.8 * ins, C.rc * 0.5); ctx.fillStyle = 'rgb(11,9,32)'; ctx.fill();
+    gr = ctx.createLinearGradient(0, C.y0, 0, C.y1); gr.addColorStop(0, 'rgba(79,163,224,0.10)'); gr.addColorStop(1, 'rgba(155,232,255,0.04)');
+    ctx.fillStyle = gr; ctx.fill();
+    ctx.strokeStyle = 'rgba(155,232,255,0.22)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  // content
+  const T = G.ct, x0 = C.x0 + T.pad, xr = C.x1 - T.pad;
+  ctx.textBaseline = 'alphabetic';
+  const a0 = ap * sm(9.45, 9.8, t);
+  if (a0 > 0) {
+    font(ctx, 600, T.small + 1 * s, 'g'); ctx.fillStyle = css(K.frost, a0); ctx.fillText('Sandbox run', x0, C.y0 + T.rows[0]);
+    font(ctx, 400, T.small, 'g'); ctx.fillStyle = css(K.mist, a0); ctx.textAlign = 'right';
+    ctx.fillText(T.wide ? 'node:20-slim, no credentials mounted' : 'node:20-slim', xr, C.y0 + T.rows[0]); ctx.textAlign = 'left';
+  }
+  // swallowed command
+  if (sw > 0) {
+    const cp = cmdPos(t);
+    cp.lines.forEach((ln, li) => { font(ctx, 400, cp.size, 'm'); drawSegs(ctx, splitCmdLine(ln, 1), cp.x, cp.y + li * cp.lh, cp.size, sw); });
+  }
+  const base = T.wide ? 2 : 3;
+  const outs = [
+    [[['network: ', 'i'], ['denied', 'f']], '2 outbound requests blocked'],
+    [[['filesystem: ', 'i'], ['read-only workspace', 'f']], ''],
+    [[['3 files', 'f'], [' would change', 'i']], T.wide ? 'dry run, nothing applied' : ''],
+  ];
+  outs.forEach((o, i) => {
+    const tt = t - TL.out[i]; if (tt <= 0 || ap <= 0) return;
+    const txt = o[0].map(sg => sg[0]).join(''), n = Math.floor(clamp(tt / 0.3, 0, 1) * txt.length);
+    let left = n; const segs = [];
+    for (const [tx, ck] of o[0]) { if (left <= 0) break; segs.push([tx.slice(0, left), ck]); left -= tx.length; }
+    font(ctx, 400, T.size, 'm');
+    const settle = clamp(tt / 0.35, 0, 1);
+    drawSegs(ctx, segs, x0, C.y0 + T.rows[base + i], T.size, ap, settle < 1 ? { i: mixc(K.frost, K.ice, settle), f: K.frost } : null);
+    if (o[1] && T.wide) { font(ctx, 400, T.small, 'g'); ctx.fillStyle = css(K.mist, ap * sm(0.25, 0.5, tt)); ctx.textAlign = 'right'; ctx.fillText(o[1], xr, C.y0 + T.rows[base + i]); ctx.textAlign = 'left'; }
+  });
+  const tf = t - TL.out[3];
+  if (tf > 0 && ap > 0) {
+    font(ctx, 400, T.files, 'm');
+    const files = T.wide ? ['~/.bashrc  ~/.local/bin/exdev  ~/.config/exdev/config.toml'] : ['~/.bashrc  ~/.local/bin/exdev', '~/.config/exdev/config.toml'];
+    files.forEach((f, i) => { ctx.fillStyle = css(K.mist, ap * sm(0, 0.35, tf - i * 0.08)); ctx.fillText(f, x0, C.y0 + T.rows[base + 3 + i]); });
+  }
+  ctx.restore();
+}
+function cmdPos(t) {
+  const C = G.cube, T = G.ct, cmv = eio(clamp((t - 8.05) / 0.75, 0, 1));
+  return { cmv, x: lerp(G.cmd.x, C.x0 + T.pad, cmv), y: lerp(G.cmd.y, C.y0 + T.rows[1], cmv), size: lerp(G.cmd.size, T.size, cmv),
+    lines: cmv < 0.5 ? G.cmd.lines : T.cmdLines, lh: lerp(G.cmd.lh, T.rows[2] - T.rows[1], cmv) };
+}
+function swallow(t) { return t < TL.exit + 0.7 ? sm(8.45, 8.85, t) : 1 - sm(TL.exit + 0.7, TL.exit + 1.1, t); }
+
+// ---------- command text, coloured by trust ----------
+function splitCmdLine(ln, cold) {
+  // colour: url and the pipe into sh run hot until the sandbox cools them
+  const segs = []; const parts = ln.match(/(\$ ?)|(curl)|(-fsSL)|(https:\/\/\S*|install\.sh)|(\|)|(\bsh\b)|(\s+)|(\S+)/g) || [];
+  for (const p of parts) {
+    let ck = 'f';
+    if (/^\$/.test(p)) ck = 's'; else if (p === 'curl') ck = 'f'; else if (p === '-fsSL') ck = 'm';
+    else if (/^https|install\.sh/.test(p)) ck = cold ? 'i' : 'U'; else if (p === '|') ck = 'f'; else if (p === 'sh') ck = cold ? 'i' : 'X'; else if (/^\s+$/.test(p)) ck = 'm';
+    segs.push([p, ck]);
+  }
+  return segs;
+}
+
+// ---------- foreground overlay: sheet content, pill labels, cursor ----------
+function drawFG(t, X, cur) {
+  const ctx = fx, s = G.s, S = G.sheet;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, fgc.width, fgc.height);
+  const onScreen = t >= TL.rise && t < TL.gone;
+  if (!onScreen) return;
+  ctx.setTransform(DPR * X.sx, 0, 0, DPR * X.sy, DPR * (X.ox + X.tx + X.sx * (LAY.SX - X.ox)), DPR * (X.oy + X.ty + X.sy * (LAY.SY - X.oy)));
+  ctx.textBaseline = 'alphabetic';
+  const H = heat(t), u = morphU(t);
+  const dis = sm(7.72, 8.25, t); // sheet chrome dissolving into the flow
+  const focusC = [(G.cube.x0 + G.cube.x1) / 2, G.cube.y0 + G.cube.h * 0.45];
+  // glyph + title + subtitle
+  if (dis < 1) {
+    ctx.save();
+    const k = 1 - 0.25 * dis; ctx.globalAlpha = 1 - dis;
+    ctx.translate(lerp(0, focusC[0] - G.title.x, dis * 0.3), lerp(0, 20 * s, dis)); ctx.translate(G.title.x, G.title.y); ctx.scale(k, k); ctx.translate(-G.title.x, -G.title.y);
+    const ga = sm(TL.title - 0.1, TL.title + 0.3, t);
+    const gl = G.glyph;
+    rr(ctx, gl.x, gl.y, gl.sz, gl.sz, gl.sz * 0.3); ctx.strokeStyle = css(K.mist, 0.55 * ga); ctx.lineWidth = 1.2 * s; ctx.stroke();
+    ctx.fillStyle = css(K.frost, 0.9 * ga); font(ctx, 500, gl.sz * 0.42, 'm'); ctx.fillText('›_', gl.x + gl.sz * 0.2, gl.y + gl.sz * 0.66);
+    // title: characters settle from heavy to light weight
+    const title = 'Agent wants to run';
+    let xx = G.title.x;
+    for (let i = 0; i < title.length; i++) {
+      const tt = t - TL.title - i * 0.018; if (tt <= 0) break;
+      const st = clamp(tt / 0.22, 0, 1);
+      font(ctx, Math.round(lerp(620, 300, eout(st))), G.title.size, 'm', 'semi-expanded');
+      ctx.fillStyle = css(mixc(K.ice, K.frost, st), clamp(tt / 0.08, 0, 1));
+      ctx.fillText(title[i], xx, G.title.y);
+      font(ctx, 300, G.title.size, 'm', 'semi-expanded'); xx += ctx.measureText(title[i]).width;
+    }
+    font(ctx, 400, G.sub.size, 'g'); ctx.fillStyle = css(K.mist, sm(TL.title + 0.3, TL.title + 0.7, t));
+    ctx.fillText(G.mode === 'd' ? 'Step 14 of "add the example CLI". It needs a shell.' : 'Step 14 of "add the example CLI"', G.sub.x, G.sub.y);
+    // label
+    font(ctx, 500, G.label.size, 'g'); ctx.fillStyle = css(K.mist, sm(TL.risk[0] - 0.25, TL.risk[0], t));
+    ctx.fillText('What this command can do', G.label.x, G.label.y);
+    ctx.restore();
+  }
+  // command well + command, then the command slides into the box
+  {
+    const cp = cmdPos(t);
+    const W = G.well, C = G.cube, T = G.ct;
+    const wa = sm(TL.cmd - 0.2, TL.cmd, t) * (1 - sm(7.9, 8.35, t));
+    if (wa > 0) { rr(ctx, W.x, W.y, W.w, W.h, W.r); ctx.fillStyle = `rgba(10,8,30,${0.5 * wa})`; ctx.fill(); ctx.strokeStyle = `rgba(140,147,196,${0.2 * wa})`; ctx.lineWidth = 1; ctx.stroke(); }
+    const ovA = 1 - swallow(t);
+    if (ovA > 0.001 && t < TL.exit) {
+      const sz = cp.size, lines = cp.lines, lh = cp.lh;
+      const cool = sm(8.0, 8.7, t);
+      let ci = 0;
+      lines.forEach((ln, li) => {
+        const x0 = cp.x, y0 = cp.y + li * lh;
+        const adv = advance(sz);
+        const segs = splitCmdLine(ln, 0);
+        let col = 0;
+        for (const [txt, ck] of segs) {
+          for (const ch of txt) {
+            const tt = t - TL.cmd - ci * 0.02; ci++;
+            if (tt > 0 && ch !== ' ') {
+              const st = clamp(tt / 0.217, 0, 1);
+              let fin = ck === 'U' ? ironbow(0.62 + 0.18 * H) : ck === 'X' ? ironbow(0.46 + 0.2 * H) : (COLS[ck] || K.frost);
+              if (ck === 'U' || ck === 'X') fin = mixc(fin, K.ice, cool);
+              const c = mixc(K.h5, fin, eout(st));
+              font(ctx, Math.round(lerp(700, 400, st)), sz, 'm');
+              ctx.fillStyle = css(c, ovA * clamp(tt / 0.05, 0, 1));
+              ctx.fillText(ch, x0 + col * adv, y0);
+            }
+            col++;
+          }
+        }
+      });
+    }
+  }
+  // risk lines: hot, then they move under the box and cool to ice
+  {
+    const RK = G.risk, RF = G.riskFinal;
+    const lines = ['Downloads and executes a remote script', 'Script is not pinned to a checksum', "Runs with your shell's permissions"];
+    const notes = ['Runs in a disposable container', 'Hash recorded so you can pin it', 'No home directory, keys or tokens'];
+    const mv = eio(clamp((t - 7.85) / 0.85, 0, 1));
+    const gone = sm(TL.exit, TL.exit + 0.55, t);
+    for (let i = 0; i < 3; i++) {
+      const tt = t - TL.risk[i]; if (tt <= 0) continue;
+      const appear = eout(clamp(tt / 0.35, 0, 1));
+      const cool = sm(TL.cool[i], TL.cool[i] + 0.9, t);
+      const x = lerp(RK.x, RF.x, mv), y = lerp(RK.y0 + i * RK.dy, RF.y0 + i * RF.dy, mv) + (1 - appear) * 10 * s;
+      const bxp = lerp(RK.bx, RF.bx, mv);
+      const size = lerp(RK.size, RF.size, mv);
+      const hv = [0.5, 0.42, 0.46][i] + 0.3 * H + 0.08 * Math.sin(t * 5 + i * 2) * H;
+      const hot = ironbow(hv);
+      const col = mixc(mixc(K.frost, hot, 0.72), K.ice, cool);
+      const a = appear * (1 - gone);
+      ctx.save();
+      if (gone > 0) { const fc = [(G.cube.x0 + G.cube.x1) / 2, G.cube.y1]; ctx.translate(fc[0], fc[1]); ctx.scale(1 - 0.4 * gone, 1 - 0.4 * gone); ctx.translate(-fc[0], -fc[1]); }
+      // bullet: a glowing heat blob that becomes an ice ring
+      const by = y - size * 0.34;
+      if (cool < 1) {
+        const rg = ctx.createRadialGradient(bxp, by, 0, bxp, by, 11 * s);
+        rg.addColorStop(0, css(ironbow(hv + 0.12), a * (1 - cool))); rg.addColorStop(0.35, css(hot, a * 0.55 * (1 - cool))); rg.addColorStop(1, css(K.h1, 0));
+        ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(bxp, by, 11 * s, 0, 7); ctx.fill();
+      }
+      if (cool > 0) { ctx.strokeStyle = css(K.ice, a * cool); ctx.lineWidth = 1.6 * s; ctx.beginPath(); ctx.arc(bxp, by, 4.6 * s, 0, 7); ctx.stroke(); }
+      font(ctx, 500, size, 'g'); ctx.fillStyle = css(col, a);
+      ctx.fillText(lines[i], x, y);
+      if (G.mode === 'd' && cool > 0) { font(ctx, 400, 14 * s, 'g'); ctx.fillStyle = css(K.mist, a * sm(0.3, 1, cool)); ctx.fillText(notes[i], RF.noteX, y); }
+      ctx.restore();
+    }
+    // punchline
+    const pa = sm(TL.punch, TL.punch + 0.5, t) * (1 - gone);
+    if (pa > 0) {
+      const P = G.punch, dy = (1 - eout(clamp((t - TL.punch) / 0.5, 0, 1))) * 8 * s;
+      font(ctx, 500, P.size, 'g'); ctx.fillStyle = css(K.frost, pa); ctx.fillText('Nothing ran on your machine.', P.x, P.y + dy);
+      font(ctx, 400, P.small, 'g'); ctx.fillStyle = css(K.mist, pa);
+      ctx.fillText(G.mode === 'd' ? 'Review the 3 changes, then pin install.sh to its sha256 before installing.' : 'Review the 3 changes, then pin install.sh by hash.', P.x, P.y + dy + P.lh);
+    }
+  }
+  // without refraction the frosted glass would blur the box contents, so draw them on top
+  if (!REFRACT) { drawCubeInterior(ctx, t, X); ctx.setTransform(DPR * X.sx, 0, 0, DPR * X.sy, DPR * (X.ox + X.tx + X.sx * (LAY.SX - X.ox)), DPR * (X.oy + X.ty + X.sy * (LAY.SY - X.oy))); }
+  // pill labels ride on the pills
+  const labels = ['Approve once', 'Deny', 'Run in sandbox'];
+  for (let i = 0; i < 3; i++) {
+    const ps = pillState(t, i, cur); if (ps.sc <= 0.01) continue;
+    const pp = G.pills[i], c = [pp.x + pp.w / 2 + ps.dx, pp.y + pp.h / 2 + ps.dy];
+    const la = clamp((ps.sc - 0.4) / 0.6, 0, 1) * (1 - ps.melt);
+    if (la <= 0) continue;
+    ctx.save(); ctx.translate(c[0], c[1]); ctx.scale(ps.sc * (1 + 0.07 * ps.hover) * (1 + 0.02 * ps.press), ps.sc * (1 + 0.07 * ps.hover) * (1 - 0.06 * ps.press));
+    font(ctx, 600, G.pillFont, 'g'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const col = i === 0 ? mixc(ironbow(0.6 + 0.25 * H), K.h5, 0.25 * ps.hover) : i === 1 ? K.frost : mixc(K.ice, K.frost, 0.3 * ps.hover);
+    ctx.fillStyle = css(col, la); ctx.fillText(labels[i], 0, 1 * s);
+    ctx.restore();
+  }
+  // cube landing glint
+  const gt = (t - 9.55) / 0.7;
+  if (gt > 0 && gt < 1) {
+    const C = G.cube; ctx.save();
+    ctx.beginPath(); ctx.moveTo(C.x0, C.y1); ctx.lineTo(C.x0, C.y0); ctx.lineTo(C.x0 + C.dx, C.y0 - C.dy); ctx.lineTo(C.x1 + C.dx, C.y0 - C.dy); ctx.lineTo(C.x1 + C.dx, C.y1 - C.dy); ctx.lineTo(C.x1, C.y1); ctx.closePath(); ctx.clip();
+    const gx = lerp(C.x0 - 200 * s, C.x1 + 200 * s, eio(gt));
+    const gr = ctx.createLinearGradient(gx - 90 * s, C.y0 - 60 * s, gx + 90 * s, C.y1 + 60 * s);
+    gr.addColorStop(0, 'rgba(232,247,255,0)'); gr.addColorStop(0.5, `rgba(232,247,255,${0.16 * Math.sin(Math.PI * gt)})`); gr.addColorStop(1, 'rgba(232,247,255,0)');
+    ctx.fillStyle = gr; ctx.fillRect(C.x0 - 10, C.y0 - C.dy - 10, C.w + C.dx + 20, C.h + C.dy + 20);
+    ctx.restore();
+  }
+  // cursor
+  if (cur.a > 0.01) {
+    ctx.save(); ctx.translate(cur.p[0], cur.p[1]);
+    const k = 1.18 * s * (1 - 0.14 * cur.press); ctx.scale(k, k);
+    ctx.shadowColor = 'rgba(8,6,24,0.5)'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 17.5); ctx.lineTo(4.3, 13.6); ctx.lineTo(7.1, 19.9); ctx.lineTo(9.9, 18.7); ctx.lineTo(7.2, 12.5); ctx.lineTo(12.9, 12.5); ctx.closePath();
+    ctx.fillStyle = css(K.frost, cur.a); ctx.fill(); ctx.shadowColor = 'transparent';
+    ctx.lineWidth = 1.2; ctx.strokeStyle = css(K.void, cur.a); ctx.stroke();
+    ctx.restore();
+    const ct = t - TL.click;
+    if (ct > 0 && ct < 0.6) { ctx.strokeStyle = css(K.ice, 0.6 * (1 - ct / 0.6)); ctx.lineWidth = 1.5 * s; ctx.beginPath(); ctx.arc(cur.p[0], cur.p[1], (8 + 60 * eout(ct / 0.6)) * s, 0, 7); ctx.stroke(); }
+  }
+}
+function pillState(t, i, cur) {
+  const pop = spring(t - TL.pills[i], 0.42, 15);
+  let sc = clamp(pop, 0, 1.2), dx = 0, dy = 0, melt = 0;
+  const hover = t < TL.swap ? pillHover(i, cur) : 0;
+  let press = 0;
+  if (i === 0) press = cur.press * hover;
+  if (i === 2) press = bump(TL.click, TL.click + 0.07, TL.click + 0.3, t);
+  if (i < 2 && t > TL.swap) {
+    // sucked toward the flowing drop
+    const k = ein(clamp((t - TL.swap) / 0.62, 0, 1));
+    const tgt = pillC(2), me = pillC(i);
+    dx = (tgt[0] - me[0]) * k * 0.85; dy = (tgt[1] - me[1]) * k * 0.85 - 30 * G.s * k;
+    sc *= 1 - k; melt = sm(0, 0.5, k);
+  }
+  let glass = true;
+  if (i === 2 && t > TL.swap) { glass = false; const k = clamp((t - TL.swap) / 0.28, 0, 1); sc *= 1 - ein(k); melt = sm(0.3, 1, k); dy = -10 * G.s * eout(k); }
+  if (t < TL.pills[i]) sc = 0;
+  const kx = (1 + 0.07 * hover) * (1 + 0.05 * press), ky = (1 + 0.07 * hover) * (1 - 0.1 * press);
+  return { sc, dx, dy, hover, press, melt, kx, ky, glass };
+}
+
+// ---------- placing the glass elements ----------
+function placeGlass(t, X, cur) {
+  const show = t >= TL.rise && t < TL.gone;
+  const els = [gBody.el, ...gPills.map(g => g.el)];
+  if (!show) { for (const e of els) e.style.display = 'none'; return; }
+  const b = G.box;
+  // body element
+  gBody.el.style.display = 'block';
+  const [ex, ey] = toScreen(X, b.x, b.y);
+  if (REFRACT) {
+    placeEl(gBody.el, X.sx, X.sy, ex, ey);
+    if (t < TL.swap) glassUse(gBody, 0, 1, clamp(X.jel, 0, 1));
+    else {
+      let u = morphU(t);
+      if (t > TL.exit) u = lerp(1, 0.64, eio((t - TL.exit) / 0.75));
+      const f = u * NM, i = Math.min(NM - 1, Math.floor(f));
+      glassUse(gBody, 2 + i, 3 + i, f - i);
+    }
+  } else placeFallbackBody(t, X);
+  // pills
+  for (let i = 0; i < 3; i++) {
+    const g = gPills[i], ps = pillState(t, i, cur), pp = G.pills[i];
+    if (ps.sc <= 0.01 || !ps.glass) { g.el.style.display = 'none'; continue; }
+    g.el.style.display = 'block';
+    const cx = pp.x + pp.w / 2 + ps.dx, cy = pp.y + pp.h / 2 + ps.dy;
+    const W = pp.w + 2 * G.pm, H = pp.h + 2 * G.pm, kx = ps.sc * ps.kx, ky = ps.sc * ps.ky;
+    const [sx0, sy0] = toScreen(X, cx - W / 2 * kx, cy - H / 2 * ky);
+    placeEl(g.el, X.sx * kx, X.sy * ky, sx0, sy0);
+    if (REFRACT) {
+      if (ps.press > 0.001) glassUse(g, 1, 2, ps.press); else glassUse(g, 0, 1, eout(ps.hover));
+    } else {
+      g.el.style.width = pp.w + 'px'; g.el.style.height = pp.h + 'px'; g.el.style.borderRadius = pp.h / 2 + 'px';
+      const kx = ps.sc * ps.kx, ky = ps.sc * ps.ky;
+      placeEl(g.el, X.sx * kx, X.sy * ky, ...toScreen(X, cx - pp.w / 2 * kx, cy - pp.h / 2 * ky));
+    }
+  }
+}
+// frosted fallback: the body is a CSS box that morphs sheet -> rounded blob -> box front
+function placeFallbackBody(t, X) {
+  const S = G.sheet, C = G.cube, el = gBody.el, s = G.s;
+  let r, L, T, W, H, clip = '';
+  const u = t < TL.swap ? 0 : t > TL.exit ? lerp(1, 0.6, eio((t - TL.exit) / 0.75)) : morphU(t);
+  const f = sm(0.08, 0.5, u), c = sm(0.7, 0.97, u);
+  const bL = C.x0 + 10 * s, bT = C.y0 - C.dy * 0.5, bW = C.w + C.dx - 20 * s, bH = C.h + C.dy * 0.5;
+  L = lerp(0, bL, f); T = lerp(0, bT, f); W = lerp(S.w, bW, f); H = lerp(S.h, bH, f);
+  if (u > 0.4) { const v = u - 0.4, w = 0.06 * Math.sin(2 * Math.PI * v / 0.17) * Math.exp(-v / 0.12); L -= W * w / 2; W *= 1 + w; T += H * w / 2; H *= 1 - w; }
+  r = lerp(S.r, Math.min(W, H) * 0.42, sm(0.05, 0.4, u));
+  L = lerp(L, C.x0, c); T = lerp(T, C.y0 - C.dy, c); W = lerp(W, C.w + C.dx, c); H = lerp(H, C.h + C.dy, c); r = lerp(r, C.rc, c);
+  el.style.width = W + 'px'; el.style.height = H + 'px'; el.style.borderRadius = r + 'px';
+  if (c > 0.02) {
+    const dx = C.dx * c, dy = C.dy * c, w0 = C.w, h0 = C.h;
+    el.style.clipPath = `polygon(0px ${C.dy}px, ${dx}px ${C.dy - dy}px, ${w0 + C.dx}px ${C.dy - dy}px, ${w0 + C.dx}px ${C.dy + h0 - dy}px, ${w0 + C.dx - (C.dx - dx)}px ${C.dy + h0}px, 0px ${C.dy + h0}px)`;
+  } else el.style.clipPath = 'none';
+  el.style.backgroundImage = 'none';
+  const [ex, ey] = toScreen(X, L, T);
+  placeEl(el, X.sx, X.sy, ex, ey);
+}
+function placeLens() {
+  const g = gLens, Rr = G.lensR + 16;
+  g.el.style.display = 'block';
+  if (REFRACT) { placeEl(g.el, 1, 1, lens.x - Rr, lens.y - Rr); glassUse(g, 0, 0, 0); }
+  else { g.el.style.width = g.el.style.height = 2 * G.lensR + 'px'; placeEl(g.el, 1, 1, lens.x - G.lensR, lens.y - G.lensR); }
+}
+
+// ---------- background ----------
+function drawBG(t, X) {
+  const H = heat(t), Cn = coolness(t), s = G.s;
+  bx.setTransform(1, 0, 0, 1, 0, 0);
+  drawFields(t, H, Cn);
+  bx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const m = 16 * s;
+  if (G.mode === 'd') {
+    const lw = Math.round(VW * 0.44), nt = LAY.notesTop;
+    const split = Math.round(nt && nt < VH * 0.7 ? Math.max(VH * 0.4, nt - 14) : VH * 0.66);
+    drawTranscript(t, m, m, lw - m, split - m);
+    drawFilesPane(t, m, split + 12 * s, lw - m, VH - split - 12 * s - m);
+    const rx = lw + 14 * s, rw = VW - rx - m, rs = Math.round(VH * 0.58);
+    drawEditor(t, rx, m, rw, rs - m);
+    drawDevLog(t, rx, rs + 12 * s, rw, VH - rs - 12 * s - m);
+  } else {
+    const top = Math.max(150 * s, LAY.SY - 14 * s);
+    drawTranscript(t, 10 * s, 10 * s, VW - 20 * s, top - 10 * s);
+    drawEditor(t, 10 * s, top + 12 * s, VW - 20 * s, VH * 0.5);
+    drawDevLog(t, 10 * s, top + 24 * s + VH * 0.5, VW - 20 * s, VH - top - VH * 0.5 - 34 * s);
+  }
+  // soft vignette keeps the edges calm
+  const vg = bx.createRadialGradient(VW / 2, VH / 2, Math.min(VW, VH) * 0.35, VW / 2, VH / 2, Math.max(VW, VH) * 0.75);
+  vg.addColorStop(0, 'rgba(16,12,42,0)'); vg.addColorStop(1, 'rgba(10,8,28,0.55)');
+  bx.fillStyle = vg; bx.fillRect(0, 0, VW, VH);
+  // scrim behind the risk lines once the sheet has flowed away
+  const sa = sm(7.9, 8.6, t) * (1 - sm(TL.exit, TL.exit + 0.6, t));
+  if (sa > 0) {
+    const RF = G.riskFinal;
+    bx.save(); bx.setTransform(DPR * X.sx, 0, 0, DPR * X.sy, DPR * (X.ox + X.tx + X.sx * (LAY.SX - X.ox)), DPR * (X.oy + X.ty + X.sy * (LAY.SY - X.oy)));
+    const y0 = RF.y0 - 36 * s, y1 = G.punch.y + G.punch.lh + 22 * s, pad = 40 * s, w = G.sheet.w + 40 * s;
+    if (!scrimC || scrimC.key !== G.sig + DPR) {
+      scrimC = document.createElement('canvas'); scrimC.key = G.sig + DPR;
+      scrimC.width = Math.ceil((w + 2 * pad) * DPR); scrimC.height = Math.ceil((y1 - y0 + 2 * pad) * DPR);
+      const c = scrimC.getContext('2d'); c.scale(DPR, DPR); c.filter = `blur(${16 * s}px)`;
+      rr(c, pad, pad, w, y1 - y0, 30 * s); c.fillStyle = 'rgba(12,9,32,0.86)'; c.fill();
+    }
+    bx.globalAlpha = sa; bx.drawImage(scrimC, -14 * s - pad, y0 - pad, w + 2 * pad, y1 - y0 + 2 * pad); bx.globalAlpha = 1;
+    bx.restore();
+  }
+  if (REFRACT) drawCubeInterior(bx, t, X);
+}
+
+// ---------- frame ----------
+let curT = 0;
+function render(t) {
+  if (!G) return;
+  t = mod(t, PERIOD); curT = t;
+  const X = sheetXform(t), cur = cursorAt(t);
+  drawBG(t, X);
+  placeGlass(t, X, cur);
+  drawFG(t, X, cur);
+  placeLens();
+}
+
+// ---------- layout / resize ----------
+const notes = $('notes'), showBtn = $('show-notes');
+function layout() {
+  VW = innerWidth; VH = innerHeight; DPR = Math.min(2, window.devicePixelRatio || 1);
+  for (const c of [bgc, fgc]) { c.width = Math.round(VW * DPR); c.height = Math.round(VH * DPR); }
+  const mobile = VW < 720 || VW / VH < 0.85, mode = mobile ? 'm' : 'd';
+  const s = mobile ? clamp(VW / 390, 0.85, 1.25) : clamp(Math.min(VW / 1440, VH / 900), 0.62, 1.35);
+  const sig = mode + ':' + s.toFixed(3) + ':' + (mobile ? Math.round(VW) : 0);
+  const nr = notes.hidden ? null : notes.getBoundingClientRect();
+  LAY.notesTop = nr && nr.height > 0 ? nr.top : 0;
+  if (!G || G.sig !== sig) { G = makeGeom(mode, s, VW); G.sig = sig; ADV = {}; if (REFRACT) { scheduleBake(G); ensureFirstFrames(); setTimeout(pumpBake, 30); } else bakeFallbackShades(G); }
+  if (mode === 'd') {
+    const notesR = notes.hidden ? 0 : notes.getBoundingClientRect().right + 24;
+    LAY.SX = Math.max(VW / 2 - G.sheet.w / 2 + 32 * s, notesR);
+    if (LAY.SX + G.sheet.w > VW - 16) LAY.SX = Math.max(16, VW - 16 - G.sheet.w);
+    LAY.SY = Math.round(VH / 2 - G.sheet.h / 2 + 4 * s);
+  } else {
+    const nh = notes.hidden ? 0 : notes.getBoundingClientRect().height + 16 + 12;
+    LAY.SX = 10 * s;
+    LAY.SY = Math.max(130 * s, VH - G.sheet.h - Math.max(12 * s, nh));
+  }
+  if (!lens.user) {
+    if (mode === 'd') { lens.x = Math.min(VW - G.lensR - 30, LAY.SX + G.sheet.w + (VW - LAY.SX - G.sheet.w) * 0.4); lens.y = 172 * s; }
+    else { lens.x = VW - G.lensR - 18 * s; lens.y = 92 * s; }
+  }
+}
+function ensureFirstFrames() {
+  // the sheet, pills and lens are needed immediately; the morph keyframes follow in idle slices
+  const need = 1 + 9 + 1 + 1;
+  for (let i = 0; i < need && bakeQueue.length; i++) bakeQueue.shift()();
+}
+let resizeTimer = 0;
+addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { layout(); render(curT); }, 160); });
+
+// ---------- lens drag ----------
+const lensEl = $('g-lens');
+let drag = null;
+lensEl.addEventListener('pointerdown', e => { drag = { id: e.pointerId, dx: lens.x - e.clientX, dy: lens.y - e.clientY }; lensEl.setPointerCapture(e.pointerId); lensEl.classList.add('drag'); e.preventDefault(); });
+lensEl.addEventListener('pointermove', e => { if (!drag || e.pointerId !== drag.id) return; lens.user = true; lens.x = clamp(e.clientX + drag.dx, 0, VW); lens.y = clamp(e.clientY + drag.dy, 0, VH); placeLens(); });
+const endDrag = e => { if (drag && e.pointerId === drag.id) { drag = null; lensEl.classList.remove('drag'); } };
+lensEl.addEventListener('pointerup', endDrag); lensEl.addEventListener('pointercancel', endDrag);
+
+// ---------- playback + contract hooks ----------
+const btn = $('playpause');
+let paused = false, baseT = 0, baseNow = performance.now();
+const setPaused = p => { paused = p; btn.textContent = p ? 'Play' : 'Pause'; btn.setAttribute('aria-pressed', String(p)); };
+function tick(now) {
+  if (!paused) render(baseT + (now - baseNow) / 1000);
+  requestAnimationFrame(tick);
+}
+window.__seek = t => {
+  lens.user = false; layout();
+  const t0 = performance.now(); ensureBaked(); prebuildFilters(); window.__bakeMs = performance.now() - t0;
+  baseT = mod(+t || 0, PERIOD); setPaused(true); render(baseT);
+};
+window.__play = () => { baseT = curT; baseNow = performance.now(); setPaused(false); };
+const pause = () => { baseT = curT; setPaused(true); render(curT); };
+const toggle = () => (paused ? window.__play() : pause());
+btn.addEventListener('click', toggle);
+const setNotes = (show, moveFocus) => {
+  notes.hidden = !show; showBtn.hidden = show;
+  layout(); render(curT);
+  if (moveFocus) (show ? $('hide-notes') : showBtn).focus({ preventScroll: true });
+};
+$('hide-notes').addEventListener('click', () => setNotes(false, true));
+showBtn.addEventListener('click', () => setNotes(true, true));
+addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'h' || e.key === 'H') setNotes(notes.hidden);
+  else if (e.key === ' ' || e.code === 'Space') {
+    if (document.activeElement && document.activeElement.tagName === 'BUTTON') return;
+    e.preventDefault(); toggle();
+  }
+});
+
+// ---------- start ----------
+if (!REFRACT) {
+  for (const g of [gBody, ...gPills, gLens]) g.el.classList.add('frost');
+  const p = document.createElement('p'); p.className = 'fallback';
+  p.textContent = "Refraction needs a Chromium-based browser; you're seeing the frosted fallback.";
+  notes.querySelector('.tech').after(p);
+}
+layout();
+const q = qs.get('t');
+if (q !== null && q !== '' && isFinite(+q)) window.__seek(+q);
+else if (matchMedia('(prefers-reduced-motion: reduce)').matches) window.__seek(HERO);
+else { baseT = 0; baseNow = performance.now(); render(0); }
+requestAnimationFrame(tick);
+const fontsReady = Promise.all([
+  document.fonts.load('400 13px "Martian Mono"'), document.fonts.load('300 20px "Martian Mono"'), document.fonts.load('700 14px "Martian Mono"'),
+  document.fonts.load('500 16px "Schibsted Grotesk"'), document.fonts.load('600 15px "Schibsted Grotesk"'), document.fonts.load('400 13px "Schibsted Grotesk"')
+]).catch(() => {});
+fontsReady.then(() => document.fonts.ready).then(() => { ADV = {}; render(curT); });
+window.__stats = () => ({ refract: REFRACT, queued: bakeQueue.length, frames: gBody.frames.filter(Boolean).length, filters: Object.keys(gBody.filters).length });
+})();
+</script>
+</body>
+</html>

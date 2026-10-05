@@ -1,0 +1,2197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Soft perimeter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--void)}
+body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent;color:var(--frost);
+  font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;-webkit-user-select:none;user-select:none}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;outline:none;cursor:default}
+#c.grab{cursor:grab}#c.grabbing{cursor:grabbing}#c.pointer{cursor:pointer}
+#c.cut{cursor:crosshair}
+#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:3}
+
+/* readout, top left */
+#hud{position:fixed;left:20px;top:18px;z-index:4;pointer-events:none;display:grid;gap:4px;
+  font:400 13px/1.35 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist)}
+#hud .row{display:flex;align-items:center;gap:8px}
+#hud .dot{width:8px;height:8px;border-radius:50%;flex:none}
+#hud .dot.ice{background:var(--ice);box-shadow:0 0 8px rgba(155,232,255,.7)}
+#hud .dot.hot{background:var(--heat-3);box-shadow:0 0 8px rgba(255,122,47,.8)}
+#hud b{font:500 14px/1 "Martian Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;color:var(--frost);min-width:5ch}
+#hud .row.hot b{color:var(--heat-4)}
+#hud .state{margin-top:6px;font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--ice);
+  padding:6px 10px;border-radius:999px;border:1px solid rgba(155,232,255,.4);background:rgba(16,12,42,.5);justify-self:start}
+#hud .state.hot{color:var(--heat-4);border-color:rgba(255,122,47,.6)}
+
+/* toolbar, top right */
+#tools{position:fixed;right:20px;top:16px;z-index:6;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;
+  padding:6px;border-radius:999px;background:rgba(16,12,42,.6);border:1px solid rgba(140,147,196,.22);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+#tools button,#tools label{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost)}
+#tools button{background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);border-radius:999px;padding:8px 13px;cursor:pointer;transition:background .15s,transform .1s}
+#tools button:hover{background:rgba(155,232,255,.16)}
+#tools button:active,#tools button.press{transform:scale(.95)}
+#tools .seg{display:flex;border-radius:999px;overflow:hidden;border:1px solid rgba(140,147,196,.35)}
+#tools .seg button{border:0;border-radius:0;background:transparent;padding:8px 12px}
+#tools .seg button[aria-pressed="true"]{background:rgba(155,232,255,.2);color:var(--ice)}
+#tools .seg button#t-cut[aria-pressed="true"]{background:rgba(255,122,47,.18);color:var(--heat-4)}
+#tools label{display:flex;align-items:center;gap:8px;padding:0 6px 0 8px;color:var(--mist)}
+#tools input[type=range]{width:110px;accent-color:var(--ice);margin:0;cursor:pointer}
+#tools #b-patch{color:var(--void);background:var(--ice);border-color:var(--ice)}
+#tools #b-patch:hover{background:#c4f2ff}
+#tools #b-patch.press{box-shadow:0 0 0 4px rgba(155,232,255,.35)}
+
+#hint{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:5;pointer-events:none;
+  padding:9px 14px;border-radius:999px;background:rgba(16,12,42,.66);border:1px solid rgba(155,232,255,.3);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:var(--frost);font:500 13.5px/1.3 "Schibsted Grotesk",system-ui,sans-serif;
+  white-space:nowrap;transition:opacity .6s}
+#hint.gone{opacity:0}
+#tip{position:fixed;left:0;top:0;z-index:7;pointer-events:none;padding:6px 10px;border-radius:8px;background:rgba(16,12,42,.85);
+  border:1px solid rgba(155,232,255,.35);font:500 12.5px/1.2 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost);
+  white-space:nowrap;opacity:0;transition:opacity .15s}
+#tip.on{opacity:1}
+
+/* ghost cursor for the attract mode */
+#ghost{position:fixed;left:0;top:0;z-index:8;pointer-events:none;opacity:0}
+#ghost svg{position:absolute;left:-5px;top:-4px;width:32px;height:38px;overflow:visible}
+#ghost .ring{position:absolute;left:-24px;top:-24px;width:48px;height:48px;border-radius:50%;border:2px solid var(--ice);opacity:0}
+#ghost.press .ring{opacity:.9;left:-11px;top:-11px;width:22px;height:22px}
+#ghost.cutting .ring{border-color:var(--heat-4)}
+#ghost .cap{position:absolute;left:26px;top:24px;padding:7px 11px;border-radius:999px;background:rgba(16,12,42,.78);border:1px solid rgba(155,232,255,.35);
+  font:500 13.5px/1.2 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost);white-space:nowrap;opacity:0;
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+#ghost.flip .cap{left:auto;right:18px}
+
+#loader{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9;text-align:center;
+  font:400 13px/1.6 "Martian Mono",ui-monospace,monospace;color:var(--mist)}
+#loader .lb{width:220px;height:2px;background:rgba(78,90,140,.35);margin:10px auto 0;border-radius:2px;overflow:hidden}
+#loader .lb i{display:block;height:100%;width:0;background:var(--ice)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+.notes .keys{font-size:12.5px;margin-top:-4px}
+
+@media (max-width:600px){
+  #tools{left:8px;right:8px;top:8px;justify-content:space-between;gap:4px;padding:4px;flex-wrap:nowrap}
+  #tools button{padding:8px 10px}
+  #tools .seg button{padding:8px 10px}
+  #tools input[type=range]{width:60px}
+  #tools label{padding:0 2px;gap:6px}
+  #hud{left:14px;right:14px;top:58px;display:flex;gap:14px;font-size:12px}
+  #hud b{font-size:12.5px;min-width:0}
+  #hud .state{display:none}
+  #hint{bottom:auto;top:84px;font-size:12.5px;padding:7px 12px;white-space:normal;text-align:center;width:max-content;max-width:calc(100vw - 32px)}
+  .notes{padding:12px 14px 10px}
+  .notes p{margin-bottom:8px}
+  .notes .keys{display:none}
+}
+</style>
+</head>
+<body>
+<canvas id="c" role="img" aria-label="A pleated ice-blue curtain woven from tiny lines of code hangs across a doorway. Hot glowing packets stream at it from behind and bounce off. A ghost cursor grabs the fabric and pulls until it rips, slashes a second tear, and the hot packets pour through the holes onto the floor until Patch stitches the tears shut with ice-coloured seams."></canvas>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<div id="hud" aria-hidden="true">
+  <div class="row"><i class="dot ice"></i><span>Bounced off</span><b id="n-blocked">0</b></div>
+  <div class="row hot"><i class="dot hot"></i><span>Got through</span><b id="n-through">0</b></div>
+  <div class="state" id="state">Perimeter intact</div>
+</div>
+
+<div id="tools" role="toolbar" aria-label="Curtain controls">
+  <div class="seg" role="group" aria-label="Tool">
+    <button type="button" id="t-grab" aria-pressed="true" title="Grab tool">Grab</button>
+    <button type="button" id="t-cut" aria-pressed="false" title="Cut tool (C)">Cut</button>
+  </div>
+  <label for="wind">Wind <input type="range" id="wind" min="0" max="1" step="0.01" value="0.3"></label>
+  <button type="button" id="b-patch" title="Stitch every tear shut (P)">Patch</button>
+  <button type="button" id="b-reset" title="Rehang the curtain (R)">Reset</button>
+</div>
+
+<div id="hint" aria-hidden="true">Drag the curtain to pull it. Pull hard to tear it. Right-drag to slash.</div>
+<div id="tip" aria-hidden="true"></div>
+<div id="ghost" aria-hidden="true">
+  <span class="ring"></span>
+  <svg viewBox="-2 -2 32 38"><path d="M3 2 L3 25 L9 19.5 L13.2 29 L17.4 27.1 L13.4 17.9 L21.5 17.9 Z" fill="none" stroke="rgba(155,232,255,.28)" stroke-width="5" stroke-linejoin="round"/><path d="M4.5 4.5 L4.5 27.5 L10.5 22 L14.7 31.5 L18.9 29.6 L14.9 20.4 L23 20.4 Z" fill="rgba(16,12,42,.55)"/><path d="M3 2 L3 25 L9 19.5 L13.2 29 L17.4 27.1 L13.4 17.9 L21.5 17.9 Z" fill="#E8F7FF" stroke="#100C2A" stroke-width="1.6" stroke-linejoin="round"/></svg>
+  <span class="cap"></span>
+</div>
+<div id="sr" class="sr-only" aria-live="polite"></div>
+<div id="loader" role="status"><div id="ld-text">Hanging the curtain</div><div class="lb"><i id="ld-bar"></i></div></div>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Soft perimeter</h1>
+  <p>A firewall curtain hangs across a doorway while hostile packets blow against it from outside. Grab it and pull hard, or slash it, and they pour through the tear; Patch stitches it shut.</p>
+  <ul class="tech">
+    <li>A hand-written XPBD cloth solver (Macklin et al. 2016 and 2019): 121 × 84 particles, about 60,000 distance constraints for stretch, shear and bending, 10 substeps of one Gauss–Seidel pass each per 1/60 s frame, in plain JS typed arrays</li>
+    <li>Tearing changes the mesh: when the weave is stretched across a grid line past its limit, the vertices on that line are split so the hole really opens, cracks grow from their tips, and Patch merges the vertices back</li>
+    <li>Packets are particles tested against the cloth through a spatial hash; the ones that get through warm a heat map on the floor</li>
+    <li>Three.js r186 MeshPhysicalMaterial with sheen over a procedural twill of code glyphs (canvas texture plus a derived normal map), frayed edges in the shader, two shadowed lights and bloom</li>
+    <li>The attract mode is a scripted session that is re-simulated from a fixed seed when you seek</li>
+  </ul>
+  <p class="keys">Keys: R reset, C cut tool, T tear, P patch, Space pause, H notes.</p>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<script>
+  // if the Three.js module cannot be fetched, say so instead of hanging on the loader
+  setTimeout(function () { var l = document.getElementById('ld-text'); if (l && document.getElementById('loader')) l.textContent = 'Three.js did not load from the CDN, so the curtain cannot be shown here.'; }, 15000);
+</script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+/* ===== Soft perimeter: XPBD cloth with tearing, packets, floor heat (deterministic) ===== */
+function hash32(a) {
+  a = Math.imul(a ^ (a >>> 16), 0x7feb352d);
+  a = Math.imul(a ^ (a >>> 15), 0x846ca68b);
+  return (a ^ (a >>> 16)) >>> 0;
+}
+function hr(a, b) { return hash32(Math.imul(a | 0, 374761393) ^ Math.imul((b | 0) + 0x632BE5AB, 668265263)) / 4294967296; }
+
+function createSim(C) {
+  const NX = C.nx, NY = C.ny, NN = NX * NY, SP = C.sp;
+  const NCX = NX - 1, NCY = NY - 1, NC = NCX * NCY;
+  const NVE = NX * NCY, NHE = NCX * NY, NE = NVE + NHE;
+  const MAXP = NN * 2 + 1024;
+  const DT = 1 / 60, SUB = C.substeps, SDT = DT / SUB;
+  const RINGS = C.rings, NR = RINGS.length, NPIN = NR + 2;
+  const MAXK = 1024, NSP = 4, GMAX = 200;
+  const FHW = 96, FHD = 64;
+  const RC = SP * 0.82;                // packet vs cloth contact radius
+  const PKT_RATE = C.pktRate, PERIOD = C.period, KP = Math.round(PKT_RATE * PERIOD);
+
+  // ---------- state (everything mutable lives here so snapshots are exact) ----------
+  const A = {
+    x: new Float64Array(MAXP * 3), xp: new Float64Array(MAXP * 3), v: new Float64Array(MAXP * 3),
+    w: new Float64Array(MAXP), pn: new Int32Array(MAXP), heat: new Float32Array(MAXP), alive: new Uint8Array(MAXP),
+    nrm: new Float32Array(MAXP * 3), acc: new Float64Array(MAXP * 3),
+    freeStack: new Int32Array(MAXP),
+    qp: new Int32Array(NN * 4),
+    cut: new Uint8Array(NE), seam: new Float32Array(NE),
+    bAlive: new Uint8Array(NN * 2),
+    pinState: new Uint8Array(NPIN), pinPos: new Float32Array(NPIN * 3), pinT: new Float32Array(NPIN),
+    grabQ: new Int32Array(GMAX), grabOff: new Float32Array(GMAX * 3), grabW: new Float32Array(GMAX), grabMask: new Uint8Array(NN),
+    sEma: new Float32Array(NE),
+    patchE: new Int32Array(NE), patchT: new Float32Array(NE), patchDone: new Uint8Array(NE),
+    kx: new Float32Array(MAXK * 3), kv: new Float32Array(MAXK * 3), ks: new Uint8Array(MAXK), ka: new Float32Array(MAXK), kh: new Float32Array(MAXK),
+    fh: new Float32Array(FHW * FHD),
+  };
+  const sc = {
+    step: 0, pCount: 0, freeTop: 0, grabN: 0, gtx: 0, gty: 0, gtz: 0,
+    ox: 0, oy: 0, oz: 0, ovx: 0, ovy: 0, ovz: 0, opx: 0, opy: 0, opz: 0,
+    blocked: 0, through: 0, patchN: 0, patchActive: 0, patchT0: 0, patchQuiet: -1e9, topo: 1, tearsTotal: 0, kSpawned: 0, gbx: 0, gby: 0, gbz: 0, volAcc: 0, gq0: 0, gq1: 0, gq2: 0, gq3: 1, maxStrain: 1,
+  };
+  // static topology data
+  const nodePin = new Int16Array(NN).fill(-1);
+  const pinNode = new Int32Array(NPIN);
+  for (let k = 0; k < NR; k++) { pinNode[k] = RINGS[k]; nodePin[RINGS[k]] = k; }
+  pinNode[NR] = (NY - 1) * NX; pinNode[NR + 1] = (NY - 1) * NX + NX - 1;
+  nodePin[pinNode[NR]] = NR; nodePin[pinNode[NR + 1]] = NR + 1;
+
+  const edgeUp = (i, j) => j > 0 ? (j - 1) * NX + i : -1;
+  const edgeDown = (i, j) => j < NY - 1 ? j * NX + i : -1;
+  const edgeLeft = (i, j) => i > 0 ? NVE + j * NCX + i - 1 : -1;
+  const edgeRight = (i, j) => i < NX - 1 ? NVE + j * NCX + i : -1;
+  const nodeEdges = new Int32Array(NN * 4);
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+    const n = j * NX + i;
+    nodeEdges[n * 4] = edgeUp(i, j); nodeEdges[n * 4 + 1] = edgeRight(i, j);
+    nodeEdges[n * 4 + 2] = edgeDown(i, j); nodeEdges[n * 4 + 3] = edgeLeft(i, j);
+  }
+  // quadrant existence: 0 UL, 1 UR, 2 LR, 3 LL
+  const qex = new Uint8Array(NN * 4);
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+    const n = j * NX + i;
+    qex[n * 4] = (i > 0 && j > 0) ? 1 : 0; qex[n * 4 + 1] = (i < NX - 1 && j > 0) ? 1 : 0;
+    qex[n * 4 + 2] = (i < NX - 1 && j < NY - 1) ? 1 : 0; qex[n * 4 + 3] = (i > 0 && j < NY - 1) ? 1 : 0;
+  }
+  // edge endpoints and interior flag
+  const eA = new Int32Array(NE), eB = new Int32Array(NE), eInt = new Uint8Array(NE);
+  // structural slots (quadrant indices)
+  const s1a = new Int32Array(NE), s1b = new Int32Array(NE), s2a = new Int32Array(NE), s2b = new Int32Array(NE);
+  for (let j = 0; j < NCY; j++) for (let i = 0; i < NX; i++) { // vertical edges (i,j)-(i,j+1)
+    const e = j * NX + i, a = j * NX + i, b = a + NX;
+    eA[e] = a; eB[e] = b; eInt[e] = (i > 0 && i < NX - 1) ? 1 : 0;
+    if (i < NX - 1) { s1a[e] = a * 4 + 2; s1b[e] = b * 4 + 1; } else { s1a[e] = a * 4 + 3; s1b[e] = b * 4 + 0; }
+    if (i > 0 && i < NX - 1) { s2a[e] = a * 4 + 3; s2b[e] = b * 4 + 0; } else { s2a[e] = -1; s2b[e] = -1; }
+  }
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NCX; i++) { // horizontal edges (i,j)-(i+1,j)
+    const e = NVE + j * NCX + i, a = j * NX + i, b = a + 1;
+    eA[e] = a; eB[e] = b; eInt[e] = (j > 0 && j < NY - 1) ? 1 : 0;
+    if (j < NY - 1) { s1a[e] = a * 4 + 2; s1b[e] = b * 4 + 3; } else { s1a[e] = a * 4 + 1; s1b[e] = b * 4 + 0; }
+    if (j > 0 && j < NY - 1) { s2a[e] = a * 4 + 1; s2b[e] = b * 4 + 0; } else { s2a[e] = -1; s2b[e] = -1; }
+  }
+  // cell corners (quadrant indices): TL, TR, BR, BL
+  const cq = new Int32Array(NC * 4);
+  for (let j = 0; j < NCY; j++) for (let i = 0; i < NCX; i++) {
+    const c = j * NCX + i, tl = j * NX + i;
+    cq[c * 4] = tl * 4 + 2; cq[c * 4 + 1] = (tl + 1) * 4 + 3; cq[c * 4 + 2] = (tl + NX + 1) * 4 + 0; cq[c * 4 + 3] = (tl + NX) * 4 + 1;
+  }
+  // bends: index n*2 (horizontal, centred at n) and n*2+1 (vertical)
+  const bqa = new Int32Array(NN * 2).fill(-1), bqb = new Int32Array(NN * 2).fill(-1);
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+    const n = j * NX + i;
+    if (i > 0 && i < NX - 1) {
+      const P = n - 1, Q = n + 1;
+      bqa[n * 2] = P * 4 + (j < NY - 1 ? 2 : 1); bqb[n * 2] = Q * 4 + (j < NY - 1 ? 3 : 0);
+    }
+    if (j > 0 && j < NY - 1) {
+      const P = n - NX, Q = n + NX;
+      bqa[n * 2 + 1] = P * 4 + (i < NX - 1 ? 2 : 3); bqb[n * 2 + 1] = Q * 4 + (i < NX - 1 ? 1 : 0);
+    }
+  }
+  // per-edge tear thresholds (seeded fabric variation)
+  const thr = new Float32Array(NE);
+  for (let e = 0; e < NE; e++) {
+    thr[e] = C.tear * (1 + 0.03 * (hr(e, 77) * 2 - 1) + 0.025 * (hr(e >> 3, 91) * 2 - 1));
+    const jb = ((e < NVE ? eA[e] : eA[e]) / NX) | 0;
+    if (jb <= 2) thr[e] = 99; // reinforced heading tape under the rings never tears
+  }
+  // rest pose (captured at t=0)
+  const restX = new Float32Array(NN * 3);
+  // ring positions on the rod
+  const ringX = new Float32Array(NR);
+  for (let k = 0; k < NR; k++) ringX[k] = -C.rodHalfW + 2 * C.rodHalfW * k / (NR - 1);
+
+  // ---------- particles ----------
+  function allocP() {
+    if (sc.freeTop > 0) return A.freeStack[--sc.freeTop];
+    if (sc.pCount >= MAXP) return -1;
+    return sc.pCount++;
+  }
+  function freeP(p) { A.alive[p] = 0; A.w[p] = 0; A.freeStack[sc.freeTop++] = p; }
+  function copyP(dst, src) {
+    for (let k = 0; k < 3; k++) {
+      A.x[dst * 3 + k] = A.x[src * 3 + k]; A.xp[dst * 3 + k] = A.xp[src * 3 + k]; A.v[dst * 3 + k] = A.v[src * 3 + k];
+      A.nrm[dst * 3 + k] = A.nrm[src * 3 + k]; A.acc[dst * 3 + k] = 0;
+    }
+    A.w[dst] = A.w[src]; A.pn[dst] = A.pn[src]; A.heat[dst] = A.heat[src]; A.alive[dst] = 1;
+  }
+
+  // ---------- topology: recompute which particle each quadrant of node n uses ----------
+  const lab = new Int8Array(4), par = new Int8Array(4), oldp = new Int32Array(4), keep = new Int32Array(4);
+  const claimed = new Set();
+  function find(a) { while (par[a] !== a) a = par[a]; return a; }
+  function retopo(n) {
+    const b4 = n * 4;
+    for (let q = 0; q < 4; q++) { par[q] = q; oldp[q] = A.qp[b4 + q]; }
+    for (let q = 0; q < 4; q++) {
+      const q2 = (q + 1) & 3, e = nodeEdges[b4 + q]; // edge between quadrant q and q+1: up(0-1), right(1-2), down(2-3), left(3-0)
+      if (qex[b4 + q] && qex[b4 + q2] && e >= 0 && !A.cut[e]) { const ra = find(q), rb = find(q2); if (ra !== rb) par[rb] = ra; }
+    }
+    // components
+    let nc = 0;
+    for (let q = 0; q < 4; q++) lab[q] = -1;
+    const root2lab = [-1, -1, -1, -1];
+    for (let q = 0; q < 4; q++) if (qex[b4 + q]) { const r = find(q); if (root2lab[r] < 0) root2lab[r] = nc++; lab[q] = root2lab[r]; }
+    claimed.clear();
+    let changed = false;
+    for (let c = 0; c < nc; c++) {
+      // keeper: smallest old pid in comp not already claimed
+      let best = -1;
+      for (let q = 0; q < 4; q++) if (lab[q] === c) { const p = oldp[q]; if (!claimed.has(p) && (best < 0 || p < best)) best = p; }
+      let src = -1;
+      for (let q = 0; q < 4; q++) if (lab[q] === c) { src = oldp[q]; break; }
+      if (best < 0) { // split: new particle copying state
+        best = allocP(); if (best < 0) return false;
+        copyP(best, src); changed = true;
+      }
+      claimed.add(best); keep[c] = best;
+    }
+    // merges: old pids in a comp other than keeper, and not claimed by another comp -> merge into keeper and free
+    for (let c = 0; c < nc; c++) {
+      const kp = keep[c];
+      let mx = A.x[kp * 3], my = A.x[kp * 3 + 1], mz = A.x[kp * 3 + 2], vx = A.v[kp * 3], vy = A.v[kp * 3 + 1], vz = A.v[kp * 3 + 2], cnt = 1, wmin = A.w[kp], h = A.heat[kp];
+      const merged = [];
+      for (let q = 0; q < 4; q++) if (lab[q] === c) {
+        const p = oldp[q];
+        if (p !== kp && !claimed.has(p) && merged.indexOf(p) < 0) {
+          merged.push(p); cnt++;
+          mx += A.x[p * 3]; my += A.x[p * 3 + 1]; mz += A.x[p * 3 + 2];
+          vx += A.v[p * 3]; vy += A.v[p * 3 + 1]; vz += A.v[p * 3 + 2];
+          if (A.w[p] < wmin) wmin = A.w[p]; if (A.heat[p] > h) h = A.heat[p];
+        }
+      }
+      if (merged.length) {
+        changed = true;
+        A.x[kp * 3] = mx / cnt; A.x[kp * 3 + 1] = my / cnt; A.x[kp * 3 + 2] = mz / cnt;
+        A.xp[kp * 3] = A.x[kp * 3]; A.xp[kp * 3 + 1] = A.x[kp * 3 + 1]; A.xp[kp * 3 + 2] = A.x[kp * 3 + 2];
+        A.v[kp * 3] = vx / cnt; A.v[kp * 3 + 1] = vy / cnt; A.v[kp * 3 + 2] = vz / cnt;
+        A.w[kp] = wmin; A.heat[kp] = h;
+        for (const p of merged) freeP(p);
+      }
+    }
+    for (let q = 0; q < 4; q++) {
+      const np = lab[q] >= 0 ? keep[lab[q]] : -1;
+      if (np !== A.qp[b4 + q]) changed = true;
+      A.qp[b4 + q] = np;
+    }
+    // pinned nodes: all copies pinned at the pin
+    const pk = nodePin[n];
+    if (pk >= 0 && A.pinState[pk] === 1) for (let c = 0; c < nc; c++) {
+      const p = keep[c]; A.w[p] = 0;
+      A.x[p * 3] = A.pinPos[pk * 3]; A.x[p * 3 + 1] = A.pinPos[pk * 3 + 1]; A.x[p * 3 + 2] = A.pinPos[pk * 3 + 2];
+    }
+    if (changed) { sc.topo = 1; conDirty = true; openDirty = true; }
+    return true;
+  }
+  function bendUpdate(n) {
+    const b4 = n * 4, up = nodeEdges[b4], rt = nodeEdges[b4 + 1], dn = nodeEdges[b4 + 2], lf = nodeEdges[b4 + 3];
+    const ok = e => e >= 0 && !A.cut[e];
+    A.bAlive[n * 2] = (bqa[n * 2] >= 0 && ok(lf) && ok(rt) && (ok(up) || ok(dn))) ? 1 : 0;
+    A.bAlive[n * 2 + 1] = (bqa[n * 2 + 1] >= 0 && ok(up) && ok(dn) && (ok(lf) || ok(rt))) ? 1 : 0;
+  }
+  function setCut(e, v) {
+    if (!eInt[e] || A.cut[e] === v) return false;
+    if (v && sc.freeTop + (MAXP - sc.pCount) < 16) return false;
+    A.cut[e] = v; conDirty = true; openDirty = true; A.sEma[e] = 1;
+    retopo(eA[e]); retopo(eB[e]); bendUpdate(eA[e]); bendUpdate(eB[e]);
+    sc.topo = 1;
+    return true;
+  }
+
+  // ---------- init ----------
+  function init(startStep) {
+    for (const k in A) A[k].fill(0);
+    for (const k in sc) sc[k] = 0;
+    sc.patchQuiet = -1e9; sc.step = startStep | 0; sc.maxStrain = 1;
+    resetScratch();
+    A.grabQ.fill(-1);
+    sc.pCount = NN; sc.topo = 1;
+    const segW = 2 * C.rodHalfW / (NR - 1);
+    for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+      const n = j * NX + i;
+      // gathered: x compressed to rod width, pleats alternate forward/back between rings
+      const u = i / (NX - 1);
+      const x = -C.rodHalfW + 2 * C.rodHalfW * u;
+      const ringsPer = (NX - 1) / (NR - 1);
+      const ph = Math.sin(Math.PI * i / ringsPer);
+      const amp = C.pleat * (1 - 0.45 * j / (NY - 1));
+      const y = C.topY - j * SP * 0.985;
+      const z = C.rodZ + amp * ph;
+      A.x[n * 3] = x; A.x[n * 3 + 1] = y; A.x[n * 3 + 2] = z;
+      A.xp[n * 3] = x; A.xp[n * 3 + 1] = y; A.xp[n * 3 + 2] = z;
+      A.w[n] = 1; A.pn[n] = n; A.alive[n] = 1;
+      for (let q = 0; q < 4; q++) A.qp[n * 4 + q] = qex[n * 4 + q] ? n : -1;
+    }
+    for (let k = 0; k < NR; k++) {
+      A.pinState[k] = 1; A.pinPos[k * 3] = ringX[k]; A.pinPos[k * 3 + 1] = C.topY; A.pinPos[k * 3 + 2] = C.rodZ;
+      const n = pinNode[k]; A.w[n] = 0; A.x[n * 3] = ringX[k]; A.xp[n * 3] = ringX[k];
+      A.x[n * 3 + 2] = C.rodZ; A.xp[n * 3 + 2] = C.rodZ;
+    }
+    for (let n = 0; n < NN; n++) bendUpdate(n);
+    conDirty = true;
+    sc.ox = C.orbHome[0]; sc.oy = C.orbHome[1]; sc.oz = C.orbHome[2];
+    sc.opx = sc.ox; sc.opy = sc.oy; sc.opz = sc.oz;
+    computeNormals();
+  }
+
+  // ---------- normals ----------
+  function computeNormals() {
+    const x = A.x, nr = A.nrm, qp = A.qp, pc = sc.pCount;
+    nr.fill(0, 0, pc * 3);
+    for (let c = 0; c < NC; c++) {
+      const a = qp[cq[c * 4]], b = qp[cq[c * 4 + 1]], cc = qp[cq[c * 4 + 2]], d = qp[cq[c * 4 + 3]];
+      // quad normal from diagonals (a->cc) x (b->d)
+      const ux = x[cc * 3] - x[a * 3], uy = x[cc * 3 + 1] - x[a * 3 + 1], uz = x[cc * 3 + 2] - x[a * 3 + 2];
+      const vx = x[d * 3] - x[b * 3], vy = x[d * 3 + 1] - x[b * 3 + 1], vz = x[d * 3 + 2] - x[b * 3 + 2];
+      const nx = vy * uz - vz * uy, ny = vz * ux - vx * uz, nz = vx * uy - vy * ux;
+      nr[a * 3] += nx; nr[a * 3 + 1] += ny; nr[a * 3 + 2] += nz;
+      nr[b * 3] += nx; nr[b * 3 + 1] += ny; nr[b * 3 + 2] += nz;
+      nr[cc * 3] += nx; nr[cc * 3 + 1] += ny; nr[cc * 3 + 2] += nz;
+      nr[d * 3] += nx; nr[d * 3 + 1] += ny; nr[d * 3 + 2] += nz;
+    }
+    for (let p = 0; p < pc; p++) {
+      const l = Math.hypot(nr[p * 3], nr[p * 3 + 1], nr[p * 3 + 2]) || 1;
+      nr[p * 3] /= l; nr[p * 3 + 1] /= l; nr[p * 3 + 2] /= l;
+    }
+  }
+
+  // ---------- spatial hash for packet collisions ----------
+  const HB = 1 << 15, HMASK = HB - 1, HCELL = RC * 2.1;
+  const hStart = new Int32Array(HB + 1), hEnt = new Int32Array(MAXP), hCnt = new Int32Array(HB);
+  const hkey = (ix, iy, iz) => (Math.imul(ix, 92837111) ^ Math.imul(iy, 689287499) ^ Math.imul(iz, 283923481)) & HMASK;
+  function buildHash() {
+    const x = A.x, pc = sc.pCount; hCnt.fill(0);
+    const inv = 1 / HCELL;
+    for (let p = 0; p < pc; p++) if (A.alive[p]) hCnt[hkey(Math.floor(x[p * 3] * inv), Math.floor(x[p * 3 + 1] * inv), Math.floor(x[p * 3 + 2] * inv))]++;
+    let s = 0; for (let h = 0; h < HB; h++) { hStart[h] = s; s += hCnt[h]; } hStart[HB] = s;
+    hCnt.fill(0);
+    for (let p = 0; p < pc; p++) if (A.alive[p]) { const h = hkey(Math.floor(x[p * 3] * inv), Math.floor(x[p * 3 + 1] * inv), Math.floor(x[p * 3 + 2] * inv)); hEnt[hStart[h] + hCnt[h]++] = p; }
+  }
+  function nearestCloth(px, py, pz, r) {
+    const inv = 1 / HCELL, x = A.x;
+    const ix = Math.floor(px * inv), iy = Math.floor(py * inv), iz = Math.floor(pz * inv);
+    let best = -1, bd = r * r;
+    for (let dz = -1; dz <= 1; dz++) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const h = hkey(ix + dx, iy + dy, iz + dz);
+      for (let k = hStart[h], e = hStart[h] + hCnt[h]; k < e; k++) {
+        const p = hEnt[k];
+        const ddx = x[p * 3] - px, ddy = x[p * 3 + 1] - py, ddz = x[p * 3 + 2] - pz, d2 = ddx * ddx + ddy * ddy + ddz * ddz;
+        if (d2 < bd) { bd = d2; best = p; }
+      }
+    }
+    return best;
+  }
+
+  // ---------- resolved constraint list (rebuilt only when topology or pins change) ----------
+  // Every constraint is a distance constraint. Per substep (Macklin et al. 2019, one iteration per substep,
+  // lambda reset to 0): dlambda = -C / (w_a + w_b + alpha/h^2), so the position factors fa, fb depend only on
+  // inverse masses and compliance and are precomputed here.
+  const MAXC = NE * 2 + NC * 2 + NN * 2;
+  const cA3 = new Int32Array(MAXC), cB3 = new Int32Array(MAXC), cR = new Float64Array(MAXC), cFa = new Float64Array(MAXC), cFb = new Float64Array(MAXC);
+  let nCon = 0, nBendStart = 0, conDirty = true;
+  const kS = C.compStretch / (SDT * SDT), kD = C.compShear / (SDT * SDT), kB = C.compBend / (SDT * SDT);
+  function pushC(a, b, r, k) {
+    const wa = A.w[a], wb = A.w[b], ws = wa + wb + k;
+    if (wa + wb === 0 || a === b) return;
+    cA3[nCon] = a * 3; cB3[nCon] = b * 3; cR[nCon] = r; cFa[nCon] = wa / ws; cFb[nCon] = wb / ws; nCon++;
+  }
+  function rebuildConstraints() {
+    nCon = 0;
+    const qp = A.qp, cut = A.cut, ba = A.bAlive, RD = SP * Math.SQRT2;
+    // vertical edges top-down first, so the pinned rings propagate support down the curtain within one pass;
+    // within a row, neighbours are split by parity so consecutive projections are independent (faster in V8)
+    for (let e = 0; e < NVE; e++) {
+      pushC(qp[s1a[e]], qp[s1b[e]], SP, kS);
+      if (cut[e] && s2a[e] >= 0) pushC(qp[s2a[e]], qp[s2b[e]], SP, kS);
+    }
+    for (let j = 0; j < NY; j++) for (let par = 0; par < 2; par++) for (let i = par; i < NCX; i += 2) {
+      const e = NVE + j * NCX + i;
+      pushC(qp[s1a[e]], qp[s1b[e]], SP, kS);
+      if (cut[e] && s2a[e] >= 0) pushC(qp[s2a[e]], qp[s2b[e]], SP, kS);
+    }
+    for (let j = 0; j < NCY; j++) for (let d = 0; d < 2; d++) for (let par = 0; par < 2; par++) for (let i = par; i < NCX; i += 2) {
+      const c4 = (j * NCX + i) * 4;
+      pushC(qp[cq[c4 + d]], qp[cq[c4 + d + 2]], RD, kD);
+    }
+    nBendStart = nCon;
+    for (let j = 0; j < NY; j++) for (let par = 0; par < 4; par++) for (let i = par; i < NX; i += 4) {
+      const n = j * NX + i; if (ba[n * 2]) pushC(qp[bqa[n * 2]], qp[bqb[n * 2]], 2 * SP, kB);
+    }
+    for (let n = 0; n < NN; n++) if (ba[n * 2 + 1]) pushC(qp[bqa[n * 2 + 1]], qp[bqb[n * 2 + 1]], 2 * SP, kB);
+    conDirty = false;
+  }
+  function solveDist(x, k0, k1) {
+    for (let k = k0; k < k1; k++) {
+      const a3 = cA3[k], b3 = cB3[k];
+      const dx = x[a3] - x[b3], dy = x[a3 + 1] - x[b3 + 1], dz = x[a3 + 2] - x[b3 + 2];
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < 1e-18) continue;
+      const s = cR[k] / Math.sqrt(d2) - 1;
+      const sa = s * cFa[k], sb = s * cFb[k];
+      x[a3] += dx * sa; x[a3 + 1] += dy * sa; x[a3 + 2] += dz * sa;
+      x[b3] -= dx * sb; x[b3 + 1] -= dy * sb; x[b3 + 2] -= dz * sb;
+    }
+  }
+
+  // ---------- one substep of XPBD ----------
+  function substep(f, inp) {
+    const x = A.x, xp = A.xp, v = A.v, w = A.w, qp = A.qp, cut = A.cut, acc = A.acc, alive = A.alive, pc = sc.pCount;
+    const g = -9.81, damp = Math.exp(-C.damping * SDT);
+    // 1. predict
+    for (let p = 0; p < pc; p++) {
+      const i3 = p * 3;
+      xp[i3] = x[i3]; xp[i3 + 1] = x[i3 + 1]; xp[i3 + 2] = x[i3 + 2];
+      if (w[p] === 0 || !alive[p]) continue;
+      v[i3] = (v[i3] + acc[i3] * SDT) * damp;
+      v[i3 + 1] = (v[i3 + 1] + (acc[i3 + 1] + g) * SDT) * damp;
+      v[i3 + 2] = (v[i3 + 2] + acc[i3 + 2] * SDT) * damp;
+      x[i3] += v[i3] * SDT; x[i3 + 1] += v[i3 + 1] * SDT; x[i3 + 2] += v[i3 + 2] * SDT;
+    }
+    // 2. constraints: one Gauss-Seidel pass over the resolved list (small steps: lambda is reset every
+    //    substep, so each projection is dlambda = -C / (w_a + w_b + alpha/h^2))
+    if (conDirty) rebuildConstraints();
+    solveDist(x, 0, (C.bendEvery === 1 || (f & 1)) ? nCon : nBendStart);
+    // grab: XPBD attachments to the pointer target (compliance grows with distance from the grab centre)
+    if (sc.grabN > 0) {
+      const maxStep = 0.03;
+      for (let k = 0; k < sc.grabN; k++) {
+        const p = qp[A.grabQ[k]]; if (p < 0 || w[p] === 0) continue;
+        const p3 = p * 3;
+        const tx = sc.gtx + GT[k * 3] - x[p3], ty = sc.gty + GT[k * 3 + 1] - x[p3 + 1], tz = sc.gtz + GT[k * 3 + 2] - x[p3 + 2];
+        const len = Math.sqrt(tx * tx + ty * ty + tz * tz); if (len < 1e-9) continue;
+        const alpha = C.compGrab / A.grabW[k] / (SDT * SDT);
+        let s = w[p] / (w[p] + alpha);
+        if (len * s > maxStep) s = maxStep / len;
+        x[p3] += tx * s; x[p3 + 1] += ty * s; x[p3 + 2] += tz * s;
+      }
+    }
+    // patch stitches: pull every copy of a stitched node toward their centroid
+    if (stitchN > 0) for (let k = 0; k < stitchN; k++) {
+      const n = stitchNode[k], kk = stitchK[k];
+      let cx = 0, cy = 0, cz = 0, cnt = 0; const ps = [];
+      for (let q = 0; q < 4; q++) { const p = qp[n * 4 + q]; if (p >= 0 && ps.indexOf(p) < 0) { ps.push(p); cx += x[p * 3]; cy += x[p * 3 + 1]; cz += x[p * 3 + 2]; cnt++; } }
+      if (cnt < 2) continue;
+      cx /= cnt; cy /= cnt; cz /= cnt;
+      for (const p of ps) {
+        if (w[p] === 0) continue;
+        let dx = cx - x[p * 3], dy = cy - x[p * 3 + 1], dz = cz - x[p * 3 + 2];
+        const l = Math.sqrt(dx * dx + dy * dy + dz * dz), m = Math.min(l * kk, 0.02);
+        if (l > 1e-9) { x[p * 3] += dx / l * m; x[p * 3 + 1] += dy / l * m; x[p * 3 + 2] += dz / l * m; }
+      }
+    }
+    // re-pinning rings: spring the node back to its ring
+    for (let k = 0; k < NPIN; k++) if (A.pinState[k] === 2) {
+      const n = pinNode[k], kk = Math.min(1, 0.02 + A.pinT[k] * 0.5);
+      for (let q = 0; q < 4; q++) {
+        const p = qp[n * 4 + q]; if (p < 0) continue;
+        const dx = A.pinPos[k * 3] - x[p * 3], dy = A.pinPos[k * 3 + 1] - x[p * 3 + 1], dz = A.pinPos[k * 3 + 2] - x[p * 3 + 2];
+        const l = Math.sqrt(dx * dx + dy * dy + dz * dz), m = Math.min(l * kk, 0.025);
+        if (l > 1e-9) { x[p * 3] += dx / l * m; x[p * 3 + 1] += dy / l * m; x[p * 3 + 2] += dz / l * m; }
+      }
+    }
+    // rest blend (attract loop end): ease every particle toward the t=0 pose
+    if (inp.blend > 0) {
+      const kb = inp.blend;
+      for (let p = 0; p < pc; p++) {
+        if (!alive[p] || w[p] === 0) continue;
+        const n3 = A.pn[p] * 3, p3 = p * 3;
+        x[p3] += (restX[n3] - x[p3]) * kb; x[p3 + 1] += (restX[n3 + 1] - x[p3 + 1]) * kb; x[p3 + 2] += (restX[n3 + 2] - x[p3 + 2]) * kb;
+      }
+    }
+    // 3. collisions: orb, wall, floor
+    const fr = (f + 1) / SUB;
+    const ox = sc.opx + (sc.ox - sc.opx) * fr, oy = sc.opy + (sc.oy - sc.opy) * fr, oz = sc.opz + (sc.oz - sc.opz) * fr;
+    const orr = C.orbR + SP * 0.35, orr2 = orr * orr;
+    const dhw = C.doorHalfW, dh = C.doorH, fl = 0.006, wz = 0.012, mu = 0.35;
+    for (let p = 0; p < pc; p++) {
+      if (w[p] === 0 || !alive[p]) continue;
+      const i3 = p * 3;
+      // orb
+      const dx = x[i3] - ox, dy = x[i3 + 1] - oy, dz = x[i3 + 2] - oz, d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < orr2) {
+        const d = Math.sqrt(d2) || 1e-6, k = orr / d;
+        x[i3] = ox + dx * k; x[i3 + 1] = oy + dy * k; x[i3 + 2] = oz + dz * k;
+      }
+      // wall face at z=0 around the opening, and the door jambs inside the opening
+      if (x[i3 + 2] < wz) {
+        const inOpen = x[i3] > -dhw && x[i3] < dhw && x[i3 + 1] < dh;
+        if (!inOpen) {
+          if (xp[i3 + 2] >= wz - 1e-4) { x[i3 + 2] = wz; xp[i3] += (x[i3] - xp[i3]) * mu * 0.5; }
+          else if (x[i3 + 2] > -C.wallT) { // inside the jamb tunnel: keep within the opening
+            if (x[i3] <= -dhw) x[i3] = -dhw + 0.004; else if (x[i3] >= dhw) x[i3] = dhw - 0.004;
+            if (x[i3 + 1] >= dh) x[i3 + 1] = dh - 0.004;
+          }
+        }
+      }
+      // floor
+      if (x[i3 + 1] < fl) {
+        x[i3 + 1] = fl;
+        x[i3] = xp[i3] + (x[i3] - xp[i3]) * (1 - mu);
+        x[i3 + 2] = xp[i3 + 2] + (x[i3 + 2] - xp[i3 + 2]) * (1 - mu);
+      }
+    }
+    // 4. velocities
+    const inv = 1 / SDT;
+    for (let p = 0; p < pc; p++) {
+      const i3 = p * 3;
+      v[i3] = (x[i3] - xp[i3]) * inv; v[i3 + 1] = (x[i3 + 1] - xp[i3 + 1]) * inv; v[i3 + 2] = (x[i3 + 2] - xp[i3 + 2]) * inv;
+    }
+  }
+
+  // ---------- wind (per step): linear aerodynamic drag on each particle's normal component ----------
+  function windAcc(t, wind) {
+    const acc = A.acc, nr = A.nrm, v = A.v, x = A.x, pc = sc.pCount;
+    const kw = C.windK;
+    const gust = 0.62 + 0.25 * Math.sin(t * 1.7) + 0.13 * Math.sin(t * 4.3 + 1.3);
+    for (let p = 0; p < pc; p++) {
+      const i3 = p * 3;
+      if (!A.alive[p]) { acc[i3] = acc[i3 + 1] = acc[i3 + 2] = 0; continue; }
+      const px = x[i3], py = x[i3 + 1];
+      const local = 1 + 0.35 * Math.sin(px * 1.9 + t * 2.3) * Math.sin(py * 1.3 - t * 1.1);
+      const W = wind * C.windSpeed * gust * local;
+      const wx = W * 0.18 * Math.sin(t * 0.7 + py), wy = W * 0.05, wz = W;
+      const rx = wx - v[i3], ry = wy - v[i3 + 1], rz = wz - v[i3 + 2];
+      const nx = nr[i3], ny = nr[i3 + 1], nz = nr[i3 + 2];
+      const d = (rx * nx + ry * ny + rz * nz) * kw;
+      acc[i3] = d * nx; acc[i3 + 1] = d * ny; acc[i3 + 2] = d * nz;
+    }
+  }
+
+  // ---------- tearing: cut grid lines where the cloth is stretched across them ----------
+  const svC = new Float32Array(NC), shC = new Float32Array(NC), seamNode = new Uint8Array(NN);
+  const candE = new Int32Array(4096), candS = new Float32Array(4096);
+  function tearCheck(maxCuts) {
+    const x = A.x, qp = A.qp;
+    const L = (a, b) => { const dx = x[a * 3] - x[b * 3], dy = x[a * 3 + 1] - x[b * 3 + 1], dz = x[a * 3 + 2] - x[b * 3 + 2]; return Math.sqrt(dx * dx + dy * dy + dz * dz); };
+    const inv = 1 / SP;
+    seamNode.fill(0);
+    let anySeam = 0;
+    for (let e = 0; e < NE; e++) if (A.seam[e] > 0) { seamNode[eA[e]] = 1; seamNode[eB[e]] = 1; anySeam = 1; }
+    if (anySeam) for (let pass = 0; pass < 2; pass++) { // stitched fabric and a margin around it relax before they can tear again
+      for (let n = 0; n < NN; n++) if (seamNode[n] === 1) for (let q = 0; q < 4; q++) { const e = nodeEdges[n * 4 + q]; if (e < 0) continue; const m = eA[e] === n ? eB[e] : eA[e]; if (!seamNode[m]) seamNode[m] = 2; }
+      for (let n = 0; n < NN; n++) if (seamNode[n] === 2) seamNode[n] = 1;
+    }
+    for (let c = 0; c < NC; c++) {
+      const tl = qp[cq[c * 4]], tr = qp[cq[c * 4 + 1]], br = qp[cq[c * 4 + 2]], bl = qp[cq[c * 4 + 3]];
+      svC[c] = Math.max(L(tl, bl), L(tr, br)) * inv;
+      shC[c] = Math.max(L(tl, tr), L(bl, br)) * inv;
+    }
+    let nCand = 0, maxS = 0;
+    for (let e = 0; e < NE; e++) {
+      if (!eInt[e] || A.cut[e]) continue;
+      if (A.grabMask[eA[e]] && A.grabMask[eB[e]]) continue; // fabric inside the fist does not tear
+      if (A.seam[e] > 0 || seamNode[eA[e]] || seamNode[eB[e]]) continue; // fresh ice stitches hold
+      let s;
+      if (e < NVE) { const i = e % NX, j = (e / NX) | 0; s = 0.5 * (shC[j * NCX + i - 1] + shC[j * NCX + i]); }
+      else { const k = e - NVE, i = k % NCX, j = (k / NCX) | 0; s = 0.5 * (svC[(j - 1) * NCX + i] + svC[j * NCX + i]); }
+      const se = A.sEma[e] + (s - A.sEma[e]) * C.strainMem; A.sEma[e] = se; s = se;
+      if (s > maxS && thr[e] < 50) { maxS = s; lastMaxE = e; }
+      // crack growth: an edge touching an open cut tears more easily (stress concentrates at the tip)
+      const a4 = eA[e] * 4, b4 = eB[e] * 4;
+      let tip = 0;
+      for (let q = 0; q < 4; q++) { const ea = nodeEdges[a4 + q], eb = nodeEdges[b4 + q]; if ((ea >= 0 && A.cut[ea]) || (eb >= 0 && A.cut[eb])) { tip = 1; break; } }
+      const th = thr[e] - tip * C.tipBonus;
+      if (s > th && nCand < 4096) { candE[nCand] = e; candS[nCand] = s - th + tip * 0.5; nCand++; }
+    }
+    sc.maxStrain = maxS;
+    let cuts = 0;
+    while (nCand > 0 && cuts < maxCuts) {
+      let bi = 0; for (let k = 1; k < nCand; k++) if (candS[k] > candS[bi]) bi = k;
+      if (setCut(candE[bi], 1)) cuts++;
+      candE[bi] = candE[nCand - 1]; candS[bi] = candS[nCand - 1]; nCand--;
+    }
+    sc.tearsTotal += cuts;
+    return cuts;
+  }
+  let lastMaxE = -1;
+
+  // ---------- slash: separate the two cells of every edge whose dual segment crosses a 2D segment ----------
+  const cellC = new Float32Array(NC * 2);
+  function slash(project, ax, ay, bx, by) {
+    const x = A.x, qp = A.qp;
+    const tmp = [0, 0];
+    const minx = Math.min(ax, bx), maxx = Math.max(ax, bx), miny = Math.min(ay, by), maxy = Math.max(ay, by);
+    for (let c = 0; c < NC; c++) {
+      let sx = 0, sy = 0, sz = 0;
+      for (let k = 0; k < 4; k++) { const p = qp[cq[c * 4 + k]]; sx += x[p * 3]; sy += x[p * 3 + 1]; sz += x[p * 3 + 2]; }
+      project(sx * 0.25, sy * 0.25, sz * 0.25, tmp);
+      cellC[c * 2] = tmp[0]; cellC[c * 2 + 1] = tmp[1];
+    }
+    const cross = (px, py, qx, qy, rx, ry) => (qx - px) * (ry - py) - (qy - py) * (rx - px);
+    let n = 0;
+    for (let e = 0; e < NE; e++) {
+      if (!eInt[e] || A.cut[e]) continue;
+      let c1, c2;
+      if (e < NVE) { const i = e % NX, j = (e / NX) | 0; c1 = j * NCX + i - 1; c2 = c1 + 1; }
+      else { const k = e - NVE, i = k % NCX, j = (k / NCX) | 0; c1 = (j - 1) * NCX + i; c2 = j * NCX + i; }
+      const px = cellC[c1 * 2], py = cellC[c1 * 2 + 1], qx = cellC[c2 * 2], qy = cellC[c2 * 2 + 1];
+      if (Math.max(px, qx) < minx || Math.min(px, qx) > maxx || Math.max(py, qy) < miny || Math.min(py, qy) > maxy) continue;
+      const d1 = cross(ax, ay, bx, by, px, py), d2 = cross(ax, ay, bx, by, qx, qy);
+      if ((d1 > 0) === (d2 > 0)) continue;
+      const d3 = cross(px, py, qx, qy, ax, ay), d4 = cross(px, py, qx, qy, bx, by);
+      if ((d3 > 0) === (d4 > 0)) continue;
+      if (setCut(e, 1)) n++;
+    }
+    sc.tearsTotal += n;
+    return n;
+  }
+
+  // ---------- patch: zip every cut edge shut, in a sweep ----------
+  const stitchNode = new Int32Array(NN), stitchK = new Float32Array(NN); let stitchN = 0;
+  const stitchMark = new Int32Array(NN).fill(-1);
+  function startPatch() {
+    let n = 0;
+    for (let e = 0; e < NE; e++) if (A.cut[e]) A.patchE[n++] = e;
+    if (!n) return 0;
+    // order: sweep along x (rest grid), slight y tilt
+    const key = e => { const a = eA[e], b = eB[e]; return ((a % NX) + (b % NX)) * 0.5 + (((a / NX) | 0) + ((b / NX) | 0)) * 0.25; };
+    const arr = Array.from(A.patchE.subarray(0, n)); arr.sort((p, q) => key(p) - key(q) || p - q);
+    const dur = Math.min(1.5, 0.35 + n * 0.006);
+    const t0 = sc.step * DT;
+    for (let k = 0; k < n; k++) { A.patchE[k] = arr[k]; A.patchT[k] = t0 + dur * (n > 1 ? k / (n - 1) : 0); A.patchDone[k] = 0; }
+    sc.patchN = n; sc.patchActive = 1; sc.patchT0 = t0;
+    return n;
+  }
+  function patchUpdate(t) {
+    stitchN = 0;
+    if (!sc.patchActive) return;
+    let remaining = 0;
+    const x = A.x, qp = A.qp;
+    for (let k = 0; k < sc.patchN; k++) {
+      if (A.patchDone[k]) continue;
+      remaining++;
+      const age = t - A.patchT[k];
+      if (age < 0) continue;
+      const e = A.patchE[k];
+      if (!A.cut[e]) { A.patchDone[k] = 1; continue; }
+      const strength = Math.min(1, 0.08 + age * 2.2);
+      for (const n of [eA[e], eB[e]]) {
+        if (stitchMark[n] !== sc.step) { stitchMark[n] = sc.step; stitchNode[stitchN] = n; stitchK[stitchN] = strength; stitchN++;
+          for (let q = 0; q < 4; q++) { const pq = qp[n * 4 + q]; if (pq >= 0) A.heat[pq] *= 0.8; } }
+      }
+      // closed enough? measure spread of copies at both endpoints
+      let spread = 0;
+      for (const n of [eA[e], eB[e]]) {
+        const p0 = qp[n * 4 + 0] >= 0 ? qp[n * 4 + 0] : qp[n * 4 + 2];
+        for (let q = 0; q < 4; q++) { const p = qp[n * 4 + q]; if (p < 0 || p0 < 0) continue; const d = Math.hypot(x[p * 3] - x[p0 * 3], x[p * 3 + 1] - x[p0 * 3 + 1], x[p * 3 + 2] - x[p0 * 3 + 2]); if (d > spread) spread = d; }
+      }
+      if (spread < SP * 0.3 || age > 0.9) {
+        setCut(e, 0); A.seam[e] = 1; A.patchDone[k] = 1;
+      }
+    }
+    if (!remaining) { sc.patchActive = 0; sc.patchN = 0; }
+  }
+
+  // ---------- packets ----------
+  const openList = new Int32Array(NE); let nOpen = 0, openDirty = true;
+  function refreshOpen() { nOpen = 0; for (let e = 0; e < NE; e++) if (A.cut[e] && isOpen(e)) openList[nOpen++] = e; openDirty = false; }
+  function launch(slot, x0, y0, z0, tx, ty, tz, speed, heat) {
+    const T = Math.max(0.3, (tz - z0) / speed), g = C.pktG;
+    A.kx[slot * 3] = x0; A.kx[slot * 3 + 1] = y0; A.kx[slot * 3 + 2] = z0;
+    A.kv[slot * 3] = (tx - x0) / T; A.kv[slot * 3 + 1] = (ty - y0) / T + 0.5 * g * T; A.kv[slot * 3 + 2] = (tz - z0) / T;
+    A.ks[slot] = 1; A.ka[slot] = 0; A.kh[slot] = heat;
+  }
+  // breach stream: while the curtain is open, hostile packets find the hole
+  function spawnBreach(k) {
+    if (openDirty) refreshOpen();
+    if (!nOpen) return;
+    const e = openList[Math.min(nOpen - 1, Math.floor(hr(k, 11) * nOpen))];
+    const qp = A.qp, x = A.x;
+    const p1 = qp[s1a[e]], p2 = qp[s2a[e]], p3 = qp[s1b[e]], p4 = qp[s2b[e]];
+    const tx = (x[p1 * 3] + x[p2 * 3] + x[p3 * 3] + x[p4 * 3]) * 0.25, ty = (x[p1 * 3 + 1] + x[p2 * 3 + 1] + x[p3 * 3 + 1] + x[p4 * 3 + 1]) * 0.25, tz = (x[p1 * 3 + 2] + x[p2 * 3 + 2] + x[p3 * 3 + 2] + x[p4 * 3 + 2]) * 0.25;
+    if (Math.abs(tx) > C.doorHalfW - 0.05 || ty > C.doorH - 0.05) return; // behind the wall: unreachable
+    const slot = (sc.kSpawned++) % MAXK;
+    const x0 = tx * 0.5 + (hr(k, 12) * 2 - 1) * 0.6, y0 = 1.2 + (hr(k, 13) * 2 - 1) * 0.5, z0 = -3.4 - hr(k, 14) * 0.6;
+    launch(slot, x0, y0, z0, tx + (hr(k, 15) - 0.5) * SP * 1.2, ty + (hr(k, 16) - 0.5) * SP * 1.2, tz, 3.4 + hr(k, 17) * 0.9, 0.9 + 0.1 * hr(k, 18));
+  }
+  function spawnPacket(k) {
+    const kk = ((k % KP) + KP) % KP;
+    const slot = (sc.kSpawned++) % MAXK;
+    const h1 = hr(kk, 1), h2 = hr(kk, 2), h3 = hr(kk, 3), h4 = hr(kk, 4), h5 = hr(kk, 5), h6 = hr(kk, 6);
+    const tx = (h1 * 2 - 1) * (C.doorHalfW - 0.12), ty = 0.45 + h2 * (C.doorH - 0.65);
+    const x0 = tx * 0.55 + (h3 * 2 - 1) * 0.5, y0 = 1.2 + (h4 * 2 - 1) * 0.55, z0 = -3.4 - h5 * 0.6;
+    const speed = 3.3 + h6 * 0.9;
+    const T = (C.rodZ - z0) / speed, g = C.pktG;
+    A.kx[slot * 3] = x0; A.kx[slot * 3 + 1] = y0; A.kx[slot * 3 + 2] = z0;
+    A.kv[slot * 3] = (tx - x0) / T; A.kv[slot * 3 + 1] = (ty - y0) / T + 0.5 * g * T; A.kv[slot * 3 + 2] = speed;
+    A.ks[slot] = 1; A.ka[slot] = 0; A.kh[slot] = 0.85 + 0.15 * hr(kk, 7);
+  }
+  function floorDeposit(px, pz, amt) {
+    const fx = (px - C.floorX0) / (C.floorX1 - C.floorX0) * FHW, fz = (pz - C.floorZ0) / (C.floorZ1 - C.floorZ0) * FHD;
+    const ix = Math.floor(fx), iz = Math.floor(fz);
+    for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+      const X = ix + dx, Z = iz + dz; if (X < 0 || Z < 0 || X >= FHW || Z >= FHD) continue;
+      const ddx = X + 0.5 - fx, ddz = Z + 0.5 - fz, wgt = Math.exp(-(ddx * ddx + ddz * ddz) / 1.6);
+      A.fh[Z * FHW + X] += amt * wgt;
+    }
+  }
+  let volley = 0;
+  function packetsStep(t, events) {
+    // spawn by schedule (periodic with the attract loop)
+    const k0 = Math.floor((t - DT) * PKT_RATE), k1 = Math.floor(t * PKT_RATE);
+    for (let k = k0; k < k1; k++) spawnPacket(k);
+    if (volley > 0) { sc.volAcc += volley * DT; while (sc.volAcc >= 1) { sc.volAcc -= 1; spawnPacket(KP * 7 + ((sc.step * 13 + sc.kSpawned) % 100003)); } }
+    const b0 = Math.floor((t - DT) * C.breachRate), b1 = Math.floor(t * C.breachRate);
+    for (let k = b0; k < b1; k++) spawnBreach(k);
+    buildHash();
+    const x = A.x, v = A.v, nr = A.nrm, kx = A.kx, kv = A.kv, ks = A.ks;
+    const dtp = DT / NSP, gIn = C.pktG;
+    const orr = C.orbR + 0.012;
+    for (let i = 0; i < MAXK; i++) {
+      const st = ks[i]; if (!st) continue;
+      const i3 = i * 3;
+      A.ka[i] += DT;
+      if (st === 4) { // landed ember: slide, cool, warm the floor
+        kv[i3] *= 0.86; kv[i3 + 2] *= 0.86;
+        kx[i3] += kv[i3] * DT; kx[i3 + 2] += kv[i3 + 2] * DT;
+        A.kh[i] -= DT * 0.2;
+        floorDeposit(kx[i3], kx[i3 + 2], A.kh[i] * 0.012);
+        if (A.kh[i] <= 0.04) ks[i] = 0;
+        continue;
+      }
+      for (let s = 0; s < NSP; s++) {
+        const g = st === 3 ? 6.5 : gIn;
+        kv[i3 + 1] -= g * dtp;
+        if (ks[i] === 3) { const dr = Math.exp(-1.8 * dtp); kv[i3] *= dr; kv[i3 + 2] *= dr; }
+        kx[i3] += kv[i3] * dtp; kx[i3 + 1] += kv[i3 + 1] * dtp; kx[i3 + 2] += kv[i3 + 2] * dtp;
+        const px = kx[i3], py = kx[i3 + 1], pz = kx[i3 + 2];
+        // wall (front face z=0, back face z=-wallT) outside the opening
+        if (pz > -C.wallT - 0.02 && pz < 0.02 && (Math.abs(px) > C.doorHalfW || py > C.doorH) && kv[i3 + 2] > 0 && ks[i] !== 3) {
+          kx[i3 + 2] = -C.wallT - 0.02; kv[i3 + 2] *= -0.35; kv[i3] += (hr(i, sc.step) - 0.5) * 1.2;
+          if (ks[i] === 1) { ks[i] = 2; A.ka[i] = 0; }
+          break;
+        }
+        // orb
+        const odx = px - sc.ox, ody = py - sc.oy, odz = pz - sc.oz, od2 = odx * odx + ody * ody + odz * odz;
+        if (od2 < orr * orr) {
+          const d = Math.sqrt(od2) || 1e-6, nx = odx / d, ny = ody / d, nz = odz / d;
+          const vn = kv[i3] * nx + kv[i3 + 1] * ny + kv[i3 + 2] * nz;
+          kx[i3] = sc.ox + nx * orr; kx[i3 + 1] = sc.oy + ny * orr; kx[i3 + 2] = sc.oz + nz * orr;
+          if (vn < 0) { kv[i3] -= 1.5 * vn * nx; kv[i3 + 1] -= 1.5 * vn * ny; kv[i3 + 2] -= 1.5 * vn * nz; }
+          if (ks[i] === 1) { ks[i] = 2; A.ka[i] = 0; sc.blocked++; }
+        }
+        // cloth
+        if (pz > -1.5 && pz < 3.5 && py > -0.05) {
+          const p = nearestCloth(px, py, pz, RC);
+          if (p >= 0) {
+            const p3 = p * 3;
+            let nx = nr[p3], ny = nr[p3 + 1], nz = nr[p3 + 2];
+            const rx = px - x[p3], ry = py - x[p3 + 1], rz = pz - x[p3 + 2];
+            if (nx * rx + ny * ry + nz * rz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+            const vn = (kv[i3] - v[p3]) * nx + (kv[i3 + 1] - v[p3 + 1]) * ny + (kv[i3 + 2] - v[p3 + 2]) * nz;
+            if (vn < 0) {
+              const e = 0.45, jx = -(1 + e) * vn * nx, jy = -(1 + e) * vn * ny, jz = -(1 + e) * vn * nz;
+              kv[i3] += jx + (hr(i, sc.step * 3 + 1) - 0.5) * 0.9; kv[i3 + 1] += jy + (hr(i, sc.step * 3 + 2) - 0.5) * 0.6; kv[i3 + 2] += jz;
+              if (A.w[p] > 0) { const m = C.pktMass; v[p3] -= jx * m; v[p3 + 1] -= jy * m; v[p3 + 2] -= jz * m; }
+              heatSplash(p, 0.85);
+              if (ks[i] === 1) { ks[i] = 2; A.ka[i] = 0; sc.blocked++; if (events) events.hits++; }
+            }
+            // push out along the contact direction
+            const rl = Math.sqrt(rx * rx + ry * ry + rz * rz) || 1e-6;
+            const push = RC - rl;
+            if (push > 0) { kx[i3] += nx * push; kx[i3 + 1] += ny * push; kx[i3 + 2] += nz * push; }
+          }
+        }
+        // past the curtain region heading in: it got through
+        if (ks[i] === 1 && pz > C.rodZ + 0.35 && kv[i3 + 2] > 0) {
+          let clear = true;
+          // still inside a cloth pulled toward the camera? stay in state 1 while cloth nearby
+          if (nearestCloth(kx[i3], kx[i3 + 1], kx[i3 + 2], RC * 3) >= 0) clear = false;
+          if (clear && pz > C.rodZ + 0.5) { ks[i] = 3; A.ka[i] = 0; kv[i3] *= 0.45; kv[i3 + 1] *= 0.5; kv[i3 + 2] *= 0.32; } // brushing through the hole costs speed
+        }
+        if (kx[i3 + 1] < 0.012) {
+          if (ks[i] === 3 || (ks[i] === 1 && kx[i3 + 2] > 0.05)) { // landed inside: hot on the floor
+            kx[i3 + 1] = 0.012; kv[i3 + 1] = 0; ks[i] = 4; A.ka[i] = 0; A.kh[i] = 1; sc.through++;
+            floorDeposit(kx[i3], kx[i3 + 2], 0.35);
+            if (events) events.through++;
+            break;
+          } else { ks[i] = 0; break; }
+        }
+      }
+      if (ks[i] === 2 && A.ka[i] > 1.4) ks[i] = 0;
+      if (ks[i] === 1 && A.ka[i] > 4) ks[i] = 0;
+      if (ks[i] === 3 && A.ka[i] > 4) ks[i] = 0;
+    }
+    // floor heat: decay + light diffusion
+    const fh = A.fh, dec = Math.exp(-0.32 * DT);
+    for (let k = 0; k < fh.length; k++) fh[k] *= dec;
+    if ((sc.step & 3) === 0) {
+      for (let z = 1; z < FHD - 1; z++) for (let xx = 1; xx < FHW - 1; xx++) {
+        const k = z * FHW + xx;
+        fh[k] = fh[k] * 0.8 + (fh[k - 1] + fh[k + 1] + fh[k - FHW] + fh[k + FHW]) * 0.05;
+      }
+    }
+    // cloth heat decay
+    const hdec = Math.exp(-2.2 * DT), ht = A.heat;
+    for (let p = 0; p < sc.pCount; p++) ht[p] *= hdec;
+  }
+  function heatSplash(p, amt) {
+    const n = A.pn[p], i = n % NX, j = (n / NX) | 0;
+    A.heat[p] = Math.min(1.0, A.heat[p] + amt);
+    for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) {
+      if (!di && !dj) continue;
+      const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii >= NX || jj >= NY) continue;
+      const m = jj * NX + ii, wgt = Math.exp(-(di * di + dj * dj) / 2.6) * amt * 0.9;
+      for (let q = 0; q < 4; q++) { const pp = A.qp[m * 4 + q]; if (pp >= 0) { A.heat[pp] = Math.min(1.0, A.heat[pp] + wgt * 0.25); } }
+    }
+  }
+
+  // ---------- pins ----------
+  function togglePin(k) {
+    const n = pinNode[k]; conDirty = true;
+    if (A.pinState[k] === 1) {
+      A.pinState[k] = 0;
+      for (let q = 0; q < 4; q++) { const p = A.qp[n * 4 + q]; if (p >= 0) A.w[p] = 1; }
+    } else if (k < NR) {
+      A.pinState[k] = 2; A.pinT[k] = 0;
+    } else { // bottom corner: pin where it is now
+      const p = A.qp[n * 4 + (k === NR ? 1 : 0)] >= 0 ? A.qp[n * 4 + (k === NR ? 1 : 0)] : A.qp[n * 4];
+      const pp = p >= 0 ? p : n;
+      A.pinPos[k * 3] = A.x[pp * 3]; A.pinPos[k * 3 + 1] = Math.max(0.006, A.x[pp * 3 + 1]); A.pinPos[k * 3 + 2] = A.x[pp * 3 + 2];
+      A.pinState[k] = 1;
+      for (let q = 0; q < 4; q++) { const p2 = A.qp[n * 4 + q]; if (p2 >= 0) { A.w[p2] = 0; A.x[p2 * 3] = A.pinPos[k * 3]; A.x[p2 * 3 + 1] = A.pinPos[k * 3 + 1]; A.x[p2 * 3 + 2] = A.pinPos[k * 3 + 2]; A.v[p2 * 3] = A.v[p2 * 3 + 1] = A.v[p2 * 3 + 2] = 0; } }
+    }
+  }
+  function pinsUpdate() {
+    for (let k = 0; k < NPIN; k++) if (A.pinState[k] === 2) {
+      A.pinT[k] += DT;
+      const n = pinNode[k];
+      let far = 0;
+      for (let q = 0; q < 4; q++) { const p = A.qp[n * 4 + q]; if (p < 0) continue; far = Math.max(far, Math.hypot(A.x[p * 3] - A.pinPos[k * 3], A.x[p * 3 + 1] - A.pinPos[k * 3 + 1], A.x[p * 3 + 2] - A.pinPos[k * 3 + 2])); }
+      if (far < 0.004 || A.pinT[k] > 1.2) {
+        A.pinState[k] = 1; conDirty = true;
+        for (let q = 0; q < 4; q++) { const p = A.qp[n * 4 + q]; if (p < 0) continue; A.w[p] = 0; A.x[p * 3] = A.pinPos[k * 3]; A.x[p * 3 + 1] = A.pinPos[k * 3 + 1]; A.x[p * 3 + 2] = A.pinPos[k * 3 + 2]; A.v[p * 3] = A.v[p * 3 + 1] = A.v[p * 3 + 2] = 0; }
+      }
+    }
+  }
+
+  // ---------- grab ----------
+  function grabStart(p, tx, ty, tz, radius) {
+    A.grabMask.fill(0);
+    const n = A.pn[p], i = n % NX, j = (n / NX) | 0;
+    let m = 0;
+    const r = Math.ceil(radius);
+    for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
+      if (m >= GMAX) break;
+      const d2 = di * di + dj * dj; if (d2 > radius * radius + 0.01) continue;
+      const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii >= NX || jj >= NY) continue;
+      const nn = jj * NX + ii;
+      let q;
+      if (!di && !dj) { q = -1; for (let qq = 0; qq < 4; qq++) if (A.qp[nn * 4 + qq] === p) { q = qq; break; } if (q < 0) continue; }
+      else { // quadrant facing the grab centre
+        const left = di > 0, up = dj > 0; // centre is to the left / above
+        q = up ? (left ? 0 : 1) : (left ? 3 : 2);
+        if (dj === 0) q = left ? (A.qp[nn * 4 + 3] >= 0 ? 3 : 0) : (A.qp[nn * 4 + 2] >= 0 ? 2 : 1);
+        if (di === 0) q = up ? (A.qp[nn * 4 + 1] >= 0 ? 1 : 0) : (A.qp[nn * 4 + 2] >= 0 ? 2 : 3);
+        if (A.qp[nn * 4 + q] < 0) { q = -1; for (let qq = 0; qq < 4; qq++) if (A.qp[nn * 4 + qq] >= 0) { q = qq; break; } }
+        if (q < 0) continue;
+      }
+      const pp = A.qp[nn * 4 + q];
+      const dx = A.x[pp * 3] - A.x[p * 3], dy = A.x[pp * 3 + 1] - A.x[p * 3 + 1], dz = A.x[pp * 3 + 2] - A.x[p * 3 + 2];
+      if (dx * dx + dy * dy + dz * dz > (radius * SP * 1.6) ** 2) continue;
+      A.grabQ[m] = nn * 4 + q; A.grabOff[m * 3] = dx; A.grabOff[m * 3 + 1] = dy; A.grabOff[m * 3 + 2] = dz;
+      A.grabW[m] = Math.exp(-d2 / (radius * radius * 0.6));
+      if (d2 <= (radius - 0.5) * (radius - 0.5)) A.grabMask[nn] = 1;
+      m++;
+    }
+    sc.grabN = m; sc.gtx = tx; sc.gty = ty; sc.gtz = tz; sc.gq0 = 0; sc.gq1 = 0; sc.gq2 = 0; sc.gq3 = 1;
+  }
+  const GR = new Float64Array(9), GT = new Float64Array(GMAX * 3);
+  function grabRotation() {
+    const x = A.x, qp = A.qp, n = sc.grabN;
+    let cx = 0, cy = 0, cz = 0, ox = 0, oy = 0, oz = 0, ws = 0;
+    for (let k = 0; k < n; k++) { const p = qp[A.grabQ[k]], w = A.grabW[k]; cx += x[p * 3] * w; cy += x[p * 3 + 1] * w; cz += x[p * 3 + 2] * w; ox += A.grabOff[k * 3] * w; oy += A.grabOff[k * 3 + 1] * w; oz += A.grabOff[k * 3 + 2] * w; ws += w; }
+    cx /= ws; cy /= ws; cz /= ws; ox /= ws; oy /= ws; oz /= ws;
+    const M = [0, 0, 0, 0, 0, 0, 0, 0, 0]; // A = sum w (x - c)(o - o_bar)^T, row-major
+    for (let k = 0; k < n; k++) {
+      const p = qp[A.grabQ[k]], w = A.grabW[k];
+      const px = (x[p * 3] - cx) * w, py = (x[p * 3 + 1] - cy) * w, pz = (x[p * 3 + 2] - cz) * w;
+      const qx = A.grabOff[k * 3] - ox, qy = A.grabOff[k * 3 + 1] - oy, qz = A.grabOff[k * 3 + 2] - oz;
+      M[0] += px * qx; M[1] += px * qy; M[2] += px * qz; M[3] += py * qx; M[4] += py * qy; M[5] += py * qz; M[6] += pz * qx; M[7] += pz * qy; M[8] += pz * qz;
+    }
+    let q0 = sc.gq0, q1 = sc.gq1, q2 = sc.gq2, q3 = sc.gq3; // (x, y, z, w)
+    for (let it = 0; it < 12; it++) {
+      const xx = q0 * q0, yy = q1 * q1, zz = q2 * q2, xy = q0 * q1, xz = q0 * q2, yz = q1 * q2, wx = q3 * q0, wy = q3 * q1, wz = q3 * q2;
+      const r00 = 1 - 2 * (yy + zz), r01 = 2 * (xy - wz), r02 = 2 * (xz + wy), r10 = 2 * (xy + wz), r11 = 1 - 2 * (xx + zz), r12 = 2 * (yz - wx), r20 = 2 * (xz - wy), r21 = 2 * (yz + wx), r22 = 1 - 2 * (xx + yy);
+      // omega = sum_i r_i x a_i / |sum_i r_i . a_i| over columns i
+      const a0x = M[0], a0y = M[3], a0z = M[6], a1x = M[1], a1y = M[4], a1z = M[7], a2x = M[2], a2y = M[5], a2z = M[8];
+      const wxv = (r10 * a0z - r20 * a0y) + (r11 * a1z - r21 * a1y) + (r12 * a2z - r22 * a2y);
+      const wyv = (r20 * a0x - r00 * a0z) + (r21 * a1x - r01 * a1z) + (r22 * a2x - r02 * a2z);
+      const wzv = (r00 * a0y - r10 * a0x) + (r01 * a1y - r11 * a1x) + (r02 * a2y - r12 * a2x);
+      const den = Math.abs(r00 * a0x + r10 * a0y + r20 * a0z + r01 * a1x + r11 * a1y + r21 * a1z + r02 * a2x + r12 * a2y + r22 * a2z) + 1e-12;
+      const ox2 = wxv / den, oy2 = wyv / den, oz2 = wzv / den, ang = Math.sqrt(ox2 * ox2 + oy2 * oy2 + oz2 * oz2);
+      if (ang < 1e-9) break;
+      const s = Math.sin(ang * 0.5) / ang, dx = ox2 * s, dy = oy2 * s, dz = oz2 * s, dw = Math.cos(ang * 0.5);
+      const n0 = dw * q0 + dx * q3 + dy * q2 - dz * q1, n1 = dw * q1 - dx * q2 + dy * q3 + dz * q0, n2 = dw * q2 + dx * q1 - dy * q0 + dz * q3, n3 = dw * q3 - dx * q0 - dy * q1 - dz * q2;
+      const l = Math.sqrt(n0 * n0 + n1 * n1 + n2 * n2 + n3 * n3); q0 = n0 / l; q1 = n1 / l; q2 = n2 / l; q3 = n3 / l;
+    }
+    sc.gq0 = q0; sc.gq1 = q1; sc.gq2 = q2; sc.gq3 = q3;
+    const xx = q0 * q0, yy = q1 * q1, zz = q2 * q2, xy = q0 * q1, xz = q0 * q2, yz = q1 * q2, wx = q3 * q0, wy = q3 * q1, wz = q3 * q2;
+    GR[0] = 1 - 2 * (yy + zz); GR[1] = 2 * (xy - wz); GR[2] = 2 * (xz + wy); GR[3] = 2 * (xy + wz); GR[4] = 1 - 2 * (xx + zz); GR[5] = 2 * (yz - wx); GR[6] = 2 * (xz - wy); GR[7] = 2 * (yz + wx); GR[8] = 1 - 2 * (xx + yy);
+    for (let k = 0; k < n; k++) { const ax = A.grabOff[k * 3], ay = A.grabOff[k * 3 + 1], az = A.grabOff[k * 3 + 2];
+      GT[k * 3] = GR[0] * ax + GR[1] * ay + GR[2] * az; GT[k * 3 + 1] = GR[3] * ax + GR[4] * ay + GR[5] * az; GT[k * 3 + 2] = GR[6] * ax + GR[7] * ay + GR[8] * az; }
+  }
+  function grabEnd() { sc.grabN = 0; A.grabMask.fill(0); }
+  function grabCentre(out) { // current position of the grabbed centre particle
+    if (!sc.grabN) return false;
+    const p = A.qp[A.grabQ[0]]; out[0] = A.x[p * 3]; out[1] = A.x[p * 3 + 1]; out[2] = A.x[p * 3 + 2]; return true;
+  }
+
+  // ---------- full step ----------
+  const events = { hits: 0, through: 0, cuts: 0 };
+  function step(inp) {
+    sc.step++;
+    const t = sc.step * DT;
+    events.hits = 0; events.through = 0; events.cuts = 0;
+    if (inp.grab) {
+      const dx = inp.grab[0] - sc.gtx, dy = inp.grab[1] - sc.gty, dz = inp.grab[2] - sc.gtz, l = Math.sqrt(dx * dx + dy * dy + dz * dz), m = C.grabSpeed * DT;
+      const k = l > m ? m / l : 1; sc.gtx += dx * k; sc.gty += dy * k; sc.gtz += dz * k;
+    }
+    // orb follows its target with a critically damped spring
+    sc.opx = sc.ox; sc.opy = sc.oy; sc.opz = sc.oz;
+    if (inp.orb) {
+      const k = 260, c = 2 * Math.sqrt(k);
+      sc.ovx += ((inp.orb[0] - sc.ox) * k - sc.ovx * c) * DT; sc.ovy += ((inp.orb[1] - sc.oy) * k - sc.ovy * c) * DT; sc.ovz += ((inp.orb[2] - sc.oz) * k - sc.ovz * c) * DT;
+      const sp = Math.hypot(sc.ovx, sc.ovy, sc.ovz); if (sp > 7) { sc.ovx *= 7 / sp; sc.ovy *= 7 / sp; sc.ovz *= 7 / sp; }
+      sc.ox += sc.ovx * DT; sc.oy += sc.ovy * DT; sc.oz += sc.ovz * DT;
+    }
+    computeNormals();
+    if (sc.grabN > 0) grabRotation();
+    windAcc(t, inp.wind);
+    patchUpdate(t);
+    for (let f = 0; f < SUB; f++) substep(f, inp);
+    pinsUpdate();
+    if (sc.patchActive) sc.patchQuiet = t + 2.5;
+    events.cuts = (sc.patchActive || t < sc.patchQuiet || inp.blend > 0) ? 0 : tearCheck(inp.maxCuts == null ? 2 : inp.maxCuts);
+    computeNormals();
+    volley = inp.volley || 0;
+    packetsStep(t, events);
+    // seams fade
+    for (let e = 0; e < NE; e++) if (A.seam[e] > 0) { A.seam[e] -= DT * 0.12; if (A.seam[e] < 0) A.seam[e] = 0; }
+    return events;
+  }
+
+  function isOpen(e) {
+    if (!A.cut[e] || s2a[e] < 0) return false;
+    const qp = A.qp; return qp[s1a[e]] !== qp[s2a[e]] || qp[s1b[e]] !== qp[s2b[e]];
+  }
+  // per-cell RGBA8: R = open torn edges (1 top, 2 right, 4 bottom, 8 left), G = seam edges, B = seam glow
+  function fillTearTex(d) {
+    let any = 0;
+    for (let j = 0; j < NCY; j++) for (let i = 0; i < NCX; i++) {
+      const c = j * NCX + i, eT = NVE + j * NCX + i, eB = NVE + (j + 1) * NCX + i, eL = j * NX + i, eR = j * NX + i + 1;
+      let bits = 0, sb = 0, g = 0;
+      if (A.cut[eT] && isOpen(eT)) bits |= 1; if (A.cut[eR] && isOpen(eR)) bits |= 2;
+      if (A.cut[eB] && isOpen(eB)) bits |= 4; if (A.cut[eL] && isOpen(eL)) bits |= 8;
+      if (A.seam[eT] > 0) { sb |= 1; g = Math.max(g, A.seam[eT]); } if (A.seam[eR] > 0) { sb |= 2; g = Math.max(g, A.seam[eR]); }
+      if (A.seam[eB] > 0) { sb |= 4; g = Math.max(g, A.seam[eB]); } if (A.seam[eL] > 0) { sb |= 8; g = Math.max(g, A.seam[eL]); }
+      d[c * 4] = bits; d[c * 4 + 1] = sb; d[c * 4 + 2] = Math.min(255, g * 255) | 0; d[c * 4 + 3] = 255;
+      any |= bits | sb;
+    }
+    return any;
+  }
+  function countCuts() { let n = 0; for (let e = 0; e < NE; e++) n += A.cut[e]; return n; }
+  function countOpen() { let n = 0; for (let e = 0; e < NE; e++) if (A.cut[e] && isOpen(e)) n++; return n; }
+  function snapshot() { const s = { sc: Object.assign({}, sc) }; for (const k in A) s[k] = A[k].slice(); return s; }
+  // everything outside A and sc is either rebuilt before use or cleared here, so a state is fully
+  // described by (A, sc): init from the seed and restore from a snapshot both start clean
+  function resetScratch() {
+    sc.topo = 1; conDirty = true; nCon = 0; openDirty = true; nOpen = 0;
+    stitchN = 0; stitchMark.fill(-1); lastMaxE = -1; volley = 0;
+  }
+  function restore(s) {
+    for (const k in A) A[k].set(s[k]);
+    for (const k in sc) sc[k] = s.sc[k];
+    resetScratch();
+  }
+  function snapshotKeys() { return Object.keys(A).length; }
+  function captureRest() { restX.set(A.x.subarray(0, NN * 3)); }
+
+  return {
+    C, NX, NY, NN, NC, NCX, NCY, NE, NVE, NR, NPIN, MAXP, MAXK, FHW, FHD, DT, SP, RC,
+    A, sc, cq, eA, eB, eInt, pinNode, nodePin, ringX, restX, s1a, s1b, s2a, s2b, isOpen, fillTearTex, countCuts, countOpen, NSP,
+    init, step, snapshot, restore, captureRest, slash, startPatch, togglePin, grabStart, grabEnd, grabCentre, setCut,
+    computeNormals, get maxStrain() { return sc.maxStrain; }, get maxE() { return lastMaxE; }, get stitching() { return stitchN; },
+  };
+}
+
+/* ===== Attract mode: a scripted session, applied step by step so __seek can re-simulate it exactly ===== */
+function lerpKeys(keys, t) {
+  if (t <= keys[0][0]) return keys[0][1];
+  for (let i = 1; i < keys.length; i++) if (t <= keys[i][0]) { const [t0, v0] = keys[i - 1], [t1, v1] = keys[i]; const k = (t - t0) / (t1 - t0), e = k * k * (3 - 2 * k); return v0 + (v1 - v0) * e; }
+  return keys[keys.length - 1][1];
+}
+const ease3 = k => { k = Math.max(0, Math.min(1, k)); return k * k * (3 - 2 * k); };
+function createDirector(sim, S) {
+  const DT = sim.DT, C = sim.C, NX = sim.NX, NY = sim.NY;
+  const st = t => Math.round(t / DT);
+  const gi = Math.round(S.grab.node[0] * (NX - 1)), gj = Math.round(S.grab.node[1] * (NY - 1)), gNode = gj * NX + gi;
+  const G0 = st(S.grab.t0), G1 = st(S.grab.t1), S0 = st(S.slash.t0), S1 = st(S.slash.t1);
+  const PATCH = st(S.patch), PIN0 = st(S.pin.off), PIN1 = st(S.pin.on);
+  const projXY = (x, y, z, o) => { o[0] = x; o[1] = y; };
+  function pullAt(t) { return ease3((t - S.grab.t0) / (S.grab.t1 - S.grab.t0 - S.grab.hold)); }
+  function bladeAt(t, o) {
+    const k = ease3((t - S.slash.t0) / (S.slash.t1 - S.slash.t0));
+    o[0] = (S.slash.a[0] + (S.slash.b[0] - S.slash.a[0]) * k) * C.rodHalfW;
+    o[1] = (S.slash.a[1] + (S.slash.b[1] - S.slash.a[1]) * k) * C.topY;
+    return o;
+  }
+  const b0 = [0, 0], b1 = [0, 0], inp = { wind: 0.3, grab: null, orb: C.orbHome, blend: 0, maxCuts: 2 }, tgt = [0, 0, 0];
+  // inputs for the step that ends at loop step k (t = k*DT); applies scripted actions first
+  function inputs(k) {
+    const t = k * DT, sc = sim.sc, A = sim.A;
+    if (k === G0) {
+      const p = A.qp[gNode * 4 + 2] >= 0 ? A.qp[gNode * 4 + 2] : gNode;
+      sc.gbx = A.x[p * 3]; sc.gby = A.x[p * 3 + 1]; sc.gbz = A.x[p * 3 + 2];
+      sim.grabStart(p, sc.gbx, sc.gby, sc.gbz, S.grab.r);
+    }
+    if (k === G1) sim.grabEnd();
+    inp.grab = null;
+    if (k > G0 && k < G1) {
+      const e = pullAt(t);
+      tgt[0] = sc.gbx + S.grab.pull[0] * e; tgt[1] = sc.gby + S.grab.pull[1] * e; tgt[2] = sc.gbz + S.grab.pull[2] * e;
+      inp.grab = tgt;
+    }
+    if (k > S0 && k <= S1) { bladeAt(t - DT, b0); bladeAt(t, b1); sim.slash(projXY, b0[0], b0[1], b1[0], b1[1]); }
+    if (k === PATCH) sim.startPatch();
+    if (k === PIN0 || k === PIN1) sim.togglePin(S.pin.k);
+    inp.wind = lerpKeys(S.wind, t);
+    const bl = (t - S.blend[0]) / (S.blend[1] - S.blend[0]);
+    inp.blend = bl > 0 ? Math.min(0.2, 0.2 * bl * bl) : 0;
+    inp.orb = C.orbHome;
+    // the loop opens with a volley: the curtain shudders under a burst of hostile packets
+    inp.volley = t < 2.0 ? 150 * Math.sin(Math.PI * Math.min(1, t / 2.0)) ** 2 : 0;
+    return inp;
+  }
+  return { inputs, pullAt, bladeAt, gNode, steps: { G0, G1, S0, S1, PATCH, PIN0, PIN1 } };
+}
+
+/* ===================== configuration ===================== */
+const params = new URLSearchParams(location.search);
+const LOW = params.get('q') === 'low';
+const NOCACHE = params.has('nocache'); // seek by re-running the seeded warm-up every time (slower; used to verify the checkpoint cache)
+const T_PARAM = params.has('t') ? parseFloat(params.get('t')) : NaN;
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const COARSE_PTR = matchMedia('(pointer: coarse)').matches;
+const PERIOD = 24, HERO_T = 11.2, DT = 1 / 60, WARM = 210, IDLE_RETURN = 12;
+const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+function makeCfg(portrait, coarse) {
+  const base = { topY: 2.93, rodZ: 0.16, doorH: 2.85, wallT: 0.25, pleat: 0.08,
+    substeps: 10, bendEvery: 1, tear: 1.55, tipBonus: 0.2, strainMem: 0.11, grabSpeed: 3.0, damping: 0.35, compStretch: 0, compShear: 2e-7, compBend: 4e-6, compGrab: 2e-6,
+    windK: 1.2, windSpeed: 4, pktRate: 44, breachRate: 110, period: PERIOD, pktG: 2, pktMass: 0.045, orbR: 0.24 };
+  let c;
+  if (!portrait) {
+    const nx = coarse ? 91 : 121, every = coarse ? 9 : 10, ny = coarse ? 63 : 84, sp = 4.2 / (nx - 1);
+    c = Object.assign(base, { nx, ny, sp, rodHalfW: 1.75, doorHalfW: 1.5, orbHome: [1.55, 0.8, 1.05],
+      floorX0: -3.2, floorX1: 3.2, floorZ0: -0.3, floorZ1: 4.0 });
+    c.rings = []; for (let i = 0; i < nx; i += every) c.rings.push(i);
+  } else {
+    const nx = 61, every = 10, sp = 0.038, ny = 78;
+    c = Object.assign(base, { nx, ny, sp, rodHalfW: 0.95, doorHalfW: 0.82, orbHome: [0.62, 0.62, 0.95], orbR: 0.2,
+      floorX0: -1.9, floorX1: 1.9, floorZ0: -0.3, floorZ1: 3.6, pktRate: 30, breachRate: 55 });
+    c.rings = []; for (let i = 0; i < nx; i += every) c.rings.push(i);
+  }
+  c.portrait = portrait;
+  return c;
+}
+function makeScript(c) {
+  if (!c.portrait) return {
+    grab: { node: [0.37, 0.5], r: 0.17 / c.sp, t0: 1.7, t1: 5.0, hold: 0.6, pull: [0.75, -0.3, 0.75] },
+    slash: { t0: 6.1, t1: 6.6, a: [-0.1, 0.62], b: [0.75, 0.5] },
+    wind: [[0, 0.3], [0.15, 0.3], [0.75, 0.85], [1.4, 0.55], [2.2, 0.3], [8.0, 0.3], [8.6, 0.75], [12.4, 0.75], [12.9, 0.3]],
+    patch: 14.4, pin: { k: 0, off: 17.6, on: 19.4 }, blend: [21.6, 24] };
+  return {
+    grab: { node: [0.3, 0.32], r: 0.17 / c.sp, t0: 1.7, t1: 5.0, hold: 0.6, pull: [0.55, -0.3, 0.7] },
+    slash: { t0: 6.1, t1: 6.6, a: [-0.5, 0.42], b: [0.8, 0.34] },
+    wind: [[0, 0.3], [0.15, 0.3], [0.75, 0.85], [1.4, 0.55], [2.2, 0.3], [8.0, 0.3], [8.6, 0.75], [12.4, 0.75], [12.9, 0.3]],
+    patch: 14.4, pin: { k: 0, off: 17.6, on: 19.4 }, blend: [21.6, 24] };
+}
+
+/* ===================== palette ===================== */
+const HEX = ['#3A0F6B', '#9B1D8F', '#F0306A', '#FF7A2F', '#FFD36B', '#FFF6E0'];
+const HEAT = HEX.map(h => new THREE.Color(h));       // linear (ColorManagement converts sRGB hex)
+const ICE = new THREE.Color('#9BE8FF'), FROST = new THREE.Color('#E8F7FF'), STEEL = new THREE.Color('#4E5A8C');
+function ironbow(x, out) { x = clamp(x, 0, 1) * 5; const i = Math.min(4, Math.floor(x)); return out.copy(HEAT[i]).lerp(HEAT[i + 1], x - i); }
+const HEX_RGB = HEX.map(h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+const IRON_LUT = new Uint8Array(256 * 3); // sRGB bytes
+for (let k = 0; k < 256; k++) { const x = k / 255 * 5, i = Math.min(4, Math.floor(x)), f = x - i; for (let c = 0; c < 3; c++) IRON_LUT[k * 3 + c] = Math.round(HEX_RGB[i][c] + (HEX_RGB[i + 1][c] - HEX_RGB[i][c]) * f); }
+const glslVec = c => `vec3(${c.r.toFixed(5)}, ${c.g.toFixed(5)}, ${c.b.toFixed(5)})`;
+const GLSL_IRONBOW = `vec3 ironbow(float x){ x = clamp(x, 0.0, 1.0) * 5.0;
+  vec3 c0 = ${glslVec(HEAT[0])}, c1 = ${glslVec(HEAT[1])}, c2 = ${glslVec(HEAT[2])}, c3 = ${glslVec(HEAT[3])}, c4 = ${glslVec(HEAT[4])}, c5 = ${glslVec(HEAT[5])};
+  if (x < 1.0) return mix(c0, c1, x); if (x < 2.0) return mix(c1, c2, x - 1.0); if (x < 3.0) return mix(c2, c3, x - 2.0);
+  if (x < 4.0) return mix(c3, c4, x - 3.0); return mix(c4, c5, x - 4.0); }`;
+
+/* ===================== woven code texture ===================== */
+const WEFT_CODE = [
+  'def allow(pkt: Packet) -> bool:  ',
+  '    if pkt.src_ip in blocklist: return False  ',
+  '    if pkt.sni not in ALLOWED_HOSTS: return False  ',
+  '    return pkt.dst_port in (443, 8443)  ',
+  'rate = limiter.hit(pkt.src_ip, window=60)  ',
+  'if rate > 120: drop(pkt, reason="rate_limited")  ',
+  'if not tls.verify(cert, roots=TRUST_STORE): drop(pkt)  ',
+  'log.warning("blocked %s:%d", pkt.src_ip, pkt.dst_port)  ',
+];
+const WARP_CODE = [
+  'const ok = await verify(sig, rawBody, PUBLIC_KEY);  ',
+  'if (!ok) return res.status(401).end();  ',
+  'if (!ALLOWED_ORIGINS.has(req.headers.origin ?? "")) return deny(req);  ',
+  'const token = req.headers.authorization?.slice(7);  ',
+  'if (!token || isRevoked(token)) return deny(req, 403);  ',
+  'await audit.write({ ip: req.ip, path: req.path, ok });  ',
+  'if (body.length > MAX_BODY) return res.status(413).end();  ',
+  'const ttl = Math.min(policy.ttl, 300);  ',
+];
+function makeWeave(anisotropy) {
+  const S = LOW ? 512 : 1024, N = 8, P = S / N, RW = 0.86;
+  const font = Math.round(P * 0.34);
+  // text strips: weft lines horizontal, warp lines rendered horizontally then read transposed
+  const tc = document.createElement('canvas'); tc.width = S; tc.height = S;
+  const tg = tc.getContext("2d", { willReadFrequently: true });
+  tg.fillStyle = '#000'; tg.fillRect(0, 0, S, S); tg.fillStyle = '#fff'; tg.textBaseline = 'middle';
+  tg.font = `500 ${font}px "Martian Mono", ui-monospace, monospace`;
+  for (let b = 0; b < N; b++) { const s = WEFT_CODE[b % WEFT_CODE.length]; let x = -((b * 37) % 90); while (x < S) { tg.fillText(s, x, b * P + P / 2); x += tg.measureText(s).width; } }
+  const weftTxt = tg.getImageData(0, 0, S, S).data;
+  tg.fillStyle = '#000'; tg.fillRect(0, 0, S, S); tg.fillStyle = '#fff';
+  for (let a = 0; a < N; a++) { const s = WARP_CODE[a % WARP_CODE.length]; let x = -((a * 53) % 120); while (x < S) { tg.fillText(s, x, a * P + P / 2); x += tg.measureText(s).width; } }
+  const warpTxt = tg.getImageData(0, 0, S, S).data; // sample at (y, x) for warp ribbon a at column x
+  const col = new Uint8ClampedArray(S * S * 4), hgt = new Float32Array(S * S);
+  const warpC = [0x2c, 0x4c, 0xa6], weftC = [0x22, 0x3d, 0x8e], glW = [0xb4, 0xf0, 0xff], glF = [0x86, 0xd8, 0xf7], gap = [0x0c, 0x0a, 0x24];
+  const prof = u => { const d = Math.abs(u - 0.5) / (RW * 0.5); return d >= 1 ? -1 : Math.sqrt(1 - d * d); };
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const a = Math.floor(x / P), b = Math.floor(y / P), u = (x % P) / P, v = (y % P) / P;
+    // twill 2/2: warp over at crossing (a, b) when (a + b) mod 4 < 2; heights follow the over/under undulation
+    const warpOver = ((a + b) & 3) < 2;
+    const pw = prof(u), pf = prof(v);
+    // along-ribbon undulation: blend over/under state of this crossing and the neighbour we approach
+    const vb = v < 0.5 ? b - 1 : b + 1, ub = u < 0.5 ? a - 1 : a + 1;
+    const wNext = (((a + vb) & 3) < 2) ? 1 : 0, fNext = (((ub + b) & 3) < 2) ? 0 : 1;
+    const kv = 0.5 - Math.abs(v - 0.5), ku = 0.5 - Math.abs(u - 0.5); // 0 at crossing edges, 0.5 at centres
+    const wS = warpOver ? 1 : 0, fS = warpOver ? 0 : 1;
+    const wLvl = wS + (wNext - wS) * 0.5 * (1 - Math.min(1, kv * 4)), fLvl = fS + (fNext - fS) * 0.5 * (1 - Math.min(1, ku * 4));
+    const hw = pw < 0 ? -1 : 0.35 + 0.45 * wLvl + 0.2 * pw, hf = pf < 0 ? -1 : 0.35 + 0.45 * fLvl + 0.2 * pf;
+    const i4 = (y * S + x) * 4;
+    let r, g, bl, h;
+    if (hw < 0 && hf < 0) { r = gap[0]; g = gap[1]; bl = gap[2]; h = 0; }
+    else if (hw >= hf) {
+      const t = warpTxt[(x * S + (S - 1 - y)) * 4] / 255 * 0.92; // warp text runs along y
+      const sh = 0.62 + 0.38 * pw * (0.55 + 0.45 * wLvl);
+      r = (warpC[0] + (glW[0] - warpC[0]) * t) * sh; g = (warpC[1] + (glW[1] - warpC[1]) * t) * sh; bl = (warpC[2] + (glW[2] - warpC[2]) * t) * sh; h = hw;
+    } else {
+      const t = weftTxt[i4] / 255 * 0.82;
+      const sh = 0.62 + 0.38 * pf * (0.55 + 0.45 * fLvl);
+      r = (weftC[0] + (glF[0] - weftC[0]) * t) * sh; g = (weftC[1] + (glF[1] - weftC[1]) * t) * sh; bl = (weftC[2] + (glF[2] - weftC[2]) * t) * sh; h = hf;
+    }
+    col[i4] = r; col[i4 + 1] = g; col[i4 + 2] = bl; col[i4 + 3] = 255; hgt[y * S + x] = h;
+  }
+  const nrm = new Uint8Array(S * S * 4), str = 2.2;
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const hx = hgt[y * S + ((x + 1) % S)] - hgt[y * S + ((x - 1 + S) % S)], hy = hgt[((y + 1) % S) * S + x] - hgt[((y - 1 + S) % S) * S + x];
+    let nx = -hx * str, ny = hy * str, nz = 1; const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+    const i4 = (y * S + x) * 4; nrm[i4] = (nx * 0.5 + 0.5) * 255; nrm[i4 + 1] = (ny * 0.5 + 0.5) * 255; nrm[i4 + 2] = (nz * 0.5 + 0.5) * 255; nrm[i4 + 3] = 255;
+  }
+  const cc = document.createElement('canvas'); cc.width = cc.height = S; cc.getContext('2d').putImageData(new ImageData(col, S, S), 0, 0);
+  const map = new THREE.CanvasTexture(cc);
+  map.colorSpace = THREE.SRGBColorSpace; map.wrapS = map.wrapT = THREE.RepeatWrapping; map.anisotropy = anisotropy; map.flipY = false;
+  const normal = new THREE.DataTexture(nrm, S, S, THREE.RGBAFormat);
+  normal.wrapS = normal.wrapT = THREE.RepeatWrapping; normal.anisotropy = anisotropy; normal.generateMipmaps = true;
+  normal.minFilter = THREE.LinearMipmapLinearFilter; normal.magFilter = THREE.LinearFilter; normal.needsUpdate = true;
+  return { map, normal };
+}
+function panelTexture() {
+  const S = 512, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d');
+  g.fillStyle = '#16123a'; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 4; j++) {
+    const x = i * 256, y = j * 128;
+    const gr = g.createLinearGradient(x, y, x, y + 128); gr.addColorStop(0, '#1d1848'); gr.addColorStop(1, '#151137');
+    g.fillStyle = gr; g.fillRect(x + 3, y + 3, 250, 122);
+  }
+  g.strokeStyle = 'rgba(78,90,140,0.35)'; g.lineWidth = 2;
+  for (let i = 0; i <= 2; i++) { g.beginPath(); g.moveTo(i * 256, 0); g.lineTo(i * 256, S); g.stroke(); }
+  for (let j = 0; j <= 4; j++) { g.beginPath(); g.moveTo(0, j * 128); g.lineTo(S, j * 128); g.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+}
+function floorTexture() {
+  const S = 512, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d');
+  g.fillStyle = '#120e2e'; g.fillRect(0, 0, S, S);
+  g.strokeStyle = 'rgba(78,90,140,0.28)'; g.lineWidth = 2;
+  for (let i = 0; i <= 4; i++) { g.beginPath(); g.moveTo(i * 128, 0); g.lineTo(i * 128, S); g.stroke(); g.beginPath(); g.moveTo(0, i * 128); g.lineTo(S, i * 128); g.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t;
+}
+
+/* ===================== renderer + scene ===================== */
+const canvas = document.getElementById('c');
+const fx = document.getElementById('fx'), fxg = fx.getContext('2d');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+} catch (err) {
+  document.getElementById('ld-text').textContent = 'This piece needs WebGL, which is not available in this browser.';
+  document.querySelector('#loader .lb').remove();
+  throw err;
+}
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+let dprCap = LOW ? 1 : 2, dprScale = 1;
+const PR = () => Math.min(window.devicePixelRatio || 1, dprCap) * dprScale;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#100C2A');
+const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 60);
+
+let C, SC, sim, director, NX, NY, NCX, NCY;
+let cloth, clothGeo, posAttr, nrmAttr, heatAttr, idxAttr, tearTex, tearData, threads, threadPos, threadGeo;
+let packets, pktColor, heatDecal, heatTex, heatData, orb, orbRim, rings = [], cornerPins = [], rod, keyLight, hotSpot, composer, bloom;
+let weave = null, built = false;
+const timeU = { value: 0 };
+
+function buildWorld() {
+  // clear previous world (when the layout switches between landscape and portrait)
+  while (scene.children.length) scene.remove(scene.children[0]);
+  rings = []; cornerPins = [];
+  const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  if (!weave) weave = makeWeave(aniso);
+
+  /* lights */
+  scene.add(new THREE.HemisphereLight(0x3b3f86, 0x120e2e, 1.15));
+  keyLight = new THREE.DirectionalLight(0xdde6ff, 2.1);
+  keyLight.position.set(-2.6, 5.2, 6.2); keyLight.target.position.set(0.2, 1.2, 0);
+  keyLight.castShadow = true; keyLight.shadow.mapSize.set(LOW ? 1024 : 2048, LOW ? 1024 : 2048);
+  const sc = keyLight.shadow.camera; sc.left = -3.6; sc.right = 3.6; sc.top = 3.6; sc.bottom = -3.6; sc.near = 1; sc.far = 16;
+  keyLight.shadow.bias = -0.0004; keyLight.shadow.normalBias = 0.025; keyLight.shadow.radius = 3;
+  scene.add(keyLight, keyLight.target);
+  const fill = new THREE.DirectionalLight(0x7f8fe0, 0.55); fill.position.set(4, 2, 5); scene.add(fill);
+  hotSpot = new THREE.SpotLight(0xff4a52, 18, 14, 0.56, 0.95, 1.4);
+  hotSpot.position.set(0, 3.3, -3.9); hotSpot.target.position.set(0, 0, 1.8);
+  hotSpot.castShadow = true; hotSpot.shadow.mapSize.set(LOW ? 512 : 1024, LOW ? 512 : 1024); hotSpot.shadow.bias = -0.0006; hotSpot.shadow.normalBias = 0.02;
+  hotSpot.shadow.camera.near = 0.5; hotSpot.shadow.camera.far = 14;
+  scene.add(hotSpot, hotSpot.target);
+
+  /* floor */
+  const fTex = floorTexture(); fTex.repeat.set(12, 7);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(24, 10.5), new THREE.MeshStandardMaterial({ map: fTex, roughness: 0.62, metalness: 0.0, color: 0xffffff }));
+  floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0, 2.75); floor.receiveShadow = true; scene.add(floor);
+  // perimeter line on the sill
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(C.doorHalfW * 2, 0.004, 0.018), new THREE.MeshBasicMaterial({ color: new THREE.Color(0x9be8ff).multiplyScalar(1.6), toneMapped: false }));
+  sill.position.set(0, 0.002, 0.03); scene.add(sill);
+
+  /* wall with a doorway */
+  const wTex = panelTexture();
+  const wallMat = new THREE.MeshStandardMaterial({ map: wTex, roughness: 0.85, metalness: 0.05 });
+  wallMat.shadowSide = THREE.DoubleSide;
+  const WW = 16, WH = 7, T = C.wallT, dh = C.doorHalfW, DH = C.doorH;
+  const mkWall = (x0, x1, y0, y1) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, T), wallMat.clone());
+    m.material.map = wTex.clone(); m.material.map.needsUpdate = true; m.material.map.repeat.set((x1 - x0) / 2, (y1 - y0) / 2);
+    m.position.set((x0 + x1) / 2, (y0 + y1) / 2, -T / 2); m.castShadow = true; m.receiveShadow = true; scene.add(m);
+  };
+  mkWall(-WW / 2, -dh, 0, WH); mkWall(dh, WW / 2, 0, WH); mkWall(-dh, dh, DH, WH);
+  // door frame trim
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0x2a2f66, roughness: 0.5, metalness: 0.3 });
+  const trim = (w, h, x, y) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.05), trimMat); m.position.set(x, y, 0.02); m.castShadow = true; m.receiveShadow = true; scene.add(m); };
+  trim(0.08, DH + 0.08, -dh - 0.04, DH / 2); trim(0.08, DH + 0.08, dh + 0.04, DH / 2); trim(dh * 2 + 0.16, 0.08, 0, DH + 0.04);
+
+  /* outside: hot haze the packets come from */
+  const hazeMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: timeU },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `varying vec2 vUv; uniform float uTime; ${GLSL_IRONBOW}
+      float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        float a = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5), b = fract(sin(dot(i + vec2(1, 0), vec2(127.1, 311.7))) * 43758.5);
+        float c = fract(sin(dot(i + vec2(0, 1), vec2(127.1, 311.7))) * 43758.5), d = fract(sin(dot(i + vec2(1, 1), vec2(127.1, 311.7))) * 43758.5);
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y); }
+      void main(){
+        // the hostile side: a hot haze that the packets stream out of (centre low behind the doorway)
+        vec2 q = vec2((vUv.x - 0.5) * 16.0, vUv.y * 12.0 - 3.6);   // metres: x, y (floor at 0)
+        float core = exp(-(q.x * q.x) / 3.2 - pow(q.y - 1.25, 2.0) / 1.6);
+        float sh = n2(vec2(q.x * 1.6, q.y * 3.0 - uTime * 0.9)) * 0.6 + n2(vec2(q.x * 3.7 + 3.0, q.y * 6.0 - uTime * 1.7)) * 0.4;
+        float lift = smoothstep(-0.6, 0.4, q.y) * (1.0 - smoothstep(2.6, 5.5, q.y));
+        float sh2 = n2(vec2(q.x * 7.0 - 5.0, q.y * 11.0 - uTime * 2.6));
+        float v = core * (0.55 + 0.7 * sh * sh2 + 0.25 * sh) + 0.2 * lift * (0.4 + 0.6 * sh);
+        vec3 col = mix(vec3(0.012, 0.007, 0.034), ironbow(0.06 + 0.46 * v), smoothstep(0.0, 0.45, v)) * (0.3 + 0.8 * v * v + 0.2 * v);
+        gl_FragColor = vec4(col, 1.0); }`,
+    depthWrite: true });
+  const haze = new THREE.Mesh(new THREE.PlaneGeometry(16, 12), hazeMat); haze.position.set(0, 2.4, -4.6); scene.add(haze);
+
+  /* rod, rings, brackets */
+  const steelMat = new THREE.MeshStandardMaterial({ color: 0x8c93c4, roughness: 0.32, metalness: 0.85 });
+  const rodY = C.topY + 0.05;
+  rod = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, C.rodHalfW * 2 + 0.36, 16), steelMat);
+  rod.rotation.z = Math.PI / 2; rod.position.set(0, rodY, C.rodZ); rod.castShadow = true; rod.receiveShadow = true; scene.add(rod);
+  for (const s of [-1, 1]) {
+    const fin = new THREE.Mesh(new THREE.SphereGeometry(0.035, 16, 12), steelMat); fin.position.set(s * (C.rodHalfW + 0.2), rodY, C.rodZ); fin.castShadow = true; scene.add(fin);
+    const br = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, C.rodZ + 0.02), steelMat); br.position.set(s * (C.rodHalfW + 0.1), rodY, C.rodZ / 2); scene.add(br);
+  }
+  const ringGeo = new THREE.TorusGeometry(0.05, 0.0075, 10, 28);
+  for (let k = 0; k < C.rings.length; k++) {
+    const m = new THREE.Mesh(ringGeo, new THREE.MeshStandardMaterial({ color: 0x9be8ff, emissive: 0x9be8ff, emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.6 }));
+    m.rotation.y = Math.PI / 2; m.position.set(sim.ringX[k], rodY, C.rodZ); m.castShadow = true; m.receiveShadow = true; scene.add(m); rings.push(m);
+  }
+  for (let k = 0; k < 2; k++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.022, 14, 10), new THREE.MeshStandardMaterial({ color: 0x9be8ff, emissive: 0x9be8ff, emissiveIntensity: 1.2 }));
+    m.visible = false; scene.add(m); cornerPins.push(m);
+  }
+
+  /* cloth */
+  const MAXP = sim.MAXP;
+  clothGeo = new THREE.BufferGeometry();
+  posAttr = new THREE.BufferAttribute(new Float32Array(MAXP * 3), 3); posAttr.setUsage(THREE.DynamicDrawUsage);
+  nrmAttr = new THREE.BufferAttribute(new Float32Array(MAXP * 3), 3); nrmAttr.setUsage(THREE.DynamicDrawUsage);
+  heatAttr = new THREE.BufferAttribute(new Float32Array(MAXP), 1); heatAttr.setUsage(THREE.DynamicDrawUsage);
+  const uv = new Float32Array(MAXP * 2);
+  idxAttr = new THREE.BufferAttribute(new Uint32Array(sim.NC * 6), 1); idxAttr.setUsage(THREE.DynamicDrawUsage);
+  clothGeo.setAttribute('position', posAttr); clothGeo.setAttribute('normal', nrmAttr); clothGeo.setAttribute('aHeat', heatAttr);
+  clothGeo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); clothGeo.setIndex(idxAttr);
+  clothGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 1.5, 0), 6);
+  NCX = sim.NCX; NCY = sim.NCY;
+  tearData = new Uint8Array(NCX * NCY * 4);
+  tearTex = new THREE.DataTexture(tearData, NCX, NCY, THREE.RGBAFormat);
+  tearTex.minFilter = tearTex.magFilter = THREE.NearestFilter; tearTex.generateMipmaps = false; tearTex.needsUpdate = true;
+  const map = weave.map.clone(); map.repeat.set((NX - 1) * C.sp / 0.42, (NY - 1) * C.sp / 0.42); map.needsUpdate = true;
+  const nmap = weave.normal.clone(); nmap.repeat.copy(map.repeat); nmap.needsUpdate = true;
+  const mat = new THREE.MeshPhysicalMaterial({
+    map, normalMap: nmap, normalScale: new THREE.Vector2(0.85, -0.85), roughness: 0.74, metalness: 0,
+    sheen: 1.0, sheenRoughness: 0.38, sheenColor: new THREE.Color('#9BE8FF'), side: THREE.DoubleSide,
+  });
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.tTear = { value: tearTex }; sh.uniforms.uCells = { value: new THREE.Vector2(NCX, NCY) }; sh.uniforms.uTime = timeU;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aHeat;\nvarying float vHeat;\nvarying vec2 vGrid;\nuniform vec2 uCells;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvGrid = uv * uCells;\nvHeat = aHeat;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform sampler2D tTear; uniform vec2 uCells; uniform float uTime;
+varying float vHeat; varying vec2 vGrid;
+${GLSL_IRONBOW}
+float h11(float n){ return fract(sin(n * 127.1) * 43758.5453); }`)
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+  vec2 cellF = clamp(floor(vGrid), vec2(0.0), uCells - 1.0);
+  vec2 fr = clamp(vGrid - cellF, 0.0, 1.0);
+  vec4 TT = texelFetch(tTear, ivec2(cellF), 0);
+  int tbits = int(TT.r * 255.0 + 0.5), sbits = int(TT.g * 255.0 + 0.5);
+  float tornD = 9.0, tornS = 0.0, seamD = 9.0, seamS = 0.0;
+  // distance to each open edge of this cell, and the coordinate along it (in cells)
+  if ((tbits & 1) != 0 && fr.y < tornD) { tornD = fr.y; tornS = cellF.x + fr.x + 0.37; }
+  if ((tbits & 4) != 0 && 1.0 - fr.y < tornD) { tornD = 1.0 - fr.y; tornS = cellF.x + fr.x + 0.71; }
+  if ((tbits & 8) != 0 && fr.x < tornD) { tornD = fr.x; tornS = cellF.y + fr.y + 0.13; }
+  if ((tbits & 2) != 0 && 1.0 - fr.x < tornD) { tornD = 1.0 - fr.x; tornS = cellF.y + fr.y + 0.53; }
+  if ((sbits & 1) != 0 && fr.y < seamD) { seamD = fr.y; seamS = cellF.x + fr.x; }
+  if ((sbits & 4) != 0 && 1.0 - fr.y < seamD) { seamD = 1.0 - fr.y; seamS = cellF.x + fr.x; }
+  if ((sbits & 8) != 0 && fr.x < seamD) { seamD = fr.x; seamS = cellF.y + fr.y; }
+  if ((sbits & 2) != 0 && 1.0 - fr.x < seamD) { seamD = 1.0 - fr.x; seamS = cellF.y + fr.y; }
+  float fray = 0.0;
+  if (tornD < 0.6) {
+    // frayed weave: loose threads poke past a ragged body edge
+    float th = tornS * 3.0, tid = floor(th), tu = fract(th);
+    float body = 0.24 + 0.1 * h11(floor(tornS * 1.3) + 7.0);
+    float len = h11(tid) * 0.26;
+    bool inThread = abs(tu - 0.5) < 0.22;
+    if (tornD < body && !(inThread && tornD > body - len)) discard;
+    fray = 1.0 - smoothstep(0.0, 0.42, tornD);
+  }`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+  diffuseColor.rgb *= 1.0 - 0.35 * fray;`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+  // heat from packet impacts glows through the weave; torn edges run hot; seams glow ice
+  float hh = clamp(vHeat, 0.0, 1.0);
+  float hk = min(hh, 1.0);
+  totalEmissiveRadiance += ironbow(0.3 + 0.5 * hk) * hk * sqrt(hk) * 1.05;
+  totalEmissiveRadiance += ironbow(0.5) * fray * fray * fray * 0.6;
+  if (seamD < 0.34) {
+    float zig = abs(fract(seamS * 2.0 + seamD * 1.7) - 0.5);
+    float st = 1.0 - smoothstep(0.07, 0.12, zig);
+    float glow = TT.b;
+    totalEmissiveRadiance += vec3(0.33, 0.80, 1.0) * (st * (0.35 + 1.5 * glow) + glow * 0.45 * (1.0 - smoothstep(0.0, 0.34, seamD)));
+  }`);
+  };
+  cloth = new THREE.Mesh(clothGeo, mat);
+  cloth.castShadow = true; cloth.receiveShadow = true; cloth.frustumCulled = false;
+  scene.add(cloth);
+  // uv per particle slot is filled lazily (split particles keep their node's uv)
+  clothGeo.userData.uv = uv;
+
+  /* loose threads at torn edges */
+  const MAXT = 3000;
+  threadPos = new Float32Array(MAXT * 2 * 3 * 2);
+  threadGeo = new THREE.BufferGeometry(); threadGeo.setAttribute('position', new THREE.BufferAttribute(threadPos, 3).setUsage(THREE.DynamicDrawUsage));
+  threads = new THREE.LineSegments(threadGeo, new THREE.LineBasicMaterial({ color: 0x8fd6f2, transparent: true, opacity: 0.85 }));
+  threads.frustumCulled = false; scene.add(threads);
+
+  /* packets */
+  const pg = new THREE.SphereGeometry(1, 10, 8);
+  packets = new THREE.InstancedMesh(pg, new THREE.MeshBasicMaterial({ toneMapped: false }), sim.MAXK);
+  packets.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  pktColor = new THREE.InstancedBufferAttribute(new Float32Array(sim.MAXK * 3), 3); pktColor.setUsage(THREE.DynamicDrawUsage);
+  packets.instanceColor = pktColor; packets.frustumCulled = false; packets.count = 0; scene.add(packets);
+
+  /* floor heat decal */
+  heatData = new Uint8Array(sim.FHW * sim.FHD * 4);
+  heatTex = new THREE.DataTexture(heatData, sim.FHW, sim.FHD, THREE.RGBAFormat);
+  heatTex.colorSpace = THREE.SRGBColorSpace; heatTex.magFilter = heatTex.minFilter = THREE.LinearFilter; heatTex.needsUpdate = true;
+  heatDecal = new THREE.Mesh(new THREE.PlaneGeometry(C.floorX1 - C.floorX0, C.floorZ1 - C.floorZ0),
+    new THREE.MeshBasicMaterial({ map: heatTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, color: new THREE.Color(1.25, 1.25, 1.25) }));
+  heatDecal.rotation.x = -Math.PI / 2; heatDecal.position.set((C.floorX0 + C.floorX1) / 2, 0.003, (C.floorZ0 + C.floorZ1) / 2);
+  heatDecal.material.map.flipY = false;
+  scene.add(heatDecal);
+
+  /* the movable orb */
+  orb = new THREE.Mesh(new THREE.SphereGeometry(C.orbR, 48, 32), new THREE.MeshPhysicalMaterial({ color: 0x3a6fd0, roughness: 0.22, metalness: 0.0, clearcoat: 1, clearcoatRoughness: 0.12, sheen: 0.6, sheenColor: new THREE.Color(0x9be8ff), emissive: 0x10265e, emissiveIntensity: 0.8 }));
+  orb.castShadow = true; orb.receiveShadow = true; scene.add(orb);
+  orbRim = new THREE.Mesh(new THREE.SphereGeometry(C.orbR * 1.06, 48, 32), new THREE.ShaderMaterial({
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide,
+    vertexShader: 'varying vec3 vN; varying vec3 vV; void main(){ vec4 mv = modelViewMatrix * vec4(position,1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+    fragmentShader: 'varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(vec3(0.45, 0.85, 1.0) * f * 1.4, 1.0); }' }));
+  scene.add(orbRim);
+
+  /* post */
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.85, 0.55, 0.92);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
+  built = true;
+}
+
+/* ===================== sim <-> render sync ===================== */
+let lastTopoSync = -1;
+function syncCloth() {
+  const A = sim.A, pc = sim.sc.pCount, pos = posAttr.array, nr = nrmAttr.array, ht = heatAttr.array, x = A.x;
+  for (let p = 0; p < pc * 3; p++) pos[p] = x[p];
+  nr.set(A.nrm.subarray(0, pc * 3));
+  for (let p = 0; p < pc; p++) ht[p] = A.heat[p];
+  posAttr.clearUpdateRanges(); posAttr.addUpdateRange(0, pc * 3); posAttr.needsUpdate = true;
+  nrmAttr.clearUpdateRanges(); nrmAttr.addUpdateRange(0, pc * 3); nrmAttr.needsUpdate = true;
+  heatAttr.clearUpdateRanges(); heatAttr.addUpdateRange(0, pc); heatAttr.needsUpdate = true;
+  if (sim.sc.topo) {
+    sim.sc.topo = 0;
+    const qp = A.qp, cq = sim.cq, idx = idxAttr.array, uv = clothGeo.userData.uv;
+    for (let j = 0; j < NCY; j++) for (let i = 0; i < NCX; i++) {
+      const c = j * NCX + i, a = qp[cq[c * 4]], b = qp[cq[c * 4 + 1]], cc = qp[cq[c * 4 + 2]], d = qp[cq[c * 4 + 3]], o = c * 6;
+      if ((i + j) & 1) { idx[o] = a; idx[o + 1] = d; idx[o + 2] = cc; idx[o + 3] = a; idx[o + 4] = cc; idx[o + 5] = b; }
+      else { idx[o] = a; idx[o + 1] = d; idx[o + 2] = b; idx[o + 3] = b; idx[o + 4] = d; idx[o + 5] = cc; }
+    }
+    idxAttr.needsUpdate = true;
+    for (let p = 0; p < pc; p++) { const n = A.pn[p]; uv[p * 2] = (n % NX) / (NX - 1); uv[p * 2 + 1] = ((n / NX) | 0) / (NY - 1); }
+    clothGeo.attributes.uv.needsUpdate = true;
+  }
+  sim.fillTearTex(tearData); tearTex.needsUpdate = true;
+}
+const tmpC = new THREE.Color(), tmpM = new THREE.Matrix4(), tmpV = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpS = new THREE.Vector3(), UPV = new THREE.Vector3(0, 1, 0);
+function syncPackets() {
+  const A = sim.A, arr = packets.instanceMatrix.array, colA = pktColor.array;
+  let n = 0;
+  const R = C.portrait ? 0.012 : 0.0095;
+  for (let i = 0; i < sim.MAXK; i++) {
+    const st = A.ks[i]; if (!st) continue;
+    const x = A.kx[i * 3], y = A.kx[i * 3 + 1], z = A.kx[i * 3 + 2];
+    let vx = A.kv[i * 3], vy = A.kv[i * 3 + 1], vz = A.kv[i * 3 + 2];
+    let heat = 0.62 + 0.3 * A.kh[i], bright = 2.0, r = R, stretch = 1;
+    if (st === 4) { const h = A.kh[i]; heat = 0.25 + 0.55 * h; bright = 0.5 + 1.6 * h; r = R * (0.55 + 0.45 * h); vx = 1; vy = 0; vz = 0; }
+    else {
+      const sp = Math.hypot(vx, vy, vz); stretch = 1 + Math.min(4, sp * 1.1);
+      if (st === 2) { const k = Math.max(0, 1 - A.ka[i] / 1.4); heat = 0.4 + 0.3 * k; bright = 1.5 * k + 0.15; r = R * (0.5 + 0.4 * k); }
+      if (st === 3) { heat = 0.88; bright = 2.6; }
+    }
+    // orient a unit sphere stretched along the velocity (motion streak)
+    tmpV.set(vx, vy, vz).normalize(); tmpQ.setFromUnitVectors(UPV, tmpV);
+    tmpS.set(r, r * stretch, r); if (st === 4) tmpS.set(r * 1.3, r * 0.3, r * 1.3);
+    tmpM.compose(tmpV.set(x, y, z), st === 4 ? tmpQ.identity() : tmpQ, tmpS);
+    tmpM.toArray(arr, n * 16);
+    ironbow(heat, tmpC).multiplyScalar(bright);
+    colA[n * 3] = tmpC.r; colA[n * 3 + 1] = tmpC.g; colA[n * 3 + 2] = tmpC.b;
+    n++;
+  }
+  packets.count = n; packets.instanceMatrix.needsUpdate = true; pktColor.needsUpdate = true;
+  // floor heat texture
+  const fh = A.fh, d = heatData;
+  const FW = sim.FHW, FD = sim.FHD;
+  for (let k = 0; k < fh.length; k++) {
+    const h = fh[(FD - 1 - ((k / FW) | 0)) * FW + (k % FW)], v = 1 - Math.exp(-h * 0.9), li = Math.min(255, Math.round((0.12 + 0.62 * v) * 255)), a = Math.min(1, v * 1.3);
+    d[k * 4] = IRON_LUT[li * 3] * a; d[k * 4 + 1] = IRON_LUT[li * 3 + 1] * a; d[k * 4 + 2] = IRON_LUT[li * 3 + 2] * a; d[k * 4 + 3] = 255;
+  }
+  heatTex.needsUpdate = true;
+}
+// loose threads hanging off open torn edges
+function syncThreads() {
+  const A = sim.A, x = A.x, qp = A.qp, cq = sim.cq, tp = threadPos;
+  let n = 0; const MAXT = 3000, sp = C.sp;
+  for (let c = 0; c < sim.NC && n < MAXT; c++) {
+    const bits = tearData[c * 4]; if (!bits) continue;
+    const i = c % NCX, j = (c / NCX) | 0;
+    const P = [qp[cq[c * 4]], qp[cq[c * 4 + 1]], qp[cq[c * 4 + 2]], qp[cq[c * 4 + 3]]];
+    const cx = (x[P[0] * 3] + x[P[1] * 3] + x[P[2] * 3] + x[P[3] * 3]) / 4, cy = (x[P[0] * 3 + 1] + x[P[1] * 3 + 1] + x[P[2] * 3 + 1] + x[P[3] * 3 + 1]) / 4, cz = (x[P[0] * 3 + 2] + x[P[1] * 3 + 2] + x[P[2] * 3 + 2] + x[P[3] * 3 + 2]) / 4;
+    for (let s = 0; s < 4; s++) {
+      if (!(bits & (1 << s))) continue;
+      const a = P[s], b = P[(s + 1) & 3]; // edges: 0 top (TL-TR), 1 right (TR-BR), 2 bottom (BR-BL), 3 left (BL-TL)
+      const seed = (c * 4 + s) * 7;
+      const cnt = hr(seed, 3) < 0.55 ? 2 : 1;
+      for (let k = 0; k < cnt && n < MAXT; k++) {
+        const f = 0.2 + 0.6 * hr(seed + k, 5);
+        const ex = x[a * 3] + (x[b * 3] - x[a * 3]) * f, ey = x[a * 3 + 1] + (x[b * 3 + 1] - x[a * 3 + 1]) * f, ez = x[a * 3 + 2] + (x[b * 3 + 2] - x[a * 3 + 2]) * f;
+        let ox = ex - cx, oy = ey - cy, oz = ez - cz; const ol = Math.hypot(ox, oy, oz) || 1; ox /= ol; oy /= ol; oz /= ol;
+        const L = sp * (0.35 + 0.65 * hr(seed + k, 9));
+        const sway = Math.sin(timeU.value * 3 + seed) * 0.15;
+        const x1 = ex + ox * L * 0.55, y1 = ey + oy * L * 0.55 - L * 0.2, z1 = ez + oz * L * 0.55 + sway * L * 0.3;
+        const x2 = x1 + ox * L * 0.35, y2 = y1 + oy * L * 0.35 - L * 0.45, z2 = z1 + oz * L * 0.35 + sway * L * 0.5;
+        const o = n * 12;
+        tp[o] = ex; tp[o + 1] = ey; tp[o + 2] = ez; tp[o + 3] = x1; tp[o + 4] = y1; tp[o + 5] = z1;
+        tp[o + 6] = x1; tp[o + 7] = y1; tp[o + 8] = z1; tp[o + 9] = x2; tp[o + 10] = y2; tp[o + 11] = z2;
+        n++;
+      }
+    }
+  }
+  threadGeo.setDrawRange(0, n * 4);
+  threadGeo.attributes.position.needsUpdate = true;
+}
+function syncProps() {
+  const A = sim.A;
+  for (let k = 0; k < rings.length; k++) {
+    const st = A.pinState[k], m = rings[k].material, hov = hover.kind === 'pin' && hover.k === k;
+    if (st === 1) { m.color.set(0x9be8ff); m.emissive.set(0x9be8ff); m.emissiveIntensity = hov ? 1.6 : 0.6; }
+    else { m.color.set(0x4e5a8c); m.emissive.set(st === 2 ? 0x9be8ff : 0x4e5a8c); m.emissiveIntensity = hov ? 1.2 : (st === 2 ? 0.9 : 0.25); }
+    rings[k].scale.setScalar(hov ? 1.3 : 1);
+  }
+  for (let k = 0; k < 2; k++) {
+    const pk = sim.NR + k, m = cornerPins[k];
+    m.visible = A.pinState[pk] === 1;
+    if (m.visible) m.position.set(A.pinPos[pk * 3], A.pinPos[pk * 3 + 1], A.pinPos[pk * 3 + 2]);
+  }
+  orb.position.set(sim.sc.ox, sim.sc.oy, sim.sc.oz); orbRim.position.copy(orb.position);
+}
+
+/* ===================== camera framing ===================== */
+function frameCamera() {
+  const w = innerWidth, h = innerHeight, asp = w / h;
+  camera.aspect = asp;
+  if (C.portrait) {
+    camera.fov = 50; camera.position.set(0.1, 2.6, 7.4); camera.lookAt(0, 1.15, 0);
+    camera.setViewOffset(w, h, 0, -h * 0.01, w, h);
+  } else {
+    camera.fov = 38;
+    // keep the curtain wide enough on narrower landscape windows
+    const extra = clamp((1.6 - asp) / 0.6, 0, 1);
+    camera.position.set(0.5, 2.25 + extra * 0.2, 6.5 + extra * 1.6); camera.lookAt(0.16, 1.2, 0);
+    camera.setViewOffset(w, h, -w * 0.035, -h * 0.035, w, h);
+  }
+  camera.updateProjectionMatrix();
+}
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setPixelRatio(PR()); renderer.setSize(w, h, false);
+  if (composer) { composer.setPixelRatio(PR()); composer.setSize(w, h); bloom.setSize(Math.round(w * PR() * 0.5), Math.round(h * PR() * 0.5)); }
+  fx.width = Math.round(w * Math.min(devicePixelRatio || 1, 2)); fx.height = Math.round(h * Math.min(devicePixelRatio || 1, 2));
+  if (C) frameCamera();
+}
+
+/* ===================== projection helpers ===================== */
+const pv = new THREE.Vector3();
+function toScreen(x, y, z, out) { pv.set(x, y, z).project(camera); out[0] = (pv.x * 0.5 + 0.5) * innerWidth; out[1] = (-pv.y * 0.5 + 0.5) * innerHeight; out[2] = pv.z; return out; }
+const raycaster = new THREE.Raycaster();
+function rayAt(px, py) { raycaster.setFromCamera(new THREE.Vector2(px / innerWidth * 2 - 1, -(py / innerHeight) * 2 + 1), camera); return raycaster.ray; }
+// ray against every cloth triangle (Moller-Trumbore); returns particle nearest to the hit
+function pickCloth(ray) {
+  const A = sim.A, x = A.x, qp = A.qp, cq = sim.cq;
+  const ox = ray.origin.x, oy = ray.origin.y, oz = ray.origin.z, dx = ray.direction.x, dy = ray.direction.y, dz = ray.direction.z;
+  let best = Infinity, bp = -1;
+  const tri = (a, b, c) => {
+    const ax = x[a * 3], ay = x[a * 3 + 1], az = x[a * 3 + 2];
+    const e1x = x[b * 3] - ax, e1y = x[b * 3 + 1] - ay, e1z = x[b * 3 + 2] - az, e2x = x[c * 3] - ax, e2y = x[c * 3 + 1] - ay, e2z = x[c * 3 + 2] - az;
+    const px = dy * e2z - dz * e2y, py = dz * e2x - dx * e2z, pz = dx * e2y - dy * e2x, det = e1x * px + e1y * py + e1z * pz;
+    if (Math.abs(det) < 1e-12) return;
+    const inv = 1 / det, tx = ox - ax, ty = oy - ay, tz = oz - az, u = (tx * px + ty * py + tz * pz) * inv; if (u < 0 || u > 1) return;
+    const qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x, v = (dx * qx + dy * qy + dz * qz) * inv; if (v < 0 || u + v > 1) return;
+    const t = (e2x * qx + e2y * qy + e2z * qz) * inv; if (t <= 0 || t >= best) return;
+    best = t; bp = (u < 0.5 && v < 0.5 && u + v < 0.66) ? a : (u > v ? b : c);
+  };
+  for (let c = 0; c < sim.NC; c++) {
+    const a = qp[cq[c * 4]], b = qp[cq[c * 4 + 1]], cc = qp[cq[c * 4 + 2]], d = qp[cq[c * 4 + 3]];
+    tri(a, d, cc); tri(a, cc, b);
+  }
+  return bp < 0 ? null : { p: bp, t: best, point: ray.at(best, new THREE.Vector3()) };
+}
+
+/* ===================== state machine: attract / live / recover ===================== */
+let mode = 'attract', playing = true, acc = 0, last = performance.now();
+let aStep = 0;               // steps since the attract loop's t = 0
+let pristine = true;         // current state lies on the seeded attract run
+let snap0 = null;            // state at t = 0 (after the warm-up)
+const checkpoints = new Map(); // attract step -> snapshot (every 2 s of the seeded run)
+let lastInput = -1e9, recoverT = 0;
+let liveWind = 0.3;
+const user = { grabbing: false, plane: new THREE.Plane(), target: new THREE.Vector3(), push: 0, orbDrag: false, orbTarget: null, slashing: false, last: null, pinDown: null, downAt: null, id: -1, firstGrab: false };
+const trails = [];           // user slash trail points {x,y,t}
+const hover = { kind: null, k: -1 };
+
+function simInputsLive() {
+  return { wind: liveWind, grab: user.grabbing ? [user.target.x, user.target.y, user.target.z] : null, orb: user.orbTarget || C.orbHome, blend: 0, maxCuts: 2 };
+}
+function stepOnce() {
+  if (mode === 'attract') {
+    const k = aStep + 1;
+    sim.step(director.inputs(k));
+    aStep = k;
+    if (pristine && !NOCACHE && aStep % 120 === 0 && !checkpoints.has(aStep)) checkpoints.set(aStep, sim.snapshot());
+    if (aStep >= Math.round(PERIOD / DT)) { aStep = 0; pristine = false; }
+  } else if (mode === 'recover') {
+    recoverT += DT;
+    const inp = simInputsLive();
+    inp.grab = null; inp.orb = C.orbHome; inp.wind = liveWind = liveWind + (0.3 - liveWind) * 0.03;
+    const settled = !sim.sc.patchActive && !Array.from(sim.A.pinState.subarray(0, sim.NR)).some(s => s !== 1);
+    if (settled && recoverT > 1.6) inp.blend = Math.min(0.2, 0.2 * ((recoverT - 1.6) / 1.4) ** 2);
+    sim.step(inp);
+    if (settled && recoverT > 3.0) { mode = 'attract'; aStep = 0; pristine = false; windInput.value = 0.3; }
+  } else {
+    const ev = sim.step(simInputsLive());
+    if (ev.cuts && user.grabbing && navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }
+  }
+}
+function takeOver() {
+  lastInput = performance.now() / 1000;
+  if (mode !== 'live') {
+    if (mode === 'attract' && sim.sc.grabN > 0) sim.grabEnd();
+    if (mode === 'attract') liveWind = director.windAt ? director.windAt(aStep * DT) : liveWind;
+    mode = 'live'; pristine = false;
+    windInput.value = String(liveWind);
+  }
+}
+function startRecover() {
+  mode = 'recover'; recoverT = 0;
+  if (sim.countCuts() > 0) sim.startPatch();
+  for (let k = 0; k < sim.NR; k++) if (sim.A.pinState[k] === 0) sim.togglePin(k);
+  for (let k = sim.NR; k < sim.NPIN; k++) if (sim.A.pinState[k] === 1) sim.togglePin(k);
+  user.orbTarget = null;
+}
+
+/* seeking: re-simulate the scripted session from the seed (via checkpoints of that same run) */
+function seekTo(t) {
+  t = ((t % PERIOD) + PERIOD) % PERIOD;
+  const N = Math.round(t / DT);
+  let bestK = 0, bestS = snap0;
+  if (NOCACHE) { warmStartSync(); bestS = null; }
+  else for (const [k, s] of checkpoints) if (k <= N && k > bestK) { bestK = k; bestS = s; }
+  if (bestS) sim.restore(bestS);
+  aStep = bestK; pristine = true; mode = 'attract';
+  user.grabbing = false; user.orbDrag = false; user.orbTarget = null; user.slashing = false; user.pinDown = null; user.last = null; trails.length = 0; touches.clear();
+  while (aStep < N) stepOnce();
+}
+
+/* ===================== ghost cursor (attract mode) ===================== */
+const ghost = document.getElementById('ghost'), ghostCap = ghost.querySelector('.cap');
+const windInput = document.getElementById('wind'), patchBtn = document.getElementById('b-patch');
+const g2 = [0, 0, 0];
+function thumbAt(v) { const r = windInput.getBoundingClientRect(); const pad = 8; return [r.left + pad + v * (r.width - 2 * pad), r.top + r.height / 2]; }
+function elCentre(el) { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }
+function ghostPlan(t) {
+  const S = SC, A = sim.A, W = innerWidth, H = innerHeight;
+  const scr = (fx, fy) => [fx * W, fy * H];
+  const world = (x, y, z) => { toScreen(x, y, z, g2); return [g2[0], g2[1]]; };
+  const nodeP = () => { const n = director.gNode, p = A.qp[n * 4 + 2] >= 0 ? A.qp[n * 4 + 2] : n; return world(A.x[p * 3], A.x[p * 3 + 1], A.x[p * 3 + 2]); };
+  const tgtAt = (tt) => { const e = director.pullAt(tt); return world(sim.sc.gbx + S.grab.pull[0] * e, sim.sc.gby + S.grab.pull[1] * e, sim.sc.gbz + S.grab.pull[2] * e); };
+  const bl = [0, 0];
+  const blade = (tt) => { director.bladeAt(tt, bl); return world(bl[0], bl[1], C.rodZ + 0.12); };
+  const ring = k => world(sim.ringX[k], C.topY + 0.05, C.rodZ);
+  const idle = C.portrait ? scr(0.74, 0.8) : scr(0.66, 0.84);
+  const mix = (a, b, k) => { k = clamp(k, 0, 1); k = k * k * (3 - 2 * k); return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k]; };
+  let p, press = false, cutting = false, alpha = 1, cap = '';
+  const g = S.grab, sl = S.slash;
+  if (t < 0.5) { p = mix(scr(0.92, 0.9), scr(0.82, 0.72), t / 0.5); alpha = t / 0.5; }
+  else if (t < g.t0 - 0.15) p = mix(scr(0.82, 0.72), nodeP(), (t - 0.5) / (g.t0 - 0.65));
+  else if (t < g.t0) p = nodeP();
+  else if (t < g.t1) { p = tgtAt(t); press = true; }
+  else if (t < g.t1 + 0.15) p = tgtAt(g.t1);
+  else if (t < sl.t0) p = mix(tgtAt(g.t1), blade(sl.t0), (t - g.t1 - 0.15) / (sl.t0 - g.t1 - 0.25));
+  else if (t < sl.t1) { p = blade(t); press = true; cutting = true; }
+  else if (t < 7.6) p = mix(blade(sl.t1), thumbAt(0.3), (t - sl.t1) / (7.6 - sl.t1));
+  else if (t < 8.0) { p = thumbAt(0.3); press = t > 7.85; }
+  else if (t < 8.6) { p = thumbAt(director.windAt(t)); press = true; }
+  else if (t < 9.6) p = mix(thumbAt(0.75), idle, (t - 8.6) / 1.0);
+  else if (t < 11.6) p = mix(idle, [idle[0] - W * 0.02, idle[1] - H * 0.01], (t - 9.6) / 2);
+  else if (t < 12.25) p = mix([idle[0] - W * 0.02, idle[1] - H * 0.01], thumbAt(0.75), (t - 11.6) / 0.65);
+  else if (t < 12.4) { p = thumbAt(0.75); press = true; }
+  else if (t < 12.9) { p = thumbAt(director.windAt(t)); press = true; }
+  else if (t < 14.1) p = mix(thumbAt(0.3), elCentre(patchBtn), (t - 12.9) / 1.2);
+  else if (t < 14.6) { p = elCentre(patchBtn); press = t > 14.3 && t < 14.48; }
+  else if (t < 16.0) p = mix(elCentre(patchBtn), idle, (t - 14.6) / 1.4);
+  else if (t < 17.3) p = mix(idle, ring(S.pin.k), (t - 16.0) / 1.3);
+  else if (t < 19.9) { p = ring(S.pin.k); press = (t > 17.5 && t < 17.68) || (t > 19.3 && t < 19.48); }
+  else if (t < 20.8) { p = mix(ring(S.pin.k), scr(0.9, 0.92), (t - 19.9) / 0.9); alpha = 1 - (t - 19.9) / 0.9; }
+  else { p = scr(0.9, 0.92); alpha = 0; }
+  const touch = COARSE_PTR;
+  const CAPS = [[0.4, 3.3, 'Drag the curtain to pull it'], [3.3, 5.6, 'Pull hard and it tears'], [5.7, 7.4, touch ? 'Two-finger swipe to slash' : 'Right-drag to slash'],
+    [7.5, 8.9, 'More wind'], [9.2, 11.8, 'Hot packets pour through the tear'], [13.4, 16.0, 'Patch stitches it shut'],
+    [16.6, 18.6, touch ? 'Tap a ring to unpin it' : 'Click a ring to unpin it'], [18.6, 19.9, touch ? 'Tap again to pin it back' : 'Click again to pin it back']];
+  let capA = 0;
+  for (const [a, b, txt] of CAPS) if (t >= a && t < b) { cap = txt; capA = Math.min(1, (t - a) / 0.25, (b - t) / 0.25); }
+  return { p, press, cutting, alpha, cap, capA: capA * alpha };
+}
+let ghostCapText = '';
+function drawGhost(t) {
+  if (mode !== 'attract') { ghost.style.opacity = '0'; return; }
+  const g = ghostPlan(t);
+  ghost.style.opacity = String(g.alpha);
+  ghost.style.transform = `translate(${Math.round(g.p[0])}px, ${Math.round(g.p[1])}px)`;
+  ghost.classList.toggle('press', g.press); ghost.classList.toggle('cutting', g.cutting);
+  ghost.classList.toggle('flip', g.p[0] > innerWidth * 0.7);
+  if (g.cap !== ghostCapText) { ghostCapText = g.cap; if (g.cap) ghostCap.textContent = g.cap; }
+  ghostCap.style.opacity = String(g.capA);
+  windInput.value = String(director.windAt(t));
+  patchBtn.classList.toggle('press', t > 14.3 && t < 14.5);
+}
+
+/* ===================== 2D overlay: slash trails + grab tension ===================== */
+function drawFx(t, now) {
+  const dpr = fx.width / innerWidth;
+  fxg.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fxg.clearRect(0, 0, innerWidth, innerHeight);
+  // ghost slash trail (function of t)
+  const pts = [];
+  if (mode === 'attract' && t > SC.slash.t0 && t < SC.slash.t1 + 0.35) {
+    const bl = [0, 0], s3 = [0, 0, 0];
+    for (let k = 0; k <= 14; k++) {
+      const tt = Math.max(SC.slash.t0, Math.min(t, SC.slash.t1) - 0.25 * k / 14);
+      director.bladeAt(tt, bl); toScreen(bl[0], bl[1], C.rodZ + 0.12, s3);
+      pts.push([s3[0], s3[1], 1 - k / 14, clamp(1 - (t - SC.slash.t1) / 0.35, 0, 1)]);
+    }
+  }
+  // user slash trail (wall clock)
+  for (let i = trails.length - 1; i >= 0; i--) if (now - trails[i].t > 0.5) trails.splice(i, 1);
+  const drawTrail = (P) => {
+    if (P.length < 2) return;
+    fxg.lineCap = 'round';
+    for (let pass = 0; pass < 2; pass++) for (let i = 1; i < P.length; i++) {
+      const a = P[i - 1], b = P[i], w = (pass ? 1.6 : 7) * a[2] * a[3];
+      if (w <= 0.05) continue;
+      fxg.strokeStyle = pass ? `rgba(255,246,224,${0.95 * a[3]})` : `rgba(255,122,47,${0.35 * a[3]})`;
+      fxg.lineWidth = w; fxg.beginPath(); fxg.moveTo(a[0], a[1]); fxg.lineTo(b[0], b[1]); fxg.stroke();
+    }
+  };
+  drawTrail(pts);
+  if (trails.length > 1) drawTrail(trails.map(p => [p.x, p.y, 1 - (now - p.t) / 0.5, 1]).reverse());
+  // tension ring around the hand while grabbing (ice when slack, hot near the tearing limit)
+  let gp = null;
+  if (mode === 'live' && user.grabbing) { const s3 = [0, 0, 0]; toScreen(user.target.x, user.target.y, user.target.z, s3); gp = s3; }
+  else if (mode === 'attract' && sim.sc.grabN > 0) { gp = ghostPlan(t).p; }
+  if (gp) {
+    const strain = sim.maxStrain, k = clamp((strain - 1.08) / (C.tear - 1.08), 0, 1);
+    ironbow(0.35 + 0.6 * k, tmpC); tmpC.convertLinearToSRGB();
+    const cs = `rgb(${(tmpC.r * 255) | 0},${(tmpC.g * 255) | 0},${(tmpC.b * 255) | 0})`;
+    fxg.lineWidth = 3; fxg.strokeStyle = 'rgba(16,12,42,0.55)'; fxg.beginPath(); fxg.arc(gp[0], gp[1], 22, 0, Math.PI * 2); fxg.stroke();
+    fxg.strokeStyle = k < 0.02 ? 'rgba(155,232,255,0.8)' : cs; fxg.lineWidth = 3;
+    fxg.beginPath(); fxg.arc(gp[0], gp[1], 22, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0.04, k)); fxg.stroke();
+  }
+}
+
+/* ===================== HUD ===================== */
+const nBlocked = document.getElementById('n-blocked'), nThrough = document.getElementById('n-through'), stateEl = document.getElementById('state'), srEl = document.getElementById('sr');
+let hudCache = '', lastOpen = 0;
+function updateHud() {
+  const b = sim.sc.blocked, th = sim.sc.through;
+  const open = sim.countOpen();
+  const s = b + '|' + th + '|' + (open > 0) + '|' + sim.sc.patchActive;
+  if (s === hudCache) return; hudCache = s;
+  nBlocked.textContent = b.toLocaleString('en-US'); nThrough.textContent = th.toLocaleString('en-US');
+  const st = sim.sc.patchActive ? 'Stitching' : open > 0 ? 'Perimeter breached' : 'Perimeter intact';
+  if (stateEl.textContent !== st) {
+    stateEl.textContent = st; stateEl.classList.toggle('hot', open > 0 && !sim.sc.patchActive);
+    if (mode === 'live') srEl.textContent = st;
+  }
+  lastOpen = open;
+}
+
+/* ===================== frame ===================== */
+let fpsAvg = 16.7, frameN = 0;
+function render(now) {
+  const t = mode === 'attract' ? aStep * DT : 0;
+  timeU.value = (sim.sc.step * DT);
+  syncCloth(); syncThreads(); syncPackets(); syncProps();
+  composer.render();
+  drawGhost(t);
+  hintEl.style.transition = playing ? '' : 'none'; // seek frames are exact, no fades in flight
+  hintEl.classList.toggle('gone', mode === 'attract' ? t > 7.5 : hintDismissed);
+  drawFx(t, now / 1000);
+  updateHud();
+}
+function loop(now) {
+  requestAnimationFrame(loop);
+  if (!ready) return;
+  const dtReal = Math.min(0.1, (now - last) / 1000); last = now;
+  if (playing) {
+    acc += dtReal;
+    let n = 0;
+    while (acc >= DT && n < 3) { stepOnce(); acc -= DT; n++; }
+    if (n === 3) acc = Math.min(acc, DT);
+    if (mode === 'live' && !user.grabbing && !user.orbDrag && now / 1000 - lastInput > IDLE_RETURN) startRecover();
+  }
+  // adaptive resolution: drop pixel ratio if frames run long
+  if (playing) { frameN++; fpsAvg = fpsAvg * 0.95 + dtReal * 1000 * 0.05; }
+  if (playing && frameN > 90 && frameN % 60 === 0) {
+    if (fpsAvg > 24 && dprScale > 0.6) { dprScale = Math.max(0.6, dprScale - 0.15); resize(); }
+    else if (fpsAvg < 17.5 && dprScale < 1) { dprScale = Math.min(1, dprScale + 0.1); resize(); }
+  }
+  render(now);
+}
+
+/* ===================== input ===================== */
+const tipEl = document.getElementById('tip'), hintEl = document.getElementById('hint');
+if (COARSE_PTR) hintEl.textContent = 'Drag to pull the curtain. Pull hard to tear. Two-finger swipe to slash.';
+let tool = 'grab';
+function setTool(t) {
+  tool = t;
+  document.getElementById('t-grab').setAttribute('aria-pressed', String(t === 'grab'));
+  document.getElementById('t-cut').setAttribute('aria-pressed', String(t === 'cut'));
+  canvas.className = t === 'cut' ? 'cut' : '';
+}
+function hitPin(px, py) {
+  const s3 = [0, 0, 0], R = COARSE_PTR ? 26 : 17;
+  let best = -1, bd = R;
+  for (let k = 0; k < sim.NR; k++) { toScreen(sim.ringX[k], C.topY + 0.05, C.rodZ, s3); const d = Math.hypot(s3[0] - px, s3[1] - py); if (d < bd) { bd = d; best = k; } }
+  for (let k = 0; k < 2; k++) {
+    const pk = sim.NR + k, n = sim.pinNode[pk], A = sim.A;
+    let p = -1; for (let q = 0; q < 4; q++) if (A.qp[n * 4 + q] >= 0) { p = A.qp[n * 4 + q]; break; }
+    if (p < 0) continue;
+    toScreen(A.x[p * 3], A.x[p * 3 + 1], A.x[p * 3 + 2], s3); const d = Math.hypot(s3[0] - px, s3[1] - py); if (d < bd) { bd = d; best = pk; }
+  }
+  return best;
+}
+function hitOrb(ray) { const s = new THREE.Sphere(new THREE.Vector3(sim.sc.ox, sim.sc.oy, sim.sc.oz), C.orbR * 1.05); return ray.intersectsSphere(s); }
+function pinTip(k) {
+  const st = sim.A.pinState[k];
+  if (k < sim.NR) return st === 1 ? 'Click to unpin this ring' : 'Click to pin this ring';
+  return st === 1 ? 'Click to unpin this corner' : 'Click to pin this corner here';
+}
+function setHover(px, py) {
+  if (user.grabbing || user.orbDrag || user.slashing) return;
+  if (tool === 'cut') { hover.kind = null; canvas.className = 'cut'; tipEl.classList.remove('on'); return; }
+  const k = hitPin(px, py);
+  if (k >= 0) { hover.kind = 'pin'; hover.k = k; canvas.className = 'pointer'; tipEl.textContent = pinTip(k); tipEl.style.transform = `translate(${px + 14}px, ${py + 16}px)`; tipEl.classList.add('on'); return; }
+  tipEl.classList.remove('on');
+  const ray = rayAt(px, py);
+  if (hitOrb(ray)) { hover.kind = 'orb'; canvas.className = 'grab'; return; }
+  const h = pickCloth(ray);
+  hover.kind = h ? 'cloth' : null; canvas.className = h ? 'grab' : '';
+}
+function slashSeg(ax, ay, bx, by) {
+  const s3 = [0, 0, 0];
+  const proj = (x, y, z, o) => { toScreen(x, y, z, s3); o[0] = s3[0]; o[1] = s3[1]; };
+  const n = sim.slash(proj, ax, ay, bx, by);
+  if (n && navigator.vibrate) { try { navigator.vibrate(8); } catch (e) {} }
+  return n;
+}
+let hintDismissed = false;
+function dismissHint() { hintDismissed = true; }
+const touches = new Map();
+function beginSlash(x, y) { user.slashing = true; user.last = [x, y]; trails.push({ x, y, t: performance.now() / 1000 }); canvas.className = 'cut'; }
+function moveSlash(x, y) {
+  if (!user.last) { user.last = [x, y]; return; }
+  if (Math.hypot(x - user.last[0], y - user.last[1]) < 2) return;
+  slashSeg(user.last[0], user.last[1], x, y);
+  user.last = [x, y]; trails.push({ x, y, t: performance.now() / 1000 });
+}
+function endGrab() { if (user.grabbing) { user.grabbing = false; sim.grabEnd(); } }
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', (e) => {
+  if (!ready) return;
+  canvas.focus({ preventScroll: true });
+  takeOver();
+  if (!playing) setPlaying(true);
+  if (e.pointerType === 'touch') {
+    touches.set(e.pointerId, [e.clientX, e.clientY]);
+    if (touches.size === 2) { // two fingers: slash with the midpoint
+      endGrab(); user.orbDrag = false;
+      const [a, b] = [...touches.values()];
+      beginSlash((a[0] + b[0]) / 2, (a[1] + b[1]) / 2); dismissHint();
+      return;
+    }
+    if (touches.size > 2) return;
+  }
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* synthetic or already released pointer */ }
+  const px = e.clientX, py = e.clientY;
+  if (tool === 'cut' || e.button === 2) { beginSlash(px, py); dismissHint(); return; }
+  if (e.button !== 0) return;
+  const k = hitPin(px, py);
+  if (k >= 0) { user.pinDown = { k, x: px, y: py }; return; }
+  const ray = rayAt(px, py);
+  if (hitOrb(ray)) {
+    user.orbDrag = true; canvas.className = 'grabbing';
+    user.plane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, sim.sc.oy, 0));
+    user.orbOff = null; return;
+  }
+  const h = pickCloth(ray);
+  if (h) {
+    const n = camera.getWorldDirection(new THREE.Vector3());
+    user.plane.setFromNormalAndCoplanarPoint(n, h.point); user.push = 0;
+    const p = h.p, A = sim.A;
+    user.target.set(A.x[p * 3], A.x[p * 3 + 1], A.x[p * 3 + 2]);
+    user.grabOff = new THREE.Vector3().copy(user.target).sub(h.point);
+    sim.grabStart(p, user.target.x, user.target.y, user.target.z, 0.17 / C.sp);
+    user.grabbing = true; canvas.className = 'grabbing'; tipEl.classList.remove('on');
+    if (!user.firstGrab) { user.firstGrab = true; setTimeout(dismissHint, 2500); }
+  }
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (!ready) return;
+  const px = e.clientX, py = e.clientY;
+  if (e.pointerType === 'touch') {
+    if (!touches.has(e.pointerId)) return;
+    touches.set(e.pointerId, [px, py]);
+    if (touches.size === 2 && user.slashing) { const [a, b] = [...touches.values()]; moveSlash((a[0] + b[0]) / 2, (a[1] + b[1]) / 2); lastInput = performance.now() / 1000; return; }
+  }
+  if (user.slashing) { moveSlash(px, py); lastInput = performance.now() / 1000; return; }
+  if (user.grabbing || user.orbDrag) {
+    lastInput = performance.now() / 1000;
+    const ray = rayAt(px, py), hit = new THREE.Vector3();
+    if (!ray.intersectPlane(user.plane, hit)) return;
+    if (user.grabbing) {
+      hit.add(user.grabOff);
+      if (user.push) hit.addScaledVector(camera.getWorldDirection(new THREE.Vector3()), -user.push);
+      user.target.copy(hit);
+    } else {
+      user.orbTarget = [clamp(hit.x, -C.rodHalfW - 0.5, C.rodHalfW + 0.5), sim.sc.oy, clamp(hit.z, -0.7, 2.6)];
+    }
+    return;
+  }
+  if (e.pointerType !== 'touch') setHover(px, py);
+});
+function pointerUp(e) {
+  if (e.pointerType === 'touch') {
+    touches.delete(e.pointerId);
+    if (user.slashing && touches.size < 2) { user.slashing = false; user.last = null; canvas.className = tool === 'cut' ? 'cut' : ''; }
+  } else if (user.slashing) { user.slashing = false; user.last = null; canvas.className = tool === 'cut' ? 'cut' : ''; }
+  if (user.pinDown) {
+    const d = Math.hypot(e.clientX - user.pinDown.x, e.clientY - user.pinDown.y);
+    if (d < 10) { sim.togglePin(user.pinDown.k); setHover(e.clientX, e.clientY); dismissHint(); }
+    user.pinDown = null;
+  }
+  endGrab();
+  if (user.orbDrag) { user.orbDrag = false; canvas.className = 'grab'; }
+  lastInput = performance.now() / 1000;
+}
+canvas.addEventListener('pointerup', pointerUp);
+canvas.addEventListener('pointercancel', pointerUp);
+canvas.addEventListener('pointerleave', () => { tipEl.classList.remove('on'); });
+canvas.addEventListener('wheel', (e) => { // while holding the cloth, the wheel pulls it toward you or pushes it back
+  if (!user.grabbing) return;
+  e.preventDefault();
+  user.push = clamp(user.push + e.deltaY * 0.0015, -1.2, 1.2);
+  lastInput = performance.now() / 1000;
+}, { passive: false });
+
+document.getElementById('t-grab').addEventListener('click', () => { takeOver(); setTool('grab'); });
+document.getElementById('t-cut').addEventListener('click', () => { takeOver(); setTool('cut'); });
+windInput.addEventListener('input', () => { takeOver(); liveWind = parseFloat(windInput.value); });
+function doPatch() { takeOver(); if (!playing) setPlaying(true); const n = sim.startPatch(); srEl.textContent = n ? 'Stitching the tears' : 'Nothing to patch'; }
+function doReset() { takeOver(); sim.restore(snap0); endGrab(); user.orbTarget = null; liveWind = 0.3; windInput.value = '0.3'; srEl.textContent = 'Curtain rehung'; }
+function doTear() { // keyboard tear: a slash across the middle of the curtain, in screen space
+  takeOver(); if (!playing) setPlaying(true);
+  const a = [0, 0, 0], b = [0, 0, 0];
+  toScreen(-C.rodHalfW * 0.35, C.topY * 0.72, C.rodZ, a); toScreen(C.rodHalfW * 0.25, C.topY * 0.3, C.rodZ, b);
+  slashSeg(a[0], a[1], b[0], b[1]);
+  trails.push({ x: a[0], y: a[1], t: performance.now() / 1000 }, { x: b[0], y: b[1], t: performance.now() / 1000 });
+  dismissHint();
+}
+patchBtn.addEventListener('click', doPatch);
+document.getElementById('b-reset').addEventListener('click', doReset);
+
+/* notes + keys */
+const pp = document.getElementById('playpause');
+function setPlaying(p) { playing = p; last = performance.now(); acc = 0; pp.textContent = p ? 'Pause' : 'Play'; pp.setAttribute('aria-pressed', String(!p)); }
+const notes = document.getElementById('notes'), showBtn = document.getElementById('show-notes');
+function setNotes(v) { notes.hidden = !v; showBtn.hidden = v; }
+document.getElementById('hide-notes').addEventListener('click', () => { setNotes(false); showBtn.focus(); });
+showBtn.addEventListener('click', () => { setNotes(true); document.getElementById('hide-notes').focus(); });
+pp.addEventListener('click', () => setPlaying(!playing));
+window.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey || !ready) return;
+  const k = e.key.toLowerCase();
+  if (k === 'h') setNotes(notes.hidden);
+  else if (e.code === 'Space' || e.key === ' ') {
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'BUTTON' || ae.tagName === 'A' || ae.tagName === 'INPUT')) return;
+    e.preventDefault(); setPlaying(!playing);
+  }
+  else if (k === 'r') doReset();
+  else if (k === 'c') { takeOver(); setTool(tool === 'cut' ? 'grab' : 'cut'); }
+  else if (k === 'p') doPatch();
+  else if (k === 't') doTear();
+});
+window.addEventListener('resize', () => {
+  resize();
+  const portrait = innerWidth / innerHeight < 0.8;
+  if (ready && portrait !== C.portrait) setup(portrait, coarse).then(() => {});
+});
+
+/* ===================== boot ===================== */
+let ready = false, coarse = false;
+const ldText = document.getElementById('ld-text'), ldBar = document.getElementById('ld-bar');
+const tick = () => new Promise(r => setTimeout(r, 0));
+// the seeded start: flat curtain, then a fixed warm-up so it hangs in its folds at t = 0
+async function warmStart(progress) {
+  sim.init(-WARM);
+  for (let s = 0; s < WARM; s++) {
+    sim.step({ wind: 0.3, maxCuts: 0, orb: C.orbHome, blend: 0, grab: null });
+    if (progress && s % 30 === 29) await progress(s);
+  }
+  sim.captureRest(); sim.sc.blocked = 0; sim.sc.through = 0; sim.sc.tearsTotal = 0;
+}
+function warmStartSync() {
+  sim.init(-WARM);
+  for (let s = 0; s < WARM; s++) sim.step({ wind: 0.3, maxCuts: 0, orb: C.orbHome, blend: 0, grab: null });
+  sim.captureRest(); sim.sc.blocked = 0; sim.sc.through = 0; sim.sc.tearsTotal = 0;
+}
+async function setup(portrait, wantCoarse) {
+  ready = false;
+  C = makeCfg(portrait, wantCoarse); SC = makeScript(C);
+  sim = createSim(C); NX = sim.NX; NY = sim.NY;
+  const t0 = performance.now();
+  await warmStart(async (s) => { ldBar.style.width = (s / WARM * 100).toFixed(0) + '%'; await tick(); });
+  const msPerStep = (performance.now() - t0) / WARM;
+  snap0 = sim.snapshot(); checkpoints.clear();
+  director = createDirector(sim, SC);
+  director.windAt = (t) => lerpKeys(SC.wind, t);
+  buildWorld(); resize();
+  aStep = 0; pristine = true; mode = 'attract';
+  ready = true;
+  return msPerStep;
+}
+(async function boot() {
+  const fontsP = Promise.race([
+    Promise.all(['500 40px "Martian Mono"', '500 13px "Schibsted Grotesk"'].map(f => document.fonts.load(f))).then(() => document.fonts.ready),
+    new Promise(r => setTimeout(r, 3500))]);
+  await fontsP;
+  const portrait = innerWidth / innerHeight < 0.8;
+  resize();
+  let ms = await setup(portrait, false);
+  if (!portrait && ms > 7.5 && !params.has('t')) { coarse = true; ldText.textContent = 'Hanging a lighter curtain for this device'; await setup(portrait, true); }
+  console.log(`Soft perimeter: XPBD cloth ${sim.NX}x${sim.NY} (${C.substeps} substeps), ${ms.toFixed(2)} ms per 1/60 s step`);
+  document.getElementById('loader').remove();
+  window.__seek = (tt) => {
+    seekTo(Number(tt) || 0); setPlaying(false);
+    // a seek frame is a pure function of t: base resolution, no hover or tooltip from the live pointer
+    frameN = 0; fpsAvg = 16.7;
+    if (dprScale !== 1) { dprScale = 1; resize(); }
+    hover.kind = null; hover.k = -1; tipEl.classList.remove('on');
+    render(performance.now());
+  };
+  window.__play = () => setPlaying(true);
+  window.__state = () => ({ mode, playing, aStep, tool, cuts: sim.countCuts(), open: sim.countOpen(), through: sim.sc.through, blocked: sim.sc.blocked,
+    pins: Array.from(sim.A.pinState), grabN: sim.sc.grabN, posHash: (() => { let h = 0; const x = sim.A.x; for (let i = 0; i < sim.sc.pCount * 3; i++) h = (h + x[i] * (1 + (i % 7))) % 1e9; return h; })(), patching: sim.sc.patchActive, particles: sim.sc.pCount, wind: liveWind, fps: Math.round(1000 / fpsAvg), dpr: PR() });
+  window.__nodeScreen = (fi, fj) => { const n = Math.round(fj * (NY - 1)) * NX + Math.round(fi * (NX - 1)), A = sim.A; let p = n; for (let q = 0; q < 4; q++) if (A.qp[n * 4 + q] >= 0) { p = A.qp[n * 4 + q]; break; }
+    const o = [0, 0, 0]; toScreen(A.x[p * 3], A.x[p * 3 + 1], A.x[p * 3 + 2], o); return { x: o[0], y: o[1], world: [A.x[p * 3], A.x[p * 3 + 1], A.x[p * 3 + 2]] }; };
+  window.__ringScreen = (k) => { const o = [0, 0, 0]; toScreen(sim.ringX[k], C.topY + 0.05, C.rodZ, o); return { x: o[0], y: o[1] }; };
+  if (Number.isFinite(T_PARAM)) { seekTo(T_PARAM); setPlaying(false); }
+  else if (REDUCED) { seekTo(HERO_T); setPlaying(false); }
+  else setPlaying(true);
+  render(performance.now());
+})();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

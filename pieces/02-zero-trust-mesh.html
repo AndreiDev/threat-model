@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zero-trust mesh</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--void)}
+body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab;outline:none}
+#c:active{cursor:grabbing}
+
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="A glowing hexagonal shield around a network of services; cold blue packets move inside it while hot packets from outside burst against it" role="img"></canvas>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Zero-trust mesh</h1>
+  <p>An AI coding agent's model sits at the centre of its services, sending verified calls over cold channels, while untrusted requests from outside run hot and burn out on a shield that checks every one.</p>
+  <ul class="tech">
+    <li>Three.js scene where 540 packets in two InstancedMeshes are placed by a pure function of time</li>
+    <li>Shield ShaderMaterial with a fresnel rim and Goldberg hex cells built from the icosahedron's 20 faces, so no cell stretches at the poles</li>
+    <li>Up to 16 impacts in a vec4 uniform array; each ring heats cells along an ironbow ramp, then cools</li>
+    <li>UnrealBloomPass thresholded to emissive colours, plus FogExp2 and back-face dimming for depth</li>
+    <li>Seeded mulberry32 layout and attack schedule; drag to orbit</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+/* ---------- params ---------- */
+const params = new URLSearchParams(location.search);
+const LOW = params.get('q') === 'low' || params.has('low');
+const T_PARAM = params.has('t') ? parseFloat(params.get('t')) : NaN;
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const HERO_T = 9.5;
+
+/* ---------- seeded randomness ---------- */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+// stateless integer hash for per-cycle variation: (seed, cycle, channel) -> [0,1)
+function hash(a, b, c) {
+  let h = 0x811c9dc5 ^ Math.imul(a | 0, 0x9E3779B1);
+  h = Math.imul(h ^ (h >>> 16), 0x85EBCA6B);
+  h ^= Math.imul(b | 0, 0xC2B2AE35);
+  h = Math.imul(h ^ (h >>> 13), 0x27D4EB2F);
+  h ^= Math.imul(c | 0, 0x165667B1);
+  h = Math.imul(h ^ (h >>> 16), 0x85EBCA6B);
+  h ^= h >>> 13; h = Math.imul(h, 0xC2B2AE35); h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+/* ---------- palette (THREE.Color converts sRGB hex to linear working space) ---------- */
+const col = h => new THREE.Color(h);
+const HEAT = ['#3A0F6B', '#9B1D8F', '#F0306A', '#FF7A2F', '#FFD36B', '#FFF6E0'].map(col);
+const COLD = ['#1B1747', '#2F4FA8', '#4FA3E0', '#9BE8FF', '#E8F7FF'].map(col);
+const ICE = col('#9BE8FF'), STEEL = col('#4E5A8C'), FROST = col('#E8F7FF'), MIST = col('#8C93C4');
+function ramp(arr, x, out, k = 1) {
+  x = clamp(x, 0, 1) * (arr.length - 1);
+  const i = Math.min(Math.floor(x), arr.length - 2), f = x - i, a = arr[i], b = arr[i + 1];
+  out.r = (a.r + (b.r - a.r) * f) * k; out.g = (a.g + (b.g - a.g) * f) * k; out.b = (a.b + (b.b - a.b) * f) * k;
+  return out;
+}
+
+/* ---------- renderer / scene ---------- */
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.setClearColor(0x100C2A, 1);
+const PR = () => Math.min(window.devicePixelRatio || 1, LOW ? 1 : 2);
+renderer.setPixelRatio(PR());
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x100C2A, 0.021);
+const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 220);
+
+const R_SHIELD = 5.2;
+const R_MESH = 3.2;
+
+/* ---------- background: vertical indigo gradient on a backside sphere ---------- */
+{
+  const m = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false,
+    uniforms: { uBot: { value: col('#0B0820') }, uTop: { value: col('#221C5C') }, uHalo: { value: col('#2B2672') } },
+    vertexShader: /* glsl */`
+      varying vec3 vW;
+      void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: /* glsl */`
+      uniform vec3 uBot, uTop, uHalo;
+      varying vec3 vW;
+      float h12(vec2 p){ vec3 q = fract(vec3(p.xyx) * .1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+      void main(){
+        vec3 d = normalize(vW - cameraPosition);
+        float g = smoothstep(-.55, .9, d.y);
+        vec3 c = mix(uBot, uTop, g);
+        float k = max(dot(d, normalize(-cameraPosition)), 0.);
+        c += uHalo * pow(k, 14.) * .28;
+        c += (h12(gl_FragCoord.xy) - .5) * .0009;
+        gl_FragColor = vec4(c, 1.);
+      }`
+  });
+  const bg = new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), m);
+  bg.renderOrder = -10;
+  scene.add(bg);
+}
+
+/* ---------- dust: faint parallax specks outside the shield ---------- */
+{
+  const rng = mulberry32(31);
+  const N = 650, pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const z = 2 * rng() - 1, a = rng() * Math.PI * 2, r = Math.sqrt(1 - z * z);
+    const R = 7 + 34 * Math.pow(rng(), 0.8);
+    pos[i * 3] = r * Math.cos(a) * R; pos[i * 3 + 1] = z * R; pos[i * 3 + 2] = r * Math.sin(a) * R;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const S = 32, data = new Uint8Array(S * S * 4);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const dx = (x + .5) / S * 2 - 1, dy = (y + .5) / S * 2 - 1, a = clamp(1 - Math.sqrt(dx * dx + dy * dy), 0, 1);
+    const o = (y * S + x) * 4; data[o] = data[o + 1] = data[o + 2] = 255; data[o + 3] = Math.round(255 * a * a);
+  }
+  const tex = new THREE.DataTexture(data, S, S); tex.needsUpdate = true;
+  const m = new THREE.PointsMaterial({ color: MIST, size: 0.09, map: tex, transparent: true, opacity: 0.55, depthWrite: false, sizeAttenuation: true });
+  scene.add(new THREE.Points(g, m));
+}
+
+/* ---------- core: the model ---------- */
+const coreGroup = new THREE.Group();
+scene.add(coreGroup);
+const coreMat = new THREE.ShaderMaterial({
+  uniforms: { uTime: { value: 0 }, uA: { value: COLD[1].clone().multiplyScalar(0.55) }, uB: { value: ICE.clone().multiplyScalar(1.45) }, uC: { value: FROST.clone() } },
+  vertexShader: /* glsl */`
+    varying vec3 vN; varying vec3 vV;
+    void main(){ vec4 mv = modelViewMatrix * vec4(position,1.); vN = normalize(normalMatrix * normal); vV = -mv.xyz; gl_Position = projectionMatrix * mv; }`,
+  fragmentShader: /* glsl */`
+    uniform float uTime; uniform vec3 uA, uB, uC;
+    varying vec3 vN; varying vec3 vV;
+    void main(){
+      float f = 1. - max(dot(normalize(vN), normalize(vV)), 0.);
+      float pulse = .5 + .5 * sin(uTime * 2.2);
+      float fr = pow(f, 2.4 - .9 * pulse);
+      vec3 c = mix(uA, uB, fr) * (.85 + .3 * pulse) + uC * pow(f, 6.) * .5;
+      gl_FragColor = vec4(c, 1.);
+    }`
+});
+const coreBall = new THREE.Mesh(new THREE.IcosahedronGeometry(0.7, 4), coreMat);
+coreGroup.add(coreBall);
+const icoShell = new THREE.Group();
+coreGroup.add(icoShell);
+{
+  const ig = new THREE.IcosahedronGeometry(1.25, 0);
+  icoShell.add(new THREE.LineSegments(new THREE.EdgesGeometry(ig), new THREE.LineBasicMaterial({ color: ICE.clone().multiplyScalar(1.15), transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })));
+  icoShell.add(new THREE.Mesh(ig, new THREE.MeshBasicMaterial({ color: COLD[1], transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })));
+}
+const dodeShell = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.DodecahedronGeometry(1.75, 0)),
+  new THREE.LineBasicMaterial({ color: STEEL, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+coreGroup.add(dodeShell);
+
+/* ---------- services: Fibonacci sphere + edges ---------- */
+const meshGroup = new THREE.Group();
+scene.add(meshGroup);
+const NN = 36;
+const nodePos = new Float32Array(NN * 3);
+const nodeSpin = new Float32Array(NN);
+const nodeSize = new Float32Array(NN);
+const edges = []; // [ax,ay,az,bx,by,bz,type]
+{
+  const rng = mulberry32(2026);
+  const GA = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < NN; i++) {
+    const y = 1 - 2 * (i + 0.5) / NN, r = Math.sqrt(1 - y * y), th = i * GA;
+    const R = R_MESH + (rng() - 0.5) * 0.55;
+    nodePos[i * 3] = Math.cos(th) * r * R; nodePos[i * 3 + 1] = y * R; nodePos[i * 3 + 2] = Math.sin(th) * r * R;
+    nodeSpin[i] = 0.4 + rng() * 0.9;
+    nodeSize[i] = 0.75 + rng() * 0.6;
+  }
+  for (let i = 0; i < NN; i++) {
+    const x = nodePos[i * 3], y = nodePos[i * 3 + 1], z = nodePos[i * 3 + 2], l = Math.sqrt(x * x + y * y + z * z);
+    edges.push([x / l * 1.4, y / l * 1.4, z / l * 1.4, x, y, z, 0]);
+  }
+  const seen = new Set();
+  for (let i = 0; i < NN; i++) {
+    const d = [];
+    for (let j = 0; j < NN; j++) if (j !== i) {
+      const dx = nodePos[j * 3] - nodePos[i * 3], dy = nodePos[j * 3 + 1] - nodePos[i * 3 + 1], dz = nodePos[j * 3 + 2] - nodePos[i * 3 + 2];
+      d.push([dx * dx + dy * dy + dz * dz, j]);
+    }
+    d.sort((a, b) => a[0] - b[0]);
+    const m = rng() < 0.55 ? 2 : 3;
+    for (let q = 0; q < m; q++) {
+      const j = d[q][1], key = Math.min(i, j) * 100 + Math.max(i, j);
+      if (seen.has(key)) continue; seen.add(key);
+      edges.push([nodePos[i * 3], nodePos[i * 3 + 1], nodePos[i * 3 + 2], nodePos[j * 3], nodePos[j * 3 + 1], nodePos[j * 3 + 2], 1]);
+    }
+  }
+  const pos = new Float32Array(edges.length * 6), cl = new Float32Array(edges.length * 6);
+  const ca = new THREE.Color(), cb = new THREE.Color();
+  edges.forEach((e, k) => {
+    pos.set(e.slice(0, 6), k * 6);
+    if (e[6] === 0) { ramp(COLD, 0.62, ca, 0.30); ramp(COLD, 0.78, cb, 0.16); }
+    else { ca.copy(STEEL).multiplyScalar(0.42); cb.copy(ca); }
+    cl.set([ca.r, ca.g, ca.b, cb.r, cb.g, cb.b], k * 6);
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(cl, 3));
+  meshGroup.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
+}
+const nodeMesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.15, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), NN);
+nodeMesh.frustumCulled = false;
+{
+  const rng = mulberry32(77), c = new THREE.Color();
+  for (let i = 0; i < NN; i++) nodeMesh.setColorAt(i, ramp(COLD, 0.6 + rng() * 0.35, c, 1.35));
+}
+meshGroup.add(nodeMesh);
+
+/* ---------- oriented instance writer (column-major 4x4, Y axis along dir) ---------- */
+function writeOriented(arr, o, px, py, pz, dx, dy, dz, sx, sy) {
+  let hx = 0, hy = 1, hz = 0;
+  if (dy > 0.9 || dy < -0.9) { hx = 1; hy = 0; }
+  let xx = hy * dz - hz * dy, xy = hz * dx - hx * dz, xz = hx * dy - hy * dx;
+  const il = 1 / Math.sqrt(xx * xx + xy * xy + xz * xz); xx *= il; xy *= il; xz *= il;
+  const zx = xy * dz - xz * dy, zy = xz * dx - xx * dz, zz = xx * dy - xy * dx;
+  arr[o] = xx * sx; arr[o + 1] = xy * sx; arr[o + 2] = xz * sx; arr[o + 3] = 0;
+  arr[o + 4] = dx * sy; arr[o + 5] = dy * sy; arr[o + 6] = dz * sy; arr[o + 7] = 0;
+  arr[o + 8] = zx * sx; arr[o + 9] = zy * sx; arr[o + 10] = zz * sx; arr[o + 11] = 0;
+  arr[o + 12] = px; arr[o + 13] = py; arr[o + 14] = pz; arr[o + 15] = 1;
+}
+function writeZero(arr, o) { for (let k = 0; k < 16; k++) arr[o + k] = 0; }
+
+const capsule = new THREE.CapsuleGeometry(0.5, 1, 3, 8); // total height 2 along Y, radius .5
+
+/* ---------- trusted traffic ---------- */
+const NT = 500;
+const tA = new Float32Array(NT * 3), tD = new Float32Array(NT * 3), tN = new Float32Array(NT * 3);
+const tSpeed = new Float32Array(NT), tPhase = new Float32Array(NT), tSize = new Float32Array(NT);
+const trusted = new THREE.InstancedMesh(capsule, new THREE.MeshBasicMaterial({ color: 0xffffff }), NT);
+trusted.frustumCulled = false;
+trusted.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+{
+  const rng = mulberry32(9001), c = new THREE.Color();
+  const coreE = edges.filter(e => e[6] === 0), nbE = edges.filter(e => e[6] === 1);
+  for (let i = 0; i < NT; i++) {
+    const isCore = rng() < 0.4;
+    const list = isCore ? coreE : nbE, e = list[Math.floor(rng() * list.length)];
+    let ax = e[0], ay = e[1], az = e[2], bx = e[3], by = e[4], bz = e[5];
+    if (rng() < 0.5) { [ax, bx] = [bx, ax]; [ay, by] = [by, ay]; [az, bz] = [bz, az]; }
+    const dx = bx - ax, dy = by - ay, dz = bz - az, len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    tA.set([ax, ay, az], i * 3); tD.set([dx, dy, dz], i * 3); tN.set([dx / len, dy / len, dz / len], i * 3);
+    tSpeed[i] = (0.45 + 0.75 * rng()) / len;
+    tPhase[i] = rng();
+    tSize[i] = 0.8 + 0.5 * rng();
+    trusted.setColorAt(i, isCore ? ramp(COLD, 0.66 + 0.22 * rng(), c, 1.35) : ramp(COLD, 0.5 + 0.3 * rng(), c, 1.25));
+  }
+}
+meshGroup.add(trusted);
+
+/* ---------- hostile traffic schedule ---------- */
+const NH = 40, NSWARM = 12, TRAIL = 14, TD_ = 0.035, SPARKS = 10, SPARK_LIFE = 0.95, RIPPLE = 2.5, WAVE = 14;
+const hType = new Uint8Array(NH), hP = new Float32Array(NH), hPh = new Float32Array(NH), hSeed = new Int32Array(NH);
+{
+  const rng = mulberry32(0xBADC0DE);
+  for (let i = 0; i < NH; i++) {
+    hSeed[i] = Math.floor(rng() * 2147483647);
+    if (i < NSWARM) { hType[i] = 1; hP[i] = WAVE; hPh[i] = 5.0 + rng() * 3.6; }
+    else { hType[i] = 0; hP[i] = 8.5 + rng() * 6; hPh[i] = rng() * hP[i]; }
+  }
+}
+// camera orbit as a function of t (also used to aim attacks at the visible hemisphere)
+const AZ0 = 0.75, AZV = 0.05, EL0 = 0.27, ELA = 0.1, ELW = 0.09;
+function camDir(t, out) {
+  const az = AZ0 + t * AZV, el = EL0 + ELA * Math.sin(t * ELW + 1.0);
+  return out.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
+}
+function randUnit(seed, k, c, out) {
+  const z = 2 * hash(seed, k, c) - 1, a = 6.283185307 * hash(seed, k, c + 1), r = Math.sqrt(Math.max(0, 1 - z * z));
+  return out.set(r * Math.cos(a), z, r * Math.sin(a));
+}
+function perpTo(n, v) { return v.addScaledVector(n, -v.dot(n)).normalize(); }
+
+// scratch (no per-frame allocation)
+const hS = new THREE.Vector3(), hC = new THREE.Vector3(), hI = new THREE.Vector3(), hN = new THREE.Vector3();
+const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3(), vD = new THREE.Vector3();
+let hLaunch = 0, hDur = 1, hImp = 0, hStr = 1, hK = 0;
+
+function hostileCycle(i, t) {
+  const seed = hSeed[i];
+  if (hType[i] === 0) {
+    const k = Math.floor((t + hPh[i]) / hP[i]);
+    hK = k; hLaunch = k * hP[i] - hPh[i]; hDur = 1.5 + 1.0 * hash(seed, k, 1); hImp = hLaunch + hDur;
+    randUnit(seed, k, 2, hN); camDir(hImp, vA); hN.addScaledVector(vA, 0.45).normalize();
+    perpTo(hN, randUnit(seed, k, 4, vB));
+    vC.copy(hN).addScaledVector(vB, 0.55 + 1.0 * hash(seed, k, 6)).normalize();
+    hS.copy(vC).multiplyScalar(10.5 + 2.5 * hash(seed, k, 7));
+    hStr = 0.6 + 0.35 * hash(seed, k, 8);
+  } else {
+    const k = Math.floor((t - hPh[i]) / WAVE);
+    hK = k; hLaunch = k * WAVE + hPh[i]; hDur = 1.6 + 0.5 * hash(seed, k, 1); hImp = hLaunch + hDur;
+    camDir(k * WAVE + 8.5, vA); randUnit(777, k, 2, vB);
+    vD.copy(vA).addScaledVector(perpTo(vA, vB), 0.95).normalize(); // wave centre, off-axis
+    hN.copy(vD).addScaledVector(randUnit(seed, k, 3, vB), 0.3).normalize();
+    perpTo(vD, randUnit(778, k, 4, vB));                         // shared approach side
+    vC.copy(hN).addScaledVector(vB, 1.05).addScaledVector(randUnit(seed, k, 5, vA), 0.12).normalize();
+    hS.copy(vC).multiplyScalar(11 + 1.5 * hash(seed, k, 7));
+    hStr = 0.8;
+  }
+  hI.copy(hN).multiplyScalar(R_SHIELD);
+  vA.subVectors(hS, hI);
+  randUnit(seed, hK, 9, vB).cross(vA).normalize().multiplyScalar(vA.length() * 0.22 * (hash(seed, hK, 11) - 0.5) * 2);
+  hC.addVectors(hS, hI).multiplyScalar(0.5).add(vB);
+}
+function bez(s, out) {
+  const a = (1 - s) * (1 - s), b = 2 * (1 - s) * s, c = s * s;
+  return out.set(a * hS.x + b * hC.x + c * hI.x, a * hS.y + b * hC.y + c * hI.y, a * hS.z + b * hC.z + c * hI.z);
+}
+const ease = u => u * (0.7 + 0.3 * u);
+
+const HN_INST = NH * (TRAIL + 1);
+// brighten each capsule toward its leading end so trail segments blend into one streak
+const streakMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+streakMat.onBeforeCompile = (sh) => {
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vAlong;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvAlong = position.y;');
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAlong;')
+    .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= 1.0 + 0.09 * clamp(vAlong, -1.0, 1.0);');
+};
+const hostile = new THREE.InstancedMesh(capsule, streakMat, HN_INST);
+hostile.frustumCulled = false;
+hostile.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+{
+  const c = new THREE.Color();
+  for (let i = 0; i < NH; i++) for (let j = 0; j <= TRAIL; j++) {
+    const x = j === 0 ? 0.95 : 0.88 - 0.048 * j, k = j === 0 ? 1.95 : 1.8 - 0.1 * j;
+    hostile.setColorAt(i * (TRAIL + 1) + j, ramp(HEAT, x, c, k));
+  }
+}
+scene.add(hostile);
+
+const NS = NH * SPARKS;
+const sparks = new THREE.InstancedMesh(capsule, new THREE.MeshBasicMaterial({ color: 0xffffff }), NS);
+sparks.frustumCulled = false;
+sparks.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+{ const c = new THREE.Color(0, 0, 0); for (let i = 0; i < NS; i++) sparks.setColorAt(i, c); }
+sparks.instanceColor.setUsage(THREE.DynamicDrawUsage);
+scene.add(sparks);
+
+/* ---------- shield ---------- */
+const MAXIMP = 16;
+const icoFaces = (() => {
+  const t = (1 + Math.sqrt(5)) / 2;
+  const v = [-1, t, 0, 1, t, 0, -1, -t, 0, 1, -t, 0, 0, -1, t, 0, 1, t, 0, -1, -t, 0, 1, -t, t, 0, -1, t, 0, 1, -t, 0, -1, -t, 0, 1];
+  const f = [0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8, 3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1];
+  const V = []; for (let i = 0; i < 12; i++) V.push(new THREE.Vector3(v[i * 3], v[i * 3 + 1], v[i * 3 + 2]).normalize());
+  const A = [], E1 = [], E2 = [], N = [];
+  for (let i = 0; i < 20; i++) {
+    const a = V[f[i * 3]], b = V[f[i * 3 + 1]], c = V[f[i * 3 + 2]];
+    A.push(a.clone()); E1.push(b.clone().sub(a)); E2.push(c.clone().sub(a)); N.push(a.clone().add(b).add(c).normalize());
+  }
+  return { A, E1, E2, N };
+})();
+const impU = Array.from({ length: MAXIMP }, () => new THREE.Vector4(0, 1, 0, -1e4));
+const IMPACT_GLSL = /* glsl */`
+  #define MAXIMP ${MAXIMP}
+  #define RIPPLE ${RIPPLE.toFixed(2)}
+  uniform float uTime;
+  uniform vec4 uImp[MAXIMP];
+  float ringR(float age){ return .95 * (1. - exp(-age * 1.6)); }
+`;
+const shieldMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+  uniforms: {
+    uTime: { value: 0 }, uImp: { value: impU },
+    uFA: { value: icoFaces.A }, uFE1: { value: icoFaces.E1 }, uFE2: { value: icoFaces.E2 }, uFN: { value: icoFaces.N },
+    uHeat: { value: HEAT }, uIce: { value: ICE }, uSteel: { value: STEEL }, uFrost: { value: FROST },
+    uCells: { value: 12 }
+  },
+  vertexShader: IMPACT_GLSL + /* glsl */`
+    varying vec3 vObj; varying vec3 vWN; varying vec3 vWP;
+    void main(){
+      vec3 p = normalize(position);
+      float disp = 0.;
+      for (int k = 0; k < MAXIMP; k++){
+        vec4 im = uImp[k];
+        float age = uTime - im.w;
+        if (age < 0. || age > RIPPLE) continue;
+        float str = length(im.xyz); vec3 d = im.xyz / str;
+        float th = acos(clamp(dot(p, d), -1., 1.));
+        float x = th - ringR(age);
+        float fade = 1. - age / RIPPLE; fade *= fade;
+        disp += str * fade * (.11 * exp(-x * x / .012)) - str * .28 * exp(-th * th / .02) * exp(-age * 5.);
+      }
+      vObj = p;
+      vec4 w = modelMatrix * vec4(position + p * disp, 1.);
+      vWP = w.xyz; vWN = normalize(mat3(modelMatrix) * p);
+      gl_Position = projectionMatrix * viewMatrix * w;
+    }`,
+  fragmentShader: IMPACT_GLSL + /* glsl */`
+    uniform vec3 uFA[20]; uniform vec3 uFE1[20]; uniform vec3 uFE2[20]; uniform vec3 uFN[20];
+    uniform vec3 uHeat[6]; uniform vec3 uIce, uSteel, uFrost; uniform float uCells;
+    varying vec3 vObj; varying vec3 vWN; varying vec3 vWP;
+    vec3 ironbow(float x){ x = clamp(x, 0., 1.) * 5.; int i = int(min(floor(x), 4.)); return mix(uHeat[i], uHeat[i + 1], x - float(i)); }
+    vec2 hexLocal(vec2 g){
+      const vec2 s = vec2(1., 1.7320508);
+      vec4 hc = floor(vec4(g, g - vec2(.5, .8660254)) / s.xyxy) + .5;
+      vec4 h = vec4(g - hc.xy * s, g - (hc.zw + .5) * s);
+      return dot(h.xy, h.xy) < dot(h.zw, h.zw) ? h.xy : h.zw;
+    }
+    float hexDist(vec2 p){ p = abs(p); return max(dot(p, vec2(.5, .8660254)), p.x); }
+    float hash13(vec3 p){ p = fract(p * .1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+    void main(){
+      vec3 p = normalize(vObj);
+      // Goldberg hex cells: pick the icosahedron face, gnomonic-project, snap to its triangular lattice
+      int fi = 0; float best = -2.;
+      for (int i = 0; i < 20; i++){ float d = dot(p, uFN[i]); if (d > best){ best = d; fi = i; } }
+      vec3 A = uFA[fi], e1 = uFE1[fi], e2 = uFE2[fi], n = uFN[fi];
+      vec3 w = p * (dot(A, n) / dot(p, n)) - A;
+      float L2 = dot(e1, e1);
+      float a1 = dot(w, e1) / L2, a2 = dot(w, e2) / L2;
+      float u = (a1 - .5 * a2) / .75, v = (a2 - .5 * a1) / .75;
+      vec2 g = vec2(u + .5 * v, .8660254 * v) * uCells;
+      vec2 hl = hexLocal(g);
+      float hd = hexDist(hl);
+      vec2 cg = (g - hl) / uCells;
+      float cv = cg.y / .8660254, cu = cg.x - .5 * cv;
+      vec3 cell = normalize(A + e1 * cu + e2 * cv);
+
+      float fw = fwidth(hd);
+      float line = smoothstep(.455 - fw * 1.2, .48, hd);
+      float cellIn = smoothstep(.1, .5, hd);
+
+      vec3 V = normalize(cameraPosition - vWP);
+      float ndv = abs(dot(normalize(vWN), V));
+      float fres = pow(1. - ndv, 3.5);
+      float face = gl_FrontFacing ? 1. : .32;
+
+      vec3 c = uIce * (fres * .36 + pow(1. - ndv, 14.) * .55);
+      c += mix(uSteel * .5, uIce * .75, fres) * line * (.065 + .8 * fres);
+      float hc = hash13(floor(cell * 97. + .5));
+      float shimmer = smoothstep(.88, 1., hc) * pow(.5 + .5 * sin(uTime * (.4 + hc * 1.1) + hc * 70.), 8.);
+      c += uIce * shimmer * (cellIn * .05 + line * .25);
+
+      float heat = 0.;
+      for (int k = 0; k < MAXIMP; k++){
+        vec4 im = uImp[k];
+        float age = uTime - im.w;
+        if (age < 0. || age > RIPPLE) continue;
+        float str = length(im.xyz); vec3 d = im.xyz / str;
+        float thc = acos(clamp(dot(cell, d), -1., 1.));
+        float thp = acos(clamp(dot(p, d), -1., 1.));
+        float x = thc - ringR(age);
+        float fade = 1. - age / RIPPLE; fade *= fade;
+        float ring = exp(-x * x / .0045) + (x < 0. ? .22 * exp(x / .1) : 0.);
+        heat += str * (.3 + .8 * fade) * fade * ring;
+        heat += str * exp(-thp * thp / .0025) * exp(-age * 4.) * 1.2;
+      }
+      float h = heat / (1. + .3 * heat);
+      vec3 hot = ironbow(h) * (.2 + 1.05 * h);
+      c += hot * smoothstep(0., .1, h) * (.08 + .22 * cellIn + .85 * line);
+      gl_FragColor = vec4(c * face, 1.);
+    }`
+});
+const shield = new THREE.Mesh(new THREE.IcosahedronGeometry(R_SHIELD, 24), shieldMat);
+shield.renderOrder = 5;
+scene.add(shield);
+
+/* ---------- per-frame scene update: everything from t ---------- */
+const candT0 = new Float32Array(NH), candStr = new Float32Array(NH), candDir = new Float32Array(NH * 3), candW = new Float32Array(NH);
+const used = new Uint8Array(NH);
+const samp = new Float32Array((TRAIL + 1) * 3);
+const sc = new THREE.Color();
+const vP = new THREE.Vector3(), vT = new THREE.Vector3();
+
+function update(t) {
+  coreGroup.rotation.set(0, 0, 0);
+  icoShell.rotation.set(t * 0.13, t * 0.22, 0);
+  dodeShell.rotation.set(-t * 0.07, -t * 0.12, t * 0.04);
+  coreMat.uniforms.uTime.value = t;
+  meshGroup.rotation.set(0, t * 0.035, 0);
+
+  // nodes
+  {
+    const a = nodeMesh.instanceMatrix.array;
+    for (let i = 0; i < NN; i++) {
+      const ang = t * nodeSpin[i] + i, c = Math.cos(ang), s = Math.sin(ang), k = nodeSize[i], o = i * 16;
+      a[o] = c * k; a[o + 1] = 0; a[o + 2] = -s * k; a[o + 3] = 0;
+      a[o + 4] = 0; a[o + 5] = k * 1.25; a[o + 6] = 0; a[o + 7] = 0;
+      a[o + 8] = s * k; a[o + 9] = 0; a[o + 10] = c * k; a[o + 11] = 0;
+      a[o + 12] = nodePos[i * 3]; a[o + 13] = nodePos[i * 3 + 1]; a[o + 14] = nodePos[i * 3 + 2]; a[o + 15] = 1;
+    }
+    nodeMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  // trusted packets: p = a + (b - a) * fract(t * speed + phase)
+  {
+    const a = trusted.instanceMatrix.array;
+    for (let i = 0; i < NT; i++) {
+      let f = t * tSpeed[i] + tPhase[i]; f -= Math.floor(f);
+      const env = smooth(0, 0.07, f) * smooth(1, 0.93, f), s = tSize[i] * env, i3 = i * 3;
+      writeOriented(a, i * 16,
+        tA[i3] + tD[i3] * f, tA[i3 + 1] + tD[i3 + 1] * f, tA[i3 + 2] + tD[i3 + 2] * f,
+        tN[i3], tN[i3 + 1], tN[i3 + 2], 0.06 * s, 0.075 * s);
+    }
+    trusted.instanceMatrix.needsUpdate = true;
+  }
+
+  // hostile packets, sparks, impacts
+  {
+    const ha = hostile.instanceMatrix.array, sa = sparks.instanceMatrix.array, scol = sparks.instanceColor.array;
+    let nc = 0;
+    for (let i = 0; i < NH; i++) {
+      hostileCycle(i, t);
+      const base = i * (TRAIL + 1);
+      // flight + trail
+      if (t >= hLaunch && t <= hImp + TRAIL * TD_) {
+        for (let j = 0; j <= TRAIL; j++) {
+          const tj = clamp(t - j * TD_, hLaunch, hImp);
+          bez(ease((tj - hLaunch) / hDur), vP);
+          samp[j * 3] = vP.x; samp[j * 3 + 1] = vP.y; samp[j * 3 + 2] = vP.z;
+        }
+        const u = (t - hLaunch) / hDur, grow = smooth(0, 0.12, u);
+        // head
+        if (t < hImp) {
+          let dx = samp[0] - samp[3], dy = samp[1] - samp[4], dz = samp[2] - samp[5];
+          const l = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (l > 1e-5) { dx /= l; dy /= l; dz /= l; writeOriented(ha, base * 16, samp[0], samp[1], samp[2], dx, dy, dz, 0.13 * grow, 0.17 * grow); }
+          else writeZero(ha, base * 16);
+        } else writeZero(ha, base * 16);
+        for (let j = 1; j <= TRAIL; j++) {
+          const o = (base + j) * 16, p = (j - 1) * 3, q = j * 3;
+          let dx = samp[p] - samp[q], dy = samp[p + 1] - samp[q + 1], dz = samp[p + 2] - samp[q + 2];
+          const l = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (l < 1e-4) { writeZero(ha, o); continue; }
+          dx /= l; dy /= l; dz /= l;
+          const th = (0.11 * (1 - j / (TRAIL + 1)) + 0.015) * grow;
+          writeOriented(ha, o, (samp[p] + samp[q]) * 0.5, (samp[p + 1] + samp[q + 1]) * 0.5, (samp[p + 2] + samp[q + 2]) * 0.5,
+            dx, dy, dz, th, l * 0.5 + th * 0.5);
+        }
+      } else {
+        for (let j = 0; j <= TRAIL; j++) writeZero(ha, (base + j) * 16);
+      }
+      // sparks
+      const tau = t - hImp, seed = hSeed[i];
+      for (let j = 0; j < SPARKS; j++) {
+        const si = i * SPARKS + j, o = si * 16;
+        if (tau < 0 || tau >= SPARK_LIFE) { writeZero(sa, o); scol[si * 3] = scol[si * 3 + 1] = scol[si * 3 + 2] = 0; continue; }
+        randUnit(seed, hK, 20 + j * 2, vT);
+        vT.addScaledVector(hN, 0.35 + 0.9 * hash(seed, hK, 40 + j));
+        const dn = vT.dot(hN); if (dn < 0) vT.addScaledVector(hN, -2 * dn);
+        vT.normalize();
+        const sp = 1.6 + 2.6 * hash(seed, hK, 60 + j), drag = 3.2;
+        const dist = sp * (1 - Math.exp(-drag * tau)) / drag, vcur = sp * Math.exp(-drag * tau);
+        const life = tau / SPARK_LIFE, th = 0.06 * Math.sqrt(1 - life) * (0.6 + 0.5 * hStr);
+        writeOriented(sa, o, hI.x + vT.x * dist, hI.y + vT.y * dist, hI.z + vT.z * dist, vT.x, vT.y, vT.z, th, 0.03 + vcur * 0.06);
+        ramp(HEAT, 0.98 - 0.75 * life, sc, 3.0 - 2.4 * life);
+        scol[si * 3] = sc.r; scol[si * 3 + 1] = sc.g; scol[si * 3 + 2] = sc.b;
+      }
+      // impact candidate
+      const age = t - hImp;
+      if (age >= 0 && age <= RIPPLE) {
+        candT0[nc] = hImp; candStr[nc] = hStr; candDir[nc * 3] = hN.x; candDir[nc * 3 + 1] = hN.y; candDir[nc * 3 + 2] = hN.z;
+        const f = 1 - age / RIPPLE; candW[nc] = f * f * hStr; nc++;
+      }
+    }
+    hostile.instanceMatrix.needsUpdate = true;
+    sparks.instanceMatrix.needsUpdate = true;
+    sparks.instanceColor.needsUpdate = true;
+    // keep the strongest MAXIMP impacts
+    used.fill(0);
+    for (let s = 0; s < MAXIMP; s++) {
+      let bi = -1, bw = -1;
+      for (let c = 0; c < nc; c++) if (!used[c] && candW[c] > bw) { bw = candW[c]; bi = c; }
+      if (bi < 0) { impU[s].set(0, 1, 0, -1e4); continue; }
+      used[bi] = 1;
+      const k = candStr[bi];
+      impU[s].set(candDir[bi * 3] * k, candDir[bi * 3 + 1] * k, candDir[bi * 3 + 2] * k, candT0[bi]);
+    }
+  }
+  shieldMat.uniforms.uTime.value = t;
+}
+
+/* ---------- camera framing + orbit ---------- */
+let camDist = 20, viewShiftX = 0, viewShiftY = 0;
+function frame() {
+  const w = window.innerWidth, h = window.innerHeight, aspect = w / h;
+  const portrait = aspect < 0.8;
+  camera.fov = portrait ? 58 : aspect < 1.25 ? 46 : 36;
+  camera.aspect = aspect;
+  const vHalf = THREE.MathUtils.degToRad(camera.fov / 2), hHalf = Math.atan(Math.tan(vHalf) * aspect);
+  const fill = portrait ? 0.84 : 0.72;
+  camDist = R_SHIELD / Math.sin(Math.min(vHalf, hHalf) * fill);
+  viewShiftX = portrait ? 0 : -Math.round(w * 0.045);
+  viewShiftY = portrait ? Math.round(h * 0.06) : 0;
+  camera.setViewOffset(w, h, viewShiftX, viewShiftY, w, h);
+  camera.updateProjectionMatrix();
+  controls.minDistance = camDist * 0.45; controls.maxDistance = camDist * 1.8;
+}
+function autoCam(t, out) { return camDir(t, out).multiplyScalar(camDist); }
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.07; controls.enablePan = false; controls.rotateSpeed = 0.6; controls.zoomSpeed = 0.7;
+let userCam = false, interacting = false, releasedAt = 0, blendStart = -1;
+const blendFrom = new THREE.Vector3(), vCam = new THREE.Vector3();
+controls.addEventListener('start', () => { userCam = true; interacting = true; blendStart = -1; });
+controls.addEventListener('end', () => { interacting = false; releasedAt = performance.now(); });
+
+function updateCamera(t, now) {
+  if (!userCam) {
+    autoCam(t, camera.position); controls.target.set(0, 0, 0); camera.lookAt(0, 0, 0);
+    return;
+  }
+  if (interacting || now - releasedAt < 3500) { controls.update(); return; }
+  if (blendStart < 0) { blendStart = now; blendFrom.copy(camera.position); }
+  const b = Math.min((now - blendStart) / 1800, 1), e = b * b * (3 - 2 * b);
+  autoCam(t, vCam);
+  const la = blendFrom.length(), lb = vCam.length();
+  camera.position.copy(blendFrom).divideScalar(la).lerp(vCam.divideScalar(lb), e).normalize().multiplyScalar(la + (lb - la) * e);
+  controls.target.set(0, 0, 0); camera.lookAt(0, 0, 0);
+  if (b >= 1) userCam = false;
+}
+
+/* ---------- post ---------- */
+const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: LOW ? 0 : 4 });
+const composer = new EffectComposer(renderer, rt);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.8, 0.22, 0.82);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setPixelRatio(PR());
+  renderer.setSize(w, h, false);
+  composer.setPixelRatio(PR());
+  composer.setSize(w, h);
+  if (LOW) bloom.setSize(Math.round(w * 0.5), Math.round(h * 0.5));
+  frame();
+  dirty = true;
+}
+
+/* ---------- loop + hooks ---------- */
+let t = 0, playing = true, dirty = true, last = performance.now();
+const pp = document.getElementById('playpause');
+function setPlaying(p) {
+  playing = p; last = performance.now(); dirty = true;
+  pp.textContent = p ? 'Pause' : 'Play';
+  pp.setAttribute('aria-pressed', String(!p));
+}
+function renderAt(now) { update(t); updateCamera(t, now); composer.render(); dirty = false; }
+
+window.__seek = (tt) => {
+  t = Number(tt) || 0;
+  setPlaying(false);
+  userCam = false; interacting = false; blendStart = -1;
+  renderAt(performance.now());
+};
+window.__play = () => setPlaying(true);
+
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min((now - last) / 1000, 0.1); last = now;
+  if (playing) t += dt;
+  if (playing || userCam || dirty) renderAt(now);
+}
+
+controls.addEventListener('change', () => { dirty = true; });
+window.addEventListener('resize', resize);
+
+/* ---------- notes UI ---------- */
+const notes = document.getElementById('notes'), showBtn = document.getElementById('show-notes');
+function setNotes(v) { notes.hidden = !v; showBtn.hidden = v; }
+document.getElementById('hide-notes').addEventListener('click', () => { setNotes(false); showBtn.focus(); });
+showBtn.addEventListener('click', () => { setNotes(true); document.getElementById('hide-notes').focus(); });
+pp.addEventListener('click', () => setPlaying(!playing));
+window.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'h' || e.key === 'H') { setNotes(notes.hidden); }
+  else if (e.code === 'Space' || e.key === ' ') {
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'BUTTON' || ae.tagName === 'A')) return;
+    e.preventDefault(); setPlaying(!playing);
+  }
+});
+
+/* ---------- start ---------- */
+resize();
+if (Number.isFinite(T_PARAM)) { t = T_PARAM; setPlaying(false); }
+else if (REDUCED) { t = HERO_T; setPlaying(false); }
+else setPlaying(true);
+renderAt(performance.now());
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

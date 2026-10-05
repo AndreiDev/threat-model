@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rotate your keys</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+  /* type scale: display rows, giant key, code, key rows, labels */
+  --M:   clamp(20px, 5vw, 80px);
+  --F:   clamp(44px, min(9.2vw, 14.7vh), 150px);
+  --FK:  clamp(34px, min(6.3vw, 11vh), 120px);
+  --FC:  clamp(12px, min(1.85vw, 3vh), 28px);
+  --FK2: clamp(18px, min(3.1vw, 5.2vh), 48px);
+  --FL:  clamp(14px, min(1.35vw, 2.3vh), 20px);
+}
+@media (max-aspect-ratio: 3/4){
+  :root{
+    --F:   clamp(34px, 13.4vw, 72px);
+    --FK:  clamp(28px, 12.4vw, 64px);
+    --FC:  clamp(11px, 3.6vw, 15px);
+    --FK2: clamp(15px, 6.1vw, 28px);
+    --FL:  clamp(13px, 3.7vw, 16px);
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--void);overflow:hidden}
+body{color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif}
+
+/* stage */
+#world{position:fixed;inset:0;overflow:hidden}
+#shake{position:absolute;inset:0}
+#grid{position:absolute;inset:0;width:100%;height:100%;display:block}
+#grid path{fill:none;stroke-linecap:round}
+.mm,.mm *{font-family:"Martian Mono",ui-monospace,monospace;font-variation-settings:"wght" var(--wg,400),"wdth" var(--wd,100)}
+
+/* beat 1 and 5: the wall rows */
+.row{position:absolute;left:0;top:0;white-space:pre;line-height:1;font-size:var(--F);
+  --rc:#4E5A8C;color:var(--rc);--on:0;--wg:300;--wd:100;--t0:#FFD36B;--t1:#9BE8FF}
+.portrait .row{--wd:75}
+/* ScrambleText wraps the original text in oldClass even at ratio 0, so the scramble colours
+   only switch on while a row's --on is 1; at 0 they collapse to the row colour */
+.scr{--k:calc(var(--on) * 100%);--wg:calc(300 + 420 * var(--on));color:transparent;-webkit-background-clip:text;background-clip:text;
+  background-image:linear-gradient(90deg,color-mix(in srgb,#FFF6E0 var(--k),var(--rc)) 0,color-mix(in srgb,#FFD36B var(--k),var(--rc)) .9ch,
+  color-mix(in srgb,#FF7A2F var(--k),var(--rc)) 2ch,color-mix(in srgb,#F0306A var(--k),var(--rc)) 4ch,
+  color-mix(in srgb,#9B1D8F var(--k),var(--rc)) 9ch,color-mix(in srgb,#3A0F6B var(--k),var(--rc)) 16ch)}
+.res{--wg:250;color:transparent;-webkit-background-clip:text;background-clip:text;
+  background-image:linear-gradient(270deg,var(--t0) 0,var(--t1) 1.6ch,#E8F7FF 4.5ch)}
+.scr2{color:color-mix(in srgb,#4FA3E0 calc(var(--on) * 100%),var(--rc))}
+.scr3{--wg:300;color:var(--steel)}
+
+/* beat 2: the diff */
+#band{position:absolute;left:0;top:0;opacity:0;background:rgba(58,15,107,.55)}
+#band::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--heat-1)}
+#diff{position:absolute;left:0;top:0;font-size:var(--FC);line-height:1.85;color:var(--mist);--wg:400;--wd:100}
+.portrait #diff{--wd:75}
+.dl{display:flex;white-space:pre}
+.dl .ln{width:3ch;text-align:right;color:var(--steel);flex:none}
+.dl .sg{width:3ch;text-align:center;flex:none}
+.dl .code{white-space:pre}
+.dl.add .code{color:var(--frost)}
+.dl.add .sg{color:var(--frost)}
+.dl .str{color:var(--mist)}
+.dl .nm{color:#BAC0E6}
+.dh{display:flex;align-items:baseline;gap:2ch;padding-bottom:.35em;margin-bottom:.45em;border-bottom:1px solid rgba(78,90,140,.45);font-size:.8em}
+.dh .fp{color:var(--frost)}
+.dh .hh{color:var(--steel)}
+.portrait .aq{display:block}
+.portrait .dl .ln{width:2.5ch}
+.portrait .dl .sg{width:2.5ch}
+#caret{position:absolute;left:0;top:0;width:2px;background:var(--frost);opacity:0}
+#sweep{position:absolute;left:0;top:0;height:100%;width:2px;background:var(--heat-2);opacity:0;
+  box-shadow:0 0 10px var(--heat-2),0 0 26px rgba(240,48,106,.55)}
+#sweep i{position:absolute;right:2px;top:0;height:100%;width:200px;background:linear-gradient(90deg,rgba(240,48,106,0),rgba(240,48,106,.13))}
+
+/* beat 3: the smash */
+#flash{position:absolute;left:0;top:0;border-radius:50%;opacity:0;pointer-events:none;
+  background:radial-gradient(circle,rgba(255,246,224,.7) 0,rgba(255,211,107,.32) 16%,rgba(255,122,47,.14) 36%,rgba(240,48,106,0) 68%)}
+#bigkey{position:absolute;inset:0;pointer-events:none;font-size:var(--FK);line-height:1;color:var(--heat-5);--wg:800;--wd:100}
+#bigkey .ch{position:absolute;text-align:center;opacity:0}
+.spark{position:absolute;left:0;top:0;border-radius:1px;background:var(--heat-4);opacity:0}
+
+/* captions: one slot, top left */
+#caps{position:absolute;left:0;top:0;font:500 var(--FL)/1.45 "Schibsted Grotesk",system-ui,sans-serif}
+.cap{overflow:hidden;color:var(--frost);white-space:nowrap}
+.cap span{display:inline-block;transform:translateY(110%)}
+#c2{color:var(--heat-3)}
+
+/* beat 4: rotate */
+#icon{position:absolute;left:0;top:0;overflow:visible;opacity:0}
+#keys{position:absolute;inset:0;pointer-events:none;z-index:2}
+#strike{position:absolute;left:0;top:0;overflow:visible}
+.lab{position:absolute;left:0;top:0;overflow:hidden;white-space:nowrap;font:500 var(--FL)/1.4 "Schibsted Grotesk",system-ui,sans-serif}
+.lab span{display:inline-block;transform:translateY(110%)}
+#revoked{color:var(--mist)}
+#active{color:var(--ice)}
+#newkey{position:absolute;left:0;top:0;white-space:pre;font-size:var(--FK2);line-height:1;color:var(--ice);--wg:400;--wd:100;opacity:0}
+#nk2{color:var(--mist)}
+
+/* beat 5 */
+#endline{position:absolute;left:0;top:0;max-width:calc(100vw - 2 * var(--M));font:400 var(--FL)/1.5 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist);opacity:0}
+
+/* still fallback if the timeline library cannot load */
+.fallback{position:fixed;left:var(--M);top:22vh;font:250 var(--F)/1 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;color:var(--frost)}
+.fallback em{font-style:normal;color:var(--ice)}
+
+/* notes card (shared contract) */
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+</style>
+</head>
+<body>
+<div id="world" aria-hidden="true"><div id="shake"></div></div>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Rotate your keys</h1>
+  <p id="lede">An AWS access key is committed, found by a bot within a minute, smashed to pieces and replaced by a rotated key, all set in live, selectable type.</p>
+  <ul class="tech">
+    <li>One seekable GSAP 3.15 master timeline</li>
+    <li>ScrambleText with seeded scramble sets</li>
+    <li>SplitText chars thrown by Physics2D into a solved heap</li>
+    <li>MorphSVG: key, rotate arrows, new key, padlock</li>
+    <li>Width and weight axes as material; heavier is hotter</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<script>
+/* Seeded randomness. ScrambleText picks its scramble characters with Math.random, so it is
+   replaced by mulberry32 before any GSAP file loads; the timeline is built with a fixed seed. */
+(function () {
+  let s = 0x2545F491;
+  Math.random = function () {
+    s = s + 0x6D2B79F5 | 0;
+    let t = Math.imul(s ^ s >>> 15, 1 | s);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+  window.__reseed = v => { s = v | 0; };
+})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/SplitText.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/ScrambleTextPlugin.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/MorphSVGPlugin.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/Physics2DPlugin.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/CustomEase.min.js"></script>
+<script>
+(() => {
+'use strict';
+/* ==========================================================================
+   Storyboard (seconds; one 24 s master timeline, repeat -1)
+   0.0  Ciphertext   wall of giant base64 rows; rows decrypt hot -> frost
+   3.6               sentence leaves
+   4.0  The leak     diff fades in, the added line types, caption 14:02
+   6.3               bot sweep crosses the frame, key goes white-hot, caption 14:03
+   7.45              key leaves the diff and grows to full width (per-char FLIP)
+   8.85              anticipation squeeze
+   9.2  The smash    Physics2D burst, grid shock ripple, heap settles, cools
+   13.0 Rotate       heap reassembles as the old key; icon key -> arrows (spin)
+   14.0              old key struck through, revoked; new key scrambles in
+   16.05             arrows -> new key; 17.45 new key -> padlock, cold ripple
+   19.0 End card     rows resolve "Secrets expire. Make them.", width breathes
+   23.0              rows encrypt back into the wall (loops to 0.0)
+   ========================================================================== */
+const DUR = 24, TB = 9.2;
+const Q = new URLSearchParams(location.search);
+const $ = s => document.querySelector(s);
+const shakeEl = $('#shake');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const btnPlay = $('#playpause'), notes = $('#notes'), showNotes = $('#show-notes');
+
+const C = { steel: '#4E5A8C', mist: '#8C93C4', ice: '#9BE8FF', frost: '#E8F7FF',
+  h0: '#3A0F6B', h1: '#9B1D8F', h2: '#F0306A', h3: '#FF7A2F', h4: '#FFD36B', h5: '#FFF6E0',
+  c1: '#2F4FA8', c2: '#4FA3E0' };
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+const KEY = 'AKIAIOSFODNN7EXAMPLE';          // AWS's own documented example key id
+const HOT = '0 0 0.16em rgba(255,122,47,.85), 0 0 0.5em rgba(240,48,106,.5)';
+const NOGLOW = '0 0 0em rgba(255,122,47,0), 0 0 0em rgba(240,48,106,0)';
+const EMBER = '0 0 0.1em rgba(155,29,143,.45), 0 0 0em rgba(58,15,107,0)';
+
+// icon shapes, 200x200 box, two subpaths each so MorphSVG pairs them cleanly
+const ICON = {
+  key: 'M175 92H92.15A38 38 0 1 0 92.15 108H140V128H152V108H160V124H175Z M55 84A16 16 0 1 1 55 116A16 16 0 1 1 55 84Z',
+  arrows: 'M42.32 83.46A60 60 0 0 1 144.59 59.85L153.51 51.82L149.45 83.93L123.78 78.59L132.7 70.56A44 44 0 0 0 57.7 87.87Z M157.68 116.54A60 60 0 0 1 55.41 140.15L46.49 148.18L50.55 116.07L76.22 121.41L67.3 129.44A44 44 0 0 0 142.3 112.13Z',
+  key2: 'M175 92H85V86A16 16 0 0 0 69 70H41A16 16 0 0 0 25 86V114A16 16 0 0 0 41 130H69A16 16 0 0 0 85 114V108H128V124H138V108H146V128H156V108H165V120H175Z M47 86H63A6 6 0 0 1 69 92V108A6 6 0 0 1 63 114H47A6 6 0 0 1 41 108V92A6 6 0 0 1 47 86Z',
+  lock: 'M56 90H60V70A40 40 0 0 1 140 70V90H144A12 12 0 0 1 156 102V160A12 12 0 0 1 144 172H56A12 12 0 0 1 44 160V102A12 12 0 0 1 56 90Z M74 90V70A26 26 0 0 1 126 70V90Z'
+};
+
+function prng(seed) {
+  let s = seed | 0;
+  return () => {
+    s = s + 0x6D2B79F5 | 0;
+    let t = Math.imul(s ^ s >>> 15, 1 | s);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// ---------------------------------------------------------------- fallback
+if (!(window.gsap && window.SplitText && window.ScrambleTextPlugin && window.MorphSVGPlugin && window.Physics2DPlugin && window.CustomEase)) {
+  const f = document.createElement('div');
+  f.className = 'fallback';
+  f.innerHTML = 'Secrets expire.<br><em>Make them.</em>';
+  document.body.appendChild(f);
+  $('#lede').textContent += ' The animation library could not load, so you are seeing a still end card instead of the motion.';
+  window.__seek = () => {}; window.__play = () => {};
+  btnPlay.textContent = 'Play'; btnPlay.setAttribute('aria-pressed', 'true');
+  return;
+}
+gsap.registerPlugin(SplitText, ScrambleTextPlugin, MorphSVGPlugin, Physics2DPlugin, CustomEase);
+CustomEase.create('snap', 'M0,0 C0.12,0 0.18,1.13 0.4,1.1 C0.58,1.07 0.7,0.985 1,1');
+CustomEase.create('settle', 'M0,0 C0.16,0.72 0.28,1.18 0.48,1.07 C0.64,0.98 0.8,1.012 1,1');
+CustomEase.create('slam', 'M0,0 C0.3,0 0.62,0.2 0.78,0.62 C0.86,0.84 0.92,1 1,1');
+
+// ---------------------------------------------------------------- state
+let tl = null, scrambles = [], G = null, built = false;
+
+// ==================================================================== build
+function build() {
+  if (tl) { tl.kill(); tl = null; }
+  shakeEl.innerHTML = '';
+  gsap.set(shakeEl, { clearProps: 'transform' });
+  const W = innerWidth, H = innerHeight, P = W / H < 0.75;
+  document.documentElement.classList.toggle('portrait', P);
+  const R = prng(1402);
+
+  // ------------------------------------------------------------ DOM
+  shakeEl.innerHTML = `
+    <svg id="grid" aria-hidden="true"></svg>
+    <div id="wall" class="mm"></div>
+    <div id="band"></div>
+    <div id="diff" class="mm"></div>
+    <div id="caret"></div>
+    <div id="sweep"><i></i></div>
+    <div id="flash"></div>
+    <div id="bigkey" class="mm">${KEY}</div>
+    <div id="sparks"></div>
+    <svg id="icon" viewBox="0 0 200 200" aria-hidden="true">
+      <defs>
+        <linearGradient id="ig" x1="0" y1="0" x2="1" y2="1">
+          <stop id="ig0" offset="0" style="stop-color:#FFD36B"/>
+          <stop id="ig1" offset="1" style="stop-color:#F0306A"/>
+        </linearGradient>
+        <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="5" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <g id="spin" filter="url(#glow)">
+        <path id="ico" fill="url(#ig)" fill-rule="evenodd" d="${ICON.key}"/>
+        <path id="keyhole" fill="#100C2A" opacity="0" d="M100 115a9 9 0 1 1 0 18a9 9 0 1 1 0-18Zm-4 12h8v20h-8Z"/>
+      </g>
+    </svg>
+    <div id="keys">
+      <svg id="strike"><line x1="0" y1="0" x2="0" y2="0" stroke="#9BE8FF" stroke-linecap="round"/></svg>
+      <div class="lab" id="revoked"><span>Revoked</span></div>
+      <div id="newkey" class="mm"><span id="nk1">    </span><span id="nk2">            </span><span id="nk3">    </span></div>
+      <div class="lab" id="active"><span>Active</span></div>
+    </div>
+    <div id="caps">
+      <div class="cap" id="c1"><span>Committed to a public repo at 14:02.</span></div>
+      <div class="cap" id="c2"><span>Found by a bot at 14:03.</span></div>
+      <div class="cap" id="c3"><span>Deleting the commit won’t un-leak it.</span></div>
+      <div class="cap" id="c4"><span>Revoke the leaked key. Issue a new one.</span></div>
+    </div>
+    <div id="endline"><span>Short-lived credentials, automatic rotation, secret scanning on every push.</span></div>`;
+  const el = id => shakeEl.querySelector('#' + id);
+  const wall = el('wall'), diff = el('diff'), band = el('band'), caret = el('caret'), sweep = el('sweep');
+  const flash = el('flash'), bigkey = el('bigkey'), sparksEl = el('sparks'), icon = el('icon');
+  const caps = el('caps'), endline = el('endline'), newkey = el('newkey');
+
+  const M = Math.round(Math.min(80, Math.max(20, W * 0.05)));
+  const fsz = e => parseFloat(getComputedStyle(e).fontSize);
+
+  // ------------------------------------------------------------ wall rows
+  const probe = document.createElement('div'); probe.className = 'row'; probe.textContent = 'M';
+  wall.appendChild(probe);
+  const F = fsz(probe); probe.remove();
+  const WD0 = P ? 75 : 100, ADV = WD0 === 75 ? 0.6 : 0.7;
+  const N = Math.ceil(H / F);
+  const y0 = (H - N * F) / 2;
+  const SENT = P ? ['Every', 'secret', 'leaks', 'eventually.'] : ['Every secret', 'leaks', 'eventually.'];
+  const END = P ? ['Secrets', 'expire.', 'Make', 'them.'] : ['Secrets', 'expire.', 'Make them.'];
+  const nS = SENT.length, nE = END.length;
+  let k = Math.round((H * (P ? 0.42 : 0.36) - y0) / F - nS / 2);
+  k = Math.max(1, Math.min(N - nS, k));
+  const cLen = Math.ceil((W - M) / (ADV * F)) + 3;
+  const CIPH = [], rows = [];
+  for (let i = 0; i < N; i++) {
+    let s = i === 0 ? 'U2FsdGVkX1' : '';       // base64 of "Salted__", OpenSSL's ciphertext header
+    while (s.length < cLen) s += B64[(R() * 64) | 0];
+    CIPH.push(s);
+    const r = document.createElement('div');
+    r.className = 'row'; r.textContent = s;
+    r.style.left = M + 'px'; r.style.top = (y0 + i * F) + 'px';
+    wall.appendChild(r); rows.push(r);
+  }
+  const sRows = rows.slice(k, k + nS);
+  const eRows = rows.slice(k, k + nE);          // the end card reuses the sentence rows
+  const others = rows.filter(r => !sRows.includes(r));
+
+  // ------------------------------------------------------------ diff
+  diff.innerHTML = `
+    <div class="dh"><span class="fp">app/settings.py</span><span class="hh">@@ -14,4 +14,5 @@</span></div>
+    <div class="dl"><span class="ln">14</span><span class="sg"> </span><span class="code"><span class="nm">DEBUG</span> = False</span></div>
+    <div class="dl"><span class="ln">15</span><span class="sg"> </span><span class="code"><span class="nm">ALLOWED_HOSTS</span> = [<span class="str">"api.example.com"</span>]</span></div>
+    <div class="dl"><span class="ln">16</span><span class="sg"> </span><span class="code"><span class="nm">AWS_REGION</span> = <span class="str">"us-east-1"</span></span></div>
+    <div class="dl add"><span class="ln">17</span><span class="sg">+</span><span class="code" id="addcode"><span class="av">AWS_ACCESS_KEY_ID = </span><span class="aq">"<span class="key">${KEY}</span>"</span></span></div>
+    <div class="dl"><span class="ln">18</span><span class="sg"> </span><span class="code"><span class="nm">S3_BUCKET</span> = <span class="str">"uploads-prod"</span></span></div>`;
+  const FC = fsz(diff);
+  const dRect0 = diff.getBoundingClientRect();
+  const diffTop = P ? H * 0.27 : H * 0.27;
+  diff.style.left = M + 'px'; diff.style.top = diffTop + 'px';
+  const addSplit = SplitText.create(diff.querySelector('#addcode'), { type: 'chars', charsClass: 'tc' });
+  const addChars = addSplit.chars;
+  const smallKey = addChars.filter(c => c.closest('.key'));
+  const addRow = diff.querySelector('.dl.add').getBoundingClientRect();
+  band.style.top = addRow.top + 'px'; band.style.height = addRow.height + 'px'; band.style.width = W + 'px';
+  const caretH = FC * 1.25;
+  caret.style.height = caretH + 'px';
+  const caretPos = addChars.map(c => { const r = c.getBoundingClientRect(); return { x: r.right + 1, y: r.top + (r.height - caretH) / 2 }; });
+  const firstR = addChars[0].getBoundingClientRect();
+  const caret0 = { x: firstR.left - 1, y: firstR.top + (firstR.height - caretH) / 2 };
+  const smallC = smallKey.map(c => { const r = c.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  const diffLines = [...diff.children];
+
+  // ------------------------------------------------------------ big key
+  const FK = fsz(bigkey), AK = 0.7 * FK;
+  const perLine = P ? 10 : 20, nLines = KEY.length / perLine;
+  const bkW = perLine * AK, bkLeft = (W - bkW) / 2;
+  const bkCy = H * (P ? 0.4 : 0.45), pitch = FK * 1.08;
+  const keySplit = SplitText.create(bigkey, { type: 'chars', charsClass: 'ch' });
+  const ch = keySplit.chars;
+  const home = ch.map((c, i) => {
+    const col = i % perLine, line = (i / perLine) | 0;
+    const cx = bkLeft + (col + 0.5) * AK, cy = bkCy + (line - (nLines - 1) / 2) * pitch;
+    gsap.set(c, { position: 'absolute', display: 'block', left: cx - AK / 2, top: cy - FK / 2, width: AK, height: FK, lineHeight: FK + 'px' });
+    return { x: cx, y: cy };
+  });
+  const keyCx = W / 2;
+
+  // heap: rows of 6,5,4,3,2 on a floor; slots are solved first, launches are solved backwards
+  const floor = P ? H * 0.745 : H * 0.915;
+  const heapCx = P ? W * 0.5 : W * 0.6;
+  const colP = FK * 0.8, rowP = FK * 0.76;
+  const COUNTS = [6, 5, 4, 3, 2];
+  const slots = [];
+  COUNTS.forEach((n, r) => {
+    const rowShift = (R() - 0.5) * 0.3 * colP;
+    for (let j = 0; j < n; j++) {
+      const lying = r === 0 && (j === 0 || j === n - 1);
+      const u = n > 1 ? (j - (n - 1) / 2) / ((n - 1) / 2) : 0;     // -1 left edge .. 1 right edge
+      const side = u < 0 ? -1 : 1;
+      let x = heapCx + (j - (n - 1) / 2) * colP + rowShift + (R() - 0.5) * 0.16 * FK;
+      // glyphs at the edges of each layer slip down the slope of the mound
+      let y = floor - 0.4 * FK - r * rowP + (r ? u * u * 0.2 * FK : 0) + R() * 0.07 * FK;
+      let rest = (R() - 0.5) * 50 + (r ? side * Math.abs(u) * 14 : 0);
+      if (lying) { rest = side * 90 + (R() - 0.5) * 10; y = floor - 0.29 * FK; x += side * 0.1 * FK; }
+      slots.push({ x, y, r, rest });
+    }
+  });
+  // assign characters to slots in rough x order, with noise, so paths cross a little
+  const byX = ch.map((c, i) => ({ i, k: home[i].x + (R() - 0.5) * bkW * 0.35 })).sort((a, b) => a.k - b.k);
+  const slotOrder = slots.map((s, i) => ({ i, k: s.x + (R() - 0.5) * colP * 0.6 })).sort((a, b) => a.k - b.k);
+  const grav = 2800 * Math.max(0.7, H / 900);
+  const phys = new Array(ch.length);
+  byX.forEach((c, n) => {
+    const i = c.i, s = slots[slotOrder[n].i];
+    const ax = (keyCx - home[i].x) * 0.07, ay = (bkCy - home[i].y) * 0.07;
+    const delay = 0.09 * Math.abs(home[i].x - keyCx) / (bkW / 2);
+    const land = 0.64 + s.r * 0.12 + R() * 0.07;
+    const T = Math.max(0.42, land - delay);
+    const slide = (R() - 0.5) * 0.3 * FK;
+    const dx = (s.x - slide) - home[i].x - ax, dy = s.y - home[i].y - ay;
+    const vx = dx / T, vy = (dy - 0.5 * grav * T * T) / T;
+    const turns = (1 + (R() * 2 | 0)) * (R() < 0.5 ? -1 : 1);
+    const over = (R() < 0.5 ? -1 : 1) * (12 + R() * 22);
+    const restAbs = s.rest + 360 * turns;
+    phys[i] = { ax, ay, delay, T, slide, s, restAbs, rotLand: restAbs + over,
+      velocity: Math.hypot(vx, vy), angle: Math.atan2(vy, vx) * 180 / Math.PI };
+  });
+
+  // sparks
+  const NSP = P ? 26 : 40, sparks = [];
+  for (let i = 0; i < NSP; i++) {
+    const d = document.createElement('div'); d.className = 'spark';
+    const sz = 3 + R() * 4;
+    const sx = bkLeft + R() * bkW, sy = bkCy + (R() - 0.5) * FK * 0.6 * nLines;
+    gsap.set(d, { width: sz, height: sz, x: sx, y: sy });
+    sparksEl.appendChild(d);
+    const up = R() < 0.72;
+    sparks.push({ d, vel: (420 + R() * 900) * Math.max(0.6, H / 900), ang: up ? 200 + R() * 140 : R() * 360, life: 0.7 + R() * 0.6 });
+  }
+  const flashD = Math.max(W, H) * 0.9;
+  gsap.set(flash, { width: flashD, height: flashD, x: keyCx - flashD / 2, y: bkCy - flashD / 2, scale: 0.3 });
+
+  // ------------------------------------------------------------ beat 4 geometry
+  const IS = P ? Math.min(W * 0.56, H * 0.28) : Math.min(W * 0.23, H * 0.35);
+  const iconX = P ? (W - IS) / 2 : M + W * 0.015, iconY = P ? H * 0.115 : H * 0.43 - IS / 2;
+  gsap.set(icon, { left: iconX, top: iconY, width: IS, height: IS, scale: 0.2, transformOrigin: '50% 50%' });
+  const iconC = { x: iconX + IS / 2, y: iconY + IS / 2 };
+  const FK2 = fsz(newkey), AK2 = 0.7 * FK2;
+  const kx = P ? M : Math.max(iconX + IS + W * 0.06, W * 0.43);
+  const oldY = P ? H * 0.49 : H * 0.36, newY = P ? H * 0.615 : H * 0.53;
+  const FL = fsz(el('revoked'));
+  const labGap = FK2 * 0.62 + FL * 0.35;
+  const oldPos = ch.map((c, i) => ({ x: kx + (i + 0.5) * AK2, y: oldY }));
+  const sl = el('strike').querySelector('line');
+  const sx1 = kx - FK2 * 0.2, sx2 = kx + 20 * AK2 + FK2 * 0.2, sLen = sx2 - sx1;
+  gsap.set(sl, { attr: { x1: sx1, y1: oldY + FK2 * 0.02, x2: sx2, y2: oldY + FK2 * 0.02, 'stroke-width': Math.max(2, FK2 * 0.07) },
+    strokeDasharray: sLen, strokeDashoffset: sLen, opacity: 0 });
+  el('strike').setAttribute('width', W); el('strike').setAttribute('height', H);
+  gsap.set(el('revoked'), { x: kx, y: oldY + labGap });
+  gsap.set(newkey, { x: kx, y: newY - FK2 / 2 });
+  gsap.set(el('active'), { x: kx, y: newY + labGap });
+
+  // ------------------------------------------------------------ captions, end line
+  gsap.set(caps, { x: M, y: P ? M + 4 : M * 0.9 });
+  gsap.set(['#c3', '#c4'].map(s => el(s.slice(1))), { position: 'absolute', left: 0, top: 0 });
+  const FE = P ? Math.min(F * 1.35, Math.floor((W - 2 * M) / (Math.max(...END.map(t => t.length)) * 0.75))) : F;
+  const eTop0 = P ? H * 0.19 : y0 + k * F;
+  const endTop = eTop0 + nE * FE + FE * (P ? 0.32 : 0.28);
+  gsap.set(endline, { x: M, y: endTop + 14 });
+
+  // ------------------------------------------------------------ dot grid (one path per colour bucket)
+  const GS = P ? 26 : 34;
+  const gx0 = ((W % GS) / 2) + GS / 2, gy0 = ((H % GS) / 2) + GS / 2;
+  const dots = [];
+  for (let y = gy0; y < H; y += GS) for (let x = gx0; x < W; x += GS) dots.push(x, y);
+  const gsvg = el('grid');
+  gsvg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const BUCKET = [
+    { c: C.steel, w: 2, o: 0.42 },
+    { c: C.h1, w: 2.4, o: 0.8 }, { c: C.h3, w: 3, o: 0.9 }, { c: C.h5, w: 3.6, o: 1 },
+    { c: C.c1, w: 2.4, o: 0.85 }, { c: C.c2, w: 3, o: 0.95 }, { c: C.ice, w: 3.6, o: 1 }
+  ];
+  gsvg.innerHTML = BUCKET.map(b => `<path stroke="${b.c}" stroke-width="${b.w}" opacity="${b.o}"/>`).join('');
+  const HR = { r: 0, a: 0 }, CR = { r: 0, a: 0 }, HG = { a: 0 };
+  G = { paths: [...gsvg.children], dots, sweep, HR, CR, HG, W, H,
+    blast: { x: keyCx, y: bkCy }, cold: iconC,
+    heap: { x: heapCx, y: floor - FK, sx: colP * 3.6, sy: rowP * 3 } };
+
+  // ------------------------------------------------------------ initial state (t = 0)
+  gsap.set(diffLines, { opacity: 0, y: FC * 0.6 });
+  gsap.set(addChars, { opacity: 0 });
+  gsap.set(smallKey, { textShadow: NOGLOW, '--wg': 400 });
+  gsap.set(sweep, { x: -40 });
+  gsap.set(ch, { opacity: 0, textShadow: HOT, color: C.h5, '--wg': 800, transformOrigin: '50% 50%' });
+  ch.forEach((c, i) => gsap.set(c, { x: smallC[i].x - home[i].x, y: smallC[i].y - home[i].y, scale: FC / FK }));
+
+  // ==================================================================== timeline
+  tl = gsap.timeline({ paused: true, repeat: -1, defaults: { ease: 'power2.out' }, onUpdate: drawGrid });
+
+  // ---------------- beat 1: ciphertext decrypts
+  sRows.forEach((r, i) => {
+    const t0 = 0.3 + i * (P ? 0.42 : 0.55);
+    tl.to(r, { '--on': 1, duration: 0.25, ease: 'power1.out' }, t0);
+    tl.to(r, { duration: 1.25, ease: 'power1.inOut',
+      scrambleText: { text: SENT[i], chars: B64, revealDelay: 0.3, speed: 0.55, newClass: 'res', oldClass: 'scr' } }, t0);
+    tl.set(r, { '--on': 0 }, t0 + 1.3);
+    tl.to(r, { '--t0': C.frost, '--t1': C.frost, duration: 0.7, ease: 'power1.inOut' }, t0 + 1.25);
+  });
+  const mid = k + (nS - 1) / 2, far = Math.max(mid, N - 1 - mid);
+  others.forEach(r => {
+    const d = Math.abs(rows.indexOf(r) - mid) / far;
+    tl.to(r, { '--wd': 75, '--wg': 100, opacity: 0.13, duration: 1.3, ease: 'power3.inOut' }, 0.95 + d * 0.8);
+  });
+  tl.to(sRows, { opacity: 0, y: -F * 0.14, '--wd': P ? 75 : 87, duration: 0.55, ease: 'power2.in', stagger: 0.07 }, 3.55);
+  tl.to(others, { opacity: 0, duration: 0.5, ease: 'power1.in' }, 3.6);
+
+  // ---------------- beat 2: the leak
+  tl.to(diffLines, { opacity: 1, y: 0, duration: 0.6, ease: 'power3.out', stagger: 0.055 }, 4.05);
+  const tType = 4.8, per = P ? 0.026 : 0.027;
+  tl.set(caret, { opacity: 1, x: caret0.x, y: caret0.y }, 4.55);
+  addChars.forEach((c, j) => {
+    tl.set(c, { opacity: 1 }, tType + j * per);
+    tl.set(caret, { x: caretPos[j].x, y: caretPos[j].y }, tType + j * per);
+  });
+  const tTyped = tType + addChars.length * per;
+  tl.set(caret, { opacity: 0 }, tTyped + 0.25).set(caret, { opacity: 1 }, tTyped + 0.5).set(caret, { opacity: 0 }, tTyped + 0.75);
+  tl.to(band, { opacity: 1, duration: 0.4 }, tTyped + 0.05);
+  tl.to(el('c1').firstChild, { y: '0%', duration: 0.6, ease: 'power3.out' }, tTyped + 0.1);
+  // the bot sweep: crosses to the end of the key, holds, then leaves
+  const kr = smallKey[smallKey.length - 1].getBoundingClientRect().right + 4;
+  const tSw = 6.3, swA = 0.66, swHold = 0.14;
+  tl.set(sweep, { opacity: 1 }, tSw);
+  tl.to(sweep, { x: kr, duration: swA, ease: 'none' }, tSw);
+  tl.to(sweep, { x: W + 60, duration: 0.45, ease: 'power2.in' }, tSw + swA + swHold);
+  tl.set(sweep, { opacity: 0 }, tSw + swA + swHold + 0.46);
+  smallKey.forEach((c, j) => {
+    const tc = tSw + swA * Math.max(0, (smallC[j].x + 40) / (kr + 40));
+    tl.to(c, { keyframes: { color: [C.h1, C.h2, C.h3, C.h4, C.h5], easeEach: 'none' }, duration: 0.42, ease: 'none' }, tc);
+    tl.to(c, { '--wg': 800, textShadow: HOT, duration: 0.42, ease: 'power1.out' }, tc);
+  });
+  tl.to(band, { backgroundColor: 'rgba(155,29,143,.34)', duration: 0.3 }, tSw + swA);
+  tl.to(el('c2').firstChild, { y: '0%', duration: 0.6, ease: 'power3.out' }, tSw + swA + 0.05);
+  // the key leaves the diff and grows to full width, one character at a time
+  const tZ = 7.45;
+  tl.to(diff, { opacity: 0, y: FC * 1.2, duration: 0.34, ease: 'power1.out' }, tZ);
+  tl.to(band, { opacity: 0, duration: 0.4, ease: 'power1.in' }, tZ);
+  tl.set(smallKey, { opacity: 0 }, tZ);
+  tl.set(ch, { opacity: 1 }, tZ);
+  tl.to(ch, { x: 0, y: 0, scale: 1, duration: 0.8, ease: 'snap', stagger: { each: 0.016, from: 'center' } }, tZ);
+  // heat shimmer: a weight wave runs through the key
+  tl.to(ch, { '--wg': 560, duration: 0.2, ease: 'sine.inOut', yoyo: true, repeat: 1, stagger: { each: 0.014, from: 'start' } }, 8.3);
+  // anticipation squeeze
+  ch.forEach((c, i) => tl.to(c, { x: phys[i].ax, y: phys[i].ay, scaleX: 0.86, scaleY: 1.14, duration: 0.35, ease: 'power2.in' }, 8.85));
+  tl.to([el('c1').firstChild, el('c2').firstChild], { y: '-110%', duration: 0.42, ease: 'power2.in', stagger: 0.05 }, 8.85);
+
+  // ---------------- beat 3: the smash
+  tl.to(flash, { opacity: 1, scale: 1, duration: 0.07, ease: 'none' }, TB)
+    .to(flash, { opacity: 0, scale: 1.7, duration: 0.65, ease: 'power2.out' }, TB + 0.07);
+  tl.to(shakeEl, { keyframes: { x: [0, -15, 12, -8, 5, -2, 0], y: [0, 9, -7, 4, -2, 1, 0], easeEach: 'none' }, duration: 0.42, ease: 'none' }, TB);
+  tl.to(G.HR, { a: 1, duration: 0.05, ease: 'none' }, TB)
+    .to(G.HR, { r: Math.hypot(W, H) * 1.1, duration: 2.6, ease: 'power1.out' }, TB)
+    .to(G.HR, { a: 0, duration: 2.3, ease: 'power1.in' }, TB + 0.25);
+  sparks.forEach(s => {
+    tl.set(s.d, { opacity: 1 }, TB);
+    tl.to(s.d, { physics2D: { velocity: s.vel, angle: s.ang, gravity: 1500 }, duration: s.life, ease: 'none' }, TB);
+    tl.to(s.d, { opacity: 0, backgroundColor: C.h2, duration: s.life, ease: 'power2.in' }, TB);
+  });
+  ch.forEach((c, i) => {
+    const p = phys[i], t0 = TB + p.delay, tl0 = t0 + p.T;
+    tl.to(c, { physics2D: { velocity: p.velocity, angle: p.angle, gravity: grav }, duration: p.T, ease: 'none' }, t0);
+    tl.to(c, { scaleX: 1, scaleY: 1, duration: 0.16, ease: 'power2.out' }, t0);
+    tl.to(c, { rotation: p.rotLand, duration: p.T, ease: 'none' }, t0);
+    tl.to(c, { x: '+=' + p.slide, rotation: p.restAbs, duration: 0.45, ease: 'settle' }, tl0);
+    tl.to(c, { keyframes: [{ scaleX: 1.16, scaleY: 0.8, duration: 0.07, ease: 'power2.out' }, { scaleX: 1, scaleY: 1, duration: 0.32, ease: 'back.out(3)' }] }, tl0);
+  });
+  tl.to(G.HG, { a: 1, duration: 0.5, ease: 'power1.out' }, TB + 0.65)
+    .to(G.HG, { a: 0, duration: 2.2, ease: 'power1.in' }, 10.7);
+  tl.to(el('c3').firstChild, { y: '0%', duration: 0.6, ease: 'power3.out' }, 10.45);
+  // cooling, top of the heap first
+  ch.forEach((c, i) => {
+    const t0 = 10.7 + (4 - phys[i].s.r) * 0.14 + (i % 3) * 0.05;
+    tl.to(c, { keyframes: { color: [C.h5, C.h4, C.h3, C.h2, C.h1], easeEach: 'none' }, duration: 1.9, ease: 'power1.inOut' }, t0);
+    tl.to(c, { '--wg': 380, textShadow: EMBER, duration: 1.9, ease: 'power1.inOut' }, t0);
+  });
+  tl.to(el('c3').firstChild, { y: '-110%', duration: 0.42, ease: 'power2.in' }, 12.85);
+
+  // ---------------- beat 4: rotate
+  ch.forEach((c, i) => {
+    const p = phys[i];
+    tl.to(c, { x: oldPos[i].x - home[i].x, y: oldPos[i].y - home[i].y, rotation: Math.round(p.restAbs / 360) * 360,
+      scale: FK2 / FK, color: C.h2, '--wg': 400, textShadow: NOGLOW, duration: 0.85, ease: 'snap' }, 13.0 + i * 0.022);
+  });
+  tl.to(el('c4').firstChild, { y: '0%', duration: 0.6, ease: 'power3.out' }, 13.3);
+  tl.to(icon, { opacity: 1, scale: 1, duration: 0.65, ease: 'back.out(1.7)' }, 13.45);
+  tl.set(sl, { opacity: 1 }, 14.05);
+  tl.to(sl, { strokeDashoffset: 0, duration: 0.45, ease: 'power2.inOut' }, 14.05);
+  tl.to(el('revoked').firstChild, { y: '0%', duration: 0.5, ease: 'power3.out' }, 14.3);
+  tl.to(ch, { color: C.steel, '--wg': 300, duration: 0.6, ease: 'power1.inOut', stagger: 0.012 }, 14.35);
+  const ico = icon.querySelector('#ico'), spin = icon.querySelector('#spin');
+  tl.to(ico, { morphSVG: { shape: ICON.arrows }, duration: 0.75, ease: 'power3.inOut' }, 14.45);
+  tl.to(spin, { rotation: 360, svgOrigin: '100 100', duration: 1.35, ease: 'snap' }, 14.9);
+  tl.to(icon.querySelector('#ig0'), { stopColor: C.frost, duration: 0.9, ease: 'power1.inOut' }, 14.95);
+  tl.to(icon.querySelector('#ig1'), { stopColor: C.c2, duration: 0.9, ease: 'power1.inOut' }, 14.95);
+  tl.set(newkey, { opacity: 1 }, 15.1);
+  const SC = { chars: B32, speed: 0.6, oldClass: 'scr3', trim: false };
+  tl.to(el('nk1'), { scrambleText: { ...SC, text: 'AKIA' }, duration: 0.55, ease: 'none' }, 15.15);
+  tl.to(el('nk2'), { scrambleText: { ...SC, text: '••••••••••••' }, duration: 1.05, ease: 'none' }, 15.3);
+  tl.to(el('nk3'), { scrambleText: { ...SC, text: 'Q7XW' }, duration: 0.6, ease: 'none' }, 15.8);
+  tl.to(ico, { morphSVG: { shape: ICON.key2 }, duration: 0.7, ease: 'power3.inOut' }, 16.1);
+  tl.to(el('active').firstChild, { y: '0%', duration: 0.5, ease: 'power3.out' }, 16.5);
+  tl.to(ico, { morphSVG: { shape: ICON.lock }, duration: 0.7, ease: 'power3.inOut' }, 17.45);
+  tl.to(icon.querySelector('#ig1'), { stopColor: C.ice, duration: 0.6 }, 17.45);
+  tl.to(icon.querySelector('#keyhole'), { opacity: 1, duration: 0.3 }, 18.05);
+  tl.to(icon, { keyframes: [{ scale: 1.06, duration: 0.09, ease: 'power2.out' }, { scale: 1, duration: 0.35, ease: 'back.out(3)' }] }, 18.12);
+  tl.to(G.CR, { a: 1, duration: 0.05, ease: 'none' }, 18.12)
+    .to(G.CR, { r: Math.hypot(W, H) * 1.1, duration: 2.4, ease: 'power1.out' }, 18.12)
+    .to(G.CR, { a: 0, duration: 1.6, ease: 'power1.in' }, 18.3);
+  tl.to(el('c4').firstChild, { y: '-110%', duration: 0.42, ease: 'power2.in' }, 18.5);
+  tl.to(icon, { opacity: 0, scale: 0.86, duration: 0.45, ease: 'power2.in' }, 18.55);
+  tl.to([el('keys'), ...ch], { opacity: 0, duration: 0.4, ease: 'power1.in' }, 18.55);
+
+  // ---------------- beat 5: end card in the same rows
+  eRows.forEach((r, i) => {
+    const t0 = 19.0 + i * 0.16, cold = i >= (P ? 2 : 2);
+    tl.set(r, { opacity: 1, y: 0, '--wd': 75, '--wg': 250, '--rc': cold ? C.ice : C.frost, '--on': 1 }, t0);
+    if (FE !== F) tl.set(r, { fontSize: FE, top: eTop0 + i * FE }, 18.9);
+    tl.to(r, { scrambleText: { text: END[i], chars: B64, speed: 0.6, oldClass: 'scr2' }, duration: 0.85, ease: 'power2.out' }, t0);
+    tl.set(r, { '--on': 0 }, t0 + 0.9);
+    tl.to(r, { '--wd': 112.5, duration: 1.0, ease: 'snap' }, t0 + 0.55);
+    tl.to(r, { '--wd': 84, duration: 1.0, ease: 'sine.inOut', yoyo: true, repeat: 1 }, t0 + 1.7);
+  });
+  tl.to(endline, { opacity: 1, y: endTop, duration: 0.7, ease: 'power3.out' }, 20.35);
+  tl.to(endline, { opacity: 0, duration: 0.35, ease: 'power1.in' }, 22.95);
+  // loop: every row encrypts back to the exact t = 0 wall
+  const reset = rows.filter((r, i) => (sRows.includes(r) || eRows.includes(r)) && !eRows.includes(r));
+  reset.forEach(r => tl.to(r, { scrambleText: { text: CIPH[rows.indexOf(r)], chars: B64 }, duration: 0.02, ease: 'none' }, 22.95));
+  eRows.forEach((r, i) => {
+    const t0 = 23.05 + i * 0.08;
+    tl.set(r, { '--on': 1 }, t0);
+    tl.to(r, { scrambleText: { text: CIPH[rows.indexOf(r)], chars: B64, speed: 0.6, oldClass: 'scr2' }, duration: 0.8, ease: 'power1.in' }, t0);
+    tl.to(r, { '--rc': C.steel, '--wg': 300, '--wd': WD0, duration: 0.8, ease: 'power2.inOut' }, t0);
+    if (FE !== F) tl.to(r, { fontSize: F, top: y0 + rows.indexOf(r) * F, duration: 0.8, ease: 'power3.inOut' }, t0);
+    tl.set(r, { '--on': 0 }, t0 + 0.82);
+  });
+  const back = rows.filter(r => !eRows.includes(r));
+  tl.to(back, { opacity: 1, y: 0, '--wd': WD0, '--wg': 300, duration: 0.7, ease: 'power2.out', stagger: { each: P ? 0.02 : 0.05, from: 'center' } }, 23.2);
+  tl.to({}, { duration: 0.001 }, DUR - 0.001);
+
+  // initialise every tween in order with a fixed seed, so scramble sets match on every load
+  window.__reseed(1402);
+  tl.time(DUR, true);
+  tl.time(0, true);
+  scrambles = [];
+  tl.getChildren(true, true, false).forEach(tw => {
+    for (let pt = tw._pt; pt; pt = pt._next) if (pt.d && pt.d.charSet) scrambles.push(pt.d);
+  });
+  built = true;
+  drawGrid();
+}
+
+// ==================================================================== dot grid
+function wave(d, r) {
+  const ph = (r - d) / 80;
+  if (ph <= 0 || ph > 4) return 0;
+  return Math.sin(ph * Math.PI) * Math.exp(-ph * 0.75);
+}
+function drawGrid() {
+  if (!G) return;
+  const { dots, HR, CR, HG, blast, cold, heap } = G;
+  const sx = +gsap.getProperty(G.sweep, 'x'), so = +gsap.getProperty(G.sweep, 'opacity');
+  const out = ['', '', '', '', '', '', ''];
+  const hot = HR.a > 0.001, cl = CR.a > 0.001, hg = HG.a > 0.001, sw = so > 0.01;
+  const s2x = 2 * heap.sx * heap.sx, s2y = 2 * heap.sy * heap.sy;
+  for (let n = 0; n < dots.length; n += 2) {
+    let x = dots[n], y = dots[n + 1], ih = 0, ic = 0;
+    if (hot) {
+      const dx = x - blast.x, dy = y - blast.y, d = Math.hypot(dx, dy) || 1, w = wave(d, HR.r) * HR.a;
+      if (w) { x += dx / d * w * 14; y += dy / d * w * 14; ih = Math.abs(w) * 1.15; }
+    }
+    if (cl) {
+      const dx = x - cold.x, dy = y - cold.y, d = Math.hypot(dx, dy) || 1, w = wave(d, CR.r) * CR.a;
+      if (w) { x += dx / d * w * 9; y += dy / d * w * 9; ic = Math.abs(w) * 1.15; }
+    }
+    if (hg) {
+      const dx = x - heap.x, dy = y - heap.y;
+      ih = Math.max(ih, HG.a * 0.62 * Math.exp(-(dx * dx / s2x + dy * dy / s2y)));
+    }
+    if (sw) {
+      const dx = x - sx;
+      if (dx > -170 && dx < 12) ih = Math.max(ih, so * (dx > 0 ? 1 - dx / 12 : Math.exp(dx / 55)));
+    }
+    const i = Math.max(ih, ic);
+    let b = i < 0.16 ? 0 : i < 0.42 ? 1 : i < 0.72 ? 2 : 3;
+    if (b && ic > ih) b += 3;
+    out[b] += `M${x.toFixed(1)} ${y.toFixed(1)}h0`;
+  }
+  for (let b = 0; b < 7; b++) G.paths[b].setAttribute('d', out[b]);
+}
+
+// ==================================================================== playback
+let stepTimer = null, stepIdx = 0, playing = false;
+const CARDS = [3.3, 7.3, 11.2, 18.4, 21.4];
+function setUI(isPlaying) {
+  playing = isPlaying;
+  btnPlay.textContent = isPlaying ? 'Pause' : 'Play';
+  btnPlay.setAttribute('aria-pressed', String(!isPlaying));
+}
+function frame(t) {
+  t = ((+t % DUR) + DUR) % DUR;
+  // ScrambleText keeps the last scramble set between renders; reset it from t so a seek is a pure function of t
+  const h = Math.floor(t * 12);
+  for (const d of scrambles) {
+    d.prevScrambleTime = 0; d.setIndex = (h * 7 + 3) % 20; d.chars = d.charSet.sets[d.setIndex];
+  }
+  window.__reseed(0x9E37 + h);
+  tl.pause().seek(t);
+  drawGrid();
+}
+function stopSteps() { if (stepTimer) { clearInterval(stepTimer); stepTimer = null; } }
+function startSteps() {
+  stopSteps();
+  frame(CARDS[stepIdx]);
+  stepTimer = setInterval(() => { stepIdx = (stepIdx + 1) % CARDS.length; frame(CARDS[stepIdx]); }, 4000);
+  setUI(true);
+}
+function play() {
+  if (reduce) { startSteps(); return; }
+  tl.play(); setUI(true);
+}
+function pause() { stopSteps(); tl.pause(); setUI(false); }
+window.__seek = t => { stopSteps(); frame(t); setUI(false); };
+window.__play = () => play();
+btnPlay.addEventListener('click', () => playing ? pause() : play());
+function setNotes(show) { notes.hidden = !show; showNotes.hidden = show; }
+$('#hide-notes').addEventListener('click', () => { setNotes(false); showNotes.focus(); });
+showNotes.addEventListener('click', () => { setNotes(true); $('#hide-notes').focus(); });
+addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input, textarea, select')) return;
+  if (e.code === 'Space') {
+    if (document.activeElement && document.activeElement.tagName === 'BUTTON') return;
+    e.preventDefault(); playing ? pause() : play();
+  } else if ((e.key === 'h' || e.key === 'H') && !e.metaKey && !e.ctrlKey && !e.altKey) setNotes(notes.hidden);
+});
+// live playback reseeds per tick (the scramble flicker only needs to look random there)
+let tick = 0;
+gsap.ticker.add(() => { if (playing && !reduce) window.__reseed(0x51ED + (++tick)); }, false, true);
+
+// rebuild at the same time on resize: re-split, re-measure, re-solve the heap
+let rz = null;
+addEventListener('resize', () => {
+  clearTimeout(rz);
+  rz = setTimeout(() => { if (built) rebuildAtSameTime(); }, 160);
+});
+
+function rebuildAtSameTime() {
+  const t = tl.time(), was = playing && !reduce;
+  build(); frame(t);
+  if (was) tl.play();
+}
+(async function boot() {
+  let late = false;
+  try {
+    const fonts = Promise.all(['300 100px "Martian Mono"', '800 100px "Martian Mono"', '500 20px "Schibsted Grotesk"', '400 20px "Schibsted Grotesk"']
+      .map(f => document.fonts.load(f, 'AKIA0+/=•'))).then(() => document.fonts.ready);
+    late = await Promise.race([fonts.then(() => false), new Promise(r => setTimeout(() => r(true), 6000))]);
+    // layout is measured from Martian Mono's advances, so re-measure if the fonts arrive late
+    if (late) fonts.then(() => { if (built) rebuildAtSameTime(); });
+  } catch (e) { /* fall through with whatever fonts loaded */ }
+  build();
+  if (Q.has('t')) window.__seek(parseFloat(Q.get('t')) || 0);
+  else if (reduce) startSteps();
+  else { frame(0); play(); }
+})();
+})();
+</script>
+</body>
+</html>

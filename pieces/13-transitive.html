@@ -1,0 +1,1218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Transitive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--void)}
+body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent;color:var(--frost)}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab;outline:none}
+#c:active{cursor:grabbing}
+
+/* captions: kinetic type, top left (notes sit bottom left, the readout top right) */
+#captions{position:fixed;left:clamp(24px,3.4vw,56px);top:clamp(24px,4.5vh,48px);width:min(470px,38vw);pointer-events:none;z-index:4}
+.cap{position:absolute;left:0;top:0;width:100%;font:300 25px/1.32 "Martian Mono",ui-monospace,monospace;
+  letter-spacing:-.01em;color:var(--frost);visibility:hidden;text-wrap:balance;
+  text-shadow:0 1px 2px rgba(16,12,42,.9),0 0 18px rgba(16,12,42,.85)}
+.cap .w{display:inline-block;white-space:nowrap}
+.cap .ch{display:inline-block}
+/* readout */
+#readout{position:fixed;right:clamp(24px,5vw,80px);top:28px;z-index:4;pointer-events:none;text-align:right;
+  font:400 12px/1.5 "Martian Mono",ui-monospace,monospace;color:var(--mist);font-variant-numeric:tabular-nums}
+#readout .mode{display:inline-flex;align-items:center;gap:8px;font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);padding:6px 10px;border:1px solid rgba(140,147,196,.3);border-radius:999px;background:rgba(16,12,42,.45);margin-bottom:8px}
+#readout .mode svg{width:14px;height:10px;display:none}
+#readout.rw .mode{color:var(--void);background:var(--ice);border-color:var(--ice)}
+#readout.rw .mode svg{display:block}
+#readout.hot .mode{border-color:rgba(255,122,47,.6);color:var(--heat-4)}
+#readout.pin .mode{border-color:rgba(155,232,255,.55);color:var(--ice)}
+#readout .bar{position:relative;width:180px;height:3px;margin:8px 0 0 auto;background:rgba(78,90,140,.35);border-radius:2px;overflow:hidden}
+#readout .bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--ice)}
+
+/* anchored tags */
+.tag{position:fixed;left:0;top:0;z-index:5;pointer-events:none;visibility:hidden;
+  padding:10px 12px 11px;border-radius:10px;background:rgba(16,12,42,.78);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);font:400 12.5px/1.45 "Schibsted Grotesk",system-ui,sans-serif;white-space:nowrap}
+.tag b{display:block;font:500 13px/1.3 "Martian Mono",ui-monospace,monospace;margin-bottom:5px}
+.tag code{display:block;font:400 11.5px/1.5 "Martian Mono",ui-monospace,monospace;margin-top:6px}
+.tag.hot{border:1px solid rgba(255,122,47,.75);color:var(--heat-5)}
+.tag.hot b{color:var(--heat-4)}
+.tag.hot code{color:var(--heat-3)}
+.tag.hot .f{color:#FFC3A8}
+.tag.cold{border:1px solid rgba(155,232,255,.6);color:var(--frost)}
+.tag.cold b{color:var(--ice)}
+.tag.cold code{color:var(--ice)}
+.tag.cold .f{color:var(--mist)}
+#leaders{position:fixed;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;overflow:visible}
+#leaders line{stroke-width:1.2}
+#leaders circle{stroke-width:1.2;fill:none}
+
+#loader{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;text-align:center;
+  font:400 13px/1.6 "Martian Mono",ui-monospace,monospace;color:var(--mist)}
+#loader .lb{width:220px;height:2px;background:rgba(78,90,140,.35);margin:10px auto 0;border-radius:2px;overflow:hidden}
+#loader .lb i{display:block;height:100%;width:0;background:var(--ice)}
+
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+
+@media (max-width:600px){
+  #captions{left:18px;right:18px;top:58px;width:auto}
+  .cap{font-size:18px;line-height:1.35}
+  #readout{left:18px;right:18px;top:14px;font-size:10.5px;display:flex;align-items:center;justify-content:space-between;text-align:left}
+  #readout .mode{font-size:12px;padding:5px 9px;margin:0}
+  #readout #ro-sim,#readout .fs{display:none}
+  #readout .bar{position:absolute;left:0;right:0;bottom:-8px;width:auto;margin:0}
+  .tag{font-size:11px;padding:8px 10px 9px}
+  .tag b{font-size:11.5px}
+  .tag code{font-size:10px}
+}
+</style>
+</head>
+<body>
+<canvas id="c" role="img" aria-label="A tall tower of labelled dependency blocks balanced on one tiny package. Its new version runs hot, is pulled out, and the tower collapses; the recorded physics then plays backwards and an ice-cold lockfile clamp holds the old version in place."></canvas>
+
+<div id="captions" aria-live="polite"></div>
+<div id="readout" aria-hidden="true">
+  <div class="mode"><svg viewBox="0 0 14 10"><path d="M7 0v10L0 5zM14 0v10L7 5z" fill="currentColor"/></svg><span id="ro-mode">Standing</span></div>
+  <div id="ro-step">step 0 of 0</div>
+  <div id="ro-sim">sim time 0.000 s</div>
+  <div class="fs">fixed step 1/120 s</div>
+  <div class="bar"><i id="ro-bar"></i></div>
+</div>
+<svg id="leaders" aria-hidden="true"></svg>
+<div class="tag hot" id="tag-hot" aria-hidden="true">
+  <b>nano-trim 1.0.4 published</b>
+  <span class="f">Postinstall script added</span><br>
+  <span class="f">Maintainer changed</span>
+  <code>"postinstall": "node setup.js"</code>
+</div>
+<div class="tag cold" id="tag-pin" aria-hidden="true">
+  <b>Pinned in package-lock.json</b>
+  <code>"version": "1.0.3",</code>
+  <code style="margin-top:0" id="sha">"integrity": "sha512-…"</code>
+</div>
+<div class="tag cold" id="tag-rej" aria-hidden="true">
+  <b>npm ci</b>
+  <span class="f">Installs exactly what the lockfile pins.</span><br>
+  <span class="f">1.0.4 is never fetched, so its script never runs.</span>
+</div>
+<div id="loader" role="status"><div id="ld-text">Loading Rapier physics (WebAssembly)</div><div class="lb"><i id="ld-bar"></i></div></div>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Transitive</h1>
+  <p>Your app is a tower of other people's code. A hijacked patch release of one tiny package pulls it down, the recorded physics plays backwards, and a pinned lockfile keeps the tower standing.</p>
+  <ul class="tech">
+    <li>Rapier 0.21 rigid bodies (Rust compiled to WebAssembly), stepped at a fixed 1/120 s from one fixed starting state</li>
+    <li>Every body's position and quaternion is recorded into a Float32Array at load, so playback, the slow-motion ramp, seeking and the rewind are all lookups with slerp between steps</li>
+    <li>Determinism is checked at load: the collapse is simulated twice and compared bit for bit</li>
+    <li>Three.js rounded-box blocks with canvas-drawn package labels, PCF soft shadows, an ironbow emissive shader and bloom</li>
+    <li>A rewind pass in the final shader: scanlines, chromatic offset and a cold tint</li>
+  </ul>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+
+const RAPIER_URL = 'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.21.0/dist/rapier.mjs';
+
+/* ---------- params ---------- */
+const params = new URLSearchParams(location.search);
+const LOW = params.get('q') === 'low';
+const T_PARAM = params.has('t') ? parseFloat(params.get('t')) : NaN;
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const HERO_T = 9.9;
+const PERIOD = 22;
+
+/* ---------- helpers ---------- */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
+const lerp = (a, b, k) => a + (b - a) * k;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const smoother = x => { x = clamp(x, 0, 1); return x * x * x * (x * (x * 6 - 15) + 10); };
+const easeInOutCubic = x => { x = clamp(x, 0, 1); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const easeOutBack = x => { x = clamp(x, 0, 1); const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+
+/* ---------- palette ---------- */
+const col = h => new THREE.Color(h);
+const HEAT = ['#3A0F6B', '#9B1D8F', '#F0306A', '#FF7A2F', '#FFD36B', '#FFF6E0'].map(col);
+const ICE = col('#9BE8FF'), FROST = col('#E8F7FF'), STEEL = col('#4E5A8C');
+function ramp(arr, x, out, k = 1) {
+  x = clamp(x, 0, 1) * (arr.length - 1);
+  const i = Math.min(Math.floor(x), arr.length - 2), f = x - i, a = arr[i], b = arr[i + 1];
+  out.r = (a.r + (b.r - a.r) * f) * k; out.g = (a.g + (b.g - a.g) * f) * k; out.b = (a.b + (b.b - a.b) * f) * k;
+  return out;
+}
+
+/* ---------- storyboard (seconds) ---------- */
+const TL = {
+  publish: 4.6, heatEnd: 6.1, shake: 6.4, yank: 7.2,
+  hold: 12.8, rw0: 13.2, rw1: 15.9,
+  clamp0: 16.4, clampLock: 17.0, upd0: 17.55, updOut0: 20.7, updOut1: 21.2,
+  clampOut0: 21.25, clampOut1: 21.85
+};
+const CAPTIONS = [
+  [0.25, 3.35, "Your app is a tower of other people's code."],
+  [3.55, 5.35, 'One tiny package holds up everything above it.'],
+  [5.55, 7.15, 'A new patch release lands, and your build pulls it in.'],
+  [7.45, 12.6, 'Nobody reviewed it. Everything above it comes down.'],
+  [12.75, 16.2, 'Deterministic physics can be replayed.'],
+  [16.45, 18.9, 'So can a lockfile.'],
+  [19.55, 21.95, 'Pin the version and its hash, and the bad update bounces off.']
+];
+
+/* ---------- the tower: fictional packages, big at the top, tiny near the bottom ---------- */
+const BLOCKS = [];
+{
+  let y = 0;
+  // hand-stacked, not machined: a seeded few millimetres of offset and a degree of twist per block
+  const jit = mulberry32(1303);
+  const add = (name, ver, depth, w, h, d, x, z, role = 'dep') => {
+    const j = role === 'dep' && depth < 11 ? 1 : 0;
+    const jx = (jit() - 0.5) * 0.024 * j, jz = (jit() - 0.5) * 0.024 * j, yaw = (jit() - 0.5) * 0.04 * j;
+    // quaternion from +,*,/ and sqrt only (correctly rounded everywhere), so every engine feeds Rapier identical bits
+    const a = yaw / 2, n = Math.sqrt(1 + a * a);
+    BLOCKS.push({ name, ver, depth, size: [w, h, d], pos: [x + jx, y + h / 2, z + jz], rot: [0, a / n, 0, 1 / n], role });
+  };
+  add('utf8-safe', '2.0.0', 14, 0.52, 0.30, 0.52, 0, 0); y += 0.30;
+  add('once-only-fn', '1.0.0', 13, 0.40, 0.28, 0.40, 0, 0); y += 0.28;
+  add('nano-trim', '1.0.3', 12, 0.20, 0.18, 0.20, 0, 0, 'tiny'); y += 0.18;
+  add('is-blank-str', '0.1.2', 11, 0.72, 0.20, 0.44, 0, 0); y += 0.20;
+  // Jenga levels, alternating direction: [axis, bar width, height, length, gap, depth, names]
+  const LEVELS = [
+    ['z', 0.27, 0.24, 0.86, 0.07, 10, [['str-pad-x', '0.0.9'], ['char-at-x', '1.0.0']]],
+    ['x', 0.30, 0.26, 1.00, 0.10, 9, [['has-own-x', '1.0.1'], ['type-tag-x', '0.1.4']]],
+    ['z', 0.30, 0.28, 1.12, 0.05, 8, [['char-class-x', '0.3.1'], ['is-plain-obj-x', '1.0.2'], ['arr-flat-x', '0.2.0']]],
+    ['x', 0.33, 0.30, 1.24, 0.05, 7, [['path-join-x', '1.2.0'], ['glob-mini', '0.6.1'], ['url-safe-x', '0.4.2']]],
+    ['z', 0.36, 0.33, 1.38, 0.05, 6, [['tiny-color-kit', '1.1.4'], ['ansi-hue', '0.3.0'], ['mime-lite-x', '1.6.0']]],
+    ['x', 0.40, 0.36, 1.52, 0.05, 5, [['kebab-case-x', '2.1.0'], ['deep-merge-ts', '2.2.0'], ['once-flag-x', '0.2.0']]],
+    ['z', 0.44, 0.40, 1.68, 0.05, 4, [['date-fmt-x', '0.9.2'], ['i18n-mini-x', '4.0.1'], ['query-str-x', '6.3.0']]],
+    ['x', 0.50, 0.44, 1.86, 0.05, 3, [['retry-backoff-x', '3.0.1'], ['emit-relay-x', '1.4.2'], ['schema-check-x', '3.2.1']]],
+    ['z', 0.56, 0.50, 2.04, 0.06, 2, [['route-lite-x', '2.4.0'], ['state-hub', '5.1.3'], ['fetch-retry-plus', '1.9.0']]],
+    ['x', 0.92, 0.62, 2.20, 0.08, 1, [['@acme/ui-kit', '3.8.1'], ['web-frame-x', '11.0.2']]]
+  ];
+  for (const [axis, ww, hh, len, gap, depth, names] of LEVELS) {
+    const n = names.length;
+    names.forEach(([nm, v], i) => {
+      const c = (i - (n - 1) / 2) * (ww + gap);
+      if (axis === 'z') add(nm, v, depth, ww, hh, len, c, 0); else add(nm, v, depth, len, hh, ww, 0, c);
+    });
+    y += hh;
+  }
+  add('@acme/storefront', '4.2.0', 0, 2.50, 0.95, 2.10, 0, 0, 'app'); y += 0.95;
+}
+const TOWER_H = BLOCKS[BLOCKS.length - 1].pos[1] + 0.475;
+const NB = BLOCKS.length;
+const TINY = BLOCKS.findIndex(b => b.role === 'tiny');
+const TINY_POS = BLOCKS[TINY].pos;
+const bevel = s => Math.min(0.035, Math.min(s[0], s[1], s[2]) * 0.12);
+
+/* ---------- physics: record once, replay forever ---------- */
+const DT = 1 / 120;
+const A_STEPS = 600;            // 5 s of collapse
+const B_STEPS = 400;            // 3.33 s of the rejected update
+const PHYS = { fric: 0.12, rest: 0.4, tinyFric: 0.15, groundFric: 0.6, groundRest: 0.45 };
+const YANK_DUR = 0.3, YANK_DIST = 0.9, YANK_DIR = [-0.944, 0, 0.33];
+// lockfile clamp: two ice jaws that close on the tiny block from either side
+const JAW_IN = 0.104, JAW_W = 0.17, JAW_H = 0.17, JAW_D = 0.44;
+const UPD_START = [2.7, 1.25, 0.32];
+
+function makeWorld(R) {
+  const world = new R.World({ x: 0, y: -9.81, z: 0 });
+  world.timestep = DT;
+  world.numSolverIterations = 12;
+  world.integrationParameters.contact_natural_frequency = 240;
+  const ground = world.createRigidBody(R.RigidBodyDesc.fixed());
+  world.createCollider(R.ColliderDesc.cuboid(40, 0.5, 40).setTranslation(0, -0.5, 0).setFriction(PHYS.groundFric).setRestitution(PHYS.groundRest)
+    .setFrictionCombineRule(3), ground); // max: slippery ice blocks, grippy floor
+  return world;
+}
+function blockCollider(R, b, fric) {
+  const [w, h, d] = b.size, r = bevel(b.size);
+  return R.ColliderDesc.roundCuboid(w / 2 - r, h / 2 - r, d / 2 - r, r)
+    .setDensity(1).setFriction(fric).setRestitution(PHYS.rest);
+}
+// Scene A: the tiny block is yanked out along a kinematic path, then let go.
+async function simulateA(R, onProgress) {
+  const world = makeWorld(R);
+  const bodies = BLOCKS.map(b => {
+    const desc = b.role === 'tiny' ? R.RigidBodyDesc.kinematicPositionBased() : R.RigidBodyDesc.dynamic();
+    desc.setTranslation(b.pos[0], b.pos[1], b.pos[2]).setRotation({ x: b.rot[0], y: b.rot[1], z: b.rot[2], w: b.rot[3] });
+    const body = world.createRigidBody(desc);
+    world.createCollider(blockCollider(R, b, b.role === 'tiny' ? PHYS.tinyFric : PHYS.fric), body);
+    return body;
+  });
+  const rec = new Float32Array((A_STEPS + 1) * NB * 7);
+  const write = s => {
+    let o = s * NB * 7;
+    for (let i = 0; i < NB; i++) {
+      const p = bodies[i].translation(), q = bodies[i].rotation();
+      rec[o++] = p.x; rec[o++] = p.y; rec[o++] = p.z; rec[o++] = q.x; rec[o++] = q.y; rec[o++] = q.z; rec[o++] = q.w;
+    }
+  };
+  write(0);
+  const tiny = bodies[TINY], p0 = TINY_POS, dl = Math.sqrt(YANK_DIR[0] * YANK_DIR[0] + YANK_DIR[1] * YANK_DIR[1] + YANK_DIR[2] * YANK_DIR[2]);
+  const ux = YANK_DIR[0] / dl, uz = YANK_DIR[2] / dl;
+  let released = false;
+  for (let s = 1; s <= A_STEPS; s++) {
+    const u = Math.min(s * DT / YANK_DUR, 1);
+    if (!released) {
+      const d = YANK_DIST * u * u;
+      tiny.setNextKinematicTranslation({ x: p0[0] + ux * d, y: p0[1], z: p0[2] + uz * d });
+      if (u >= 1) released = true;
+    } else if (tiny.bodyType() !== R.RigidBodyType.Dynamic) {
+      tiny.setBodyType(R.RigidBodyType.Dynamic, true);
+      tiny.setLinvel({ x: ux * 3.0, y: 2.4, z: uz * 3.0 }, true);
+      tiny.setAngvel({ x: 3, y: 9, z: -14 }, true);
+    }
+    world.step();
+    write(s);
+    if (onProgress && s % 60 === 0) await onProgress(s / A_STEPS);
+  }
+  world.free();
+  return rec;
+}
+function jaws() {
+  const y = TINY_POS[1], a = JAW_IN + JAW_W / 2;
+  return [{ pos: [a, y, 0], size: [JAW_W, JAW_H, JAW_D], dir: 1 }, { pos: [-a, y, 0], size: [JAW_W, JAW_H, JAW_D], dir: -1 }];
+}
+// Scene B: the tower is pinned (fixed), the jaws hold the tiny block, and the hot update is thrown at them.
+const UPD_HIT = 0.5;
+function simulateB(R) {
+  const world = makeWorld(R);
+  const fixed = world.createRigidBody(R.RigidBodyDesc.fixed());
+  for (const b of BLOCKS) world.createCollider(blockCollider(R, b, 0.5).setTranslation(b.pos[0], b.pos[1], b.pos[2]).setRotation({ x: b.rot[0], y: b.rot[1], z: b.rot[2], w: b.rot[3] }), fixed);
+  for (const j of jaws()) world.createCollider(R.ColliderDesc.cuboid(j.size[0] / 2, j.size[1] / 2, j.size[2] / 2)
+    .setTranslation(j.pos[0], j.pos[1], j.pos[2]).setFriction(0.3).setRestitution(0.7), fixed);
+  // ballistic throw that meets the right jaw's outer face after UPD_HIT seconds
+  const T = UPD_HIT, tgt = [JAW_IN + JAW_W + 0.1, TINY_POS[1] - 0.06, 0.06];
+  const v = [(tgt[0] - UPD_START[0]) / T, (tgt[1] - UPD_START[1]) / T + 0.5 * 9.81 * T, (tgt[2] - UPD_START[2]) / T];
+  const body = world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(...UPD_START)
+    .setLinvel(v[0], v[1], v[2]).setAngvel({ x: 0.6, y: -1.2, z: 1.5 }).setCcdEnabled(true));
+  world.createCollider(blockCollider(R, BLOCKS[TINY], 0.9).setRestitution(0.65).setFrictionCombineRule(3), body);
+  const rec = new Float32Array((B_STEPS + 1) * 7);
+  const write = s => {
+    const p = body.translation(), q = body.rotation(), o = s * 7;
+    rec[o] = p.x; rec[o + 1] = p.y; rec[o + 2] = p.z; rec[o + 3] = q.x; rec[o + 4] = q.y; rec[o + 5] = q.z; rec[o + 6] = q.w;
+  };
+  write(0);
+  for (let s = 1; s <= B_STEPS; s++) { world.step(); write(s); }
+  world.free();
+  return rec;
+}
+
+/* ---------- display time -> simulation time ---------- */
+// replay speed as a function of simulation time: real-time snap, slow motion through the break-up
+// and the first impacts, then back to real time while the pieces settle
+const SPEED_KEYS = [[0, 1], [0.3, 1], [0.42, 0.55], [0.75, 0.55], [0.95, 0.9], [1.35, 0.9], [1.55, 0.45], [2.65, 0.45], [2.95, 1.1], [5, 1.2]];
+function speedAtSim(x) {
+  if (x <= SPEED_KEYS[0][0]) return SPEED_KEYS[0][1];
+  for (let i = 1; i < SPEED_KEYS.length; i++) {
+    const [x1, v1] = SPEED_KEYS[i], [x0, v0] = SPEED_KEYS[i - 1];
+    if (x < x1) return lerp(v0, v1, smooth(x0, x1, x));
+  }
+  return SPEED_KEYS[SPEED_KEYS.length - 1][1];
+}
+const S_END = A_STEPS * DT;
+// integrate display time over sim time (dt = ds / v), then invert onto a 1 ms display grid
+const SIM_TABLE_DT = 0.001;
+const SIM_TABLE = (() => {
+  const ds = 1 / 2400, ts = [0], ss = [0];
+  for (let s = 0; s < S_END; s += ds) { ts.push(ts[ts.length - 1] + ds / speedAtSim(s + ds / 2)); ss.push(Math.min(s + ds, S_END)); }
+  const n = Math.ceil(ts[ts.length - 1] / SIM_TABLE_DT) + 2, out = new Float32Array(n);
+  let j = 0;
+  for (let k = 0; k < n; k++) {
+    const t = k * SIM_TABLE_DT;
+    while (j < ts.length - 2 && ts[j + 1] < t) j++;
+    out[k] = t >= ts[ts.length - 1] ? S_END : lerp(ss[j], ss[j + 1], clamp((t - ts[j]) / (ts[j + 1] - ts[j]), 0, 1));
+  }
+  return out;
+})();
+function forwardSim(t) {
+  const f = (t - TL.yank) / SIM_TABLE_DT, k = clamp(Math.floor(f), 0, SIM_TABLE.length - 2);
+  return Math.min(lerp(SIM_TABLE[k], SIM_TABLE[k + 1], clamp(f - k, 0, 1)), S_END);
+}
+const S_HOLD = forwardSim(TL.hold);
+function simAt(t) {
+  if (t < TL.yank) return 0;
+  if (t < TL.hold) return forwardSim(t);
+  if (t < TL.rw0) return S_HOLD;
+  if (t < TL.rw1) return S_HOLD * (1 - easeInOutCubic((t - TL.rw0) / (TL.rw1 - TL.rw0)));
+  return 0;
+}
+function replaySpeed(t) {
+  if (t < TL.yank || (t >= TL.hold && t < TL.rw0) || t >= TL.rw1) return 0;
+  const e = 0.004;
+  return (simAt(t + e) - simAt(t - e)) / (2 * e);
+}
+function heatAt(t) {
+  if (t < TL.publish) return 0;
+  if (t < TL.rw0) return 1 - Math.pow(1 - clamp((t - TL.publish) / (TL.heatEnd - TL.publish), 0, 1), 2.2);
+  if (t < TL.rw1) return 1 - smooth(0.74, 0.98, (t - TL.rw0) / (TL.rw1 - TL.rw0));
+  return 0;
+}
+function tinyVersionHot(t) {
+  if (t < TL.publish) return false;
+  if (t < TL.publish + 0.32) return Math.floor((t - TL.publish) * 22) % 2 === 0;
+  if (t < TL.rw1) return heatAt(t) > 0.35;
+  return false;
+}
+
+/* ---------- camera storyboard ---------- */
+// [t, target x,y,z, azimuth, elevation, half-width, half-height to frame, optional portrait target y]
+const CAM_KEYS = [
+  [0.0, 0.0, 4.0, 0.0, 0.50, 0.28, 4.0, 2.6, 3.1],
+  [3.4, 0.0, 0.74, 0.0, 0.72, 0.12, 1.15, 0.72],
+  [7.0, 0.04, 0.70, 0.0, 0.80, 0.10, 0.95, 0.6],
+  [8.5, 0.8, 2.0, 0.2, 0.22, 0.12, 4.3, 2.8],
+  [12.4, 4.0, 0.6, 0.0, 0.18, 0.42, 6.4, 2.8],
+  [13.2, 4.0, 0.6, 0.0, 0.18, 0.42, 6.4, 2.8],
+  [15.9, 0.0, 2.85, 0.0, 0.50, 0.14, 3.2, 3.0],
+  [17.0, 0.5, 0.74, 0.1, 0.70, 0.15, 1.05, 0.66],
+  [19.4, 0.9, 0.62, 0.2, 0.62, 0.22, 1.7, 1.0],
+  [22.0, 0.0, 4.0, 0.0, 0.50, 0.28, 4.0, 2.6, 3.1]
+];
+const camS = new Float32Array(7);
+function camKeysAt(t, por) {
+  let i = 1;
+  while (i < CAM_KEYS.length - 1 && t >= CAM_KEYS[i][0]) i++;
+  const a = CAM_KEYS[i - 1], b = CAM_KEYS[i];
+  const e = smoother((t - a[0]) / (b[0] - a[0]));
+  for (let k = 0; k < 7; k++) camS[k] = lerp(a[k + 1], b[k + 1], e);
+  if (por) camS[1] = lerp(a[8] ?? a[2], b[8] ?? b[2], e);
+  return camS;
+}
+
+/* ---------- renderer / scene ---------- */
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.setClearColor(0x100C2A, 1);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const PR = () => Math.min(window.devicePixelRatio || 1, LOW ? 1 : 2);
+renderer.setPixelRatio(PR());
+const ANISO = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x15113A, 0.04);
+const camera = new THREE.PerspectiveCamera(35, 1, 0.05, 200);
+
+/* sky: indigo gradient dome with a faint cold horizon */
+{
+  const m = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: { uTop: { value: col('#08061C') }, uHor: { value: col('#15113A') }, uBand: { value: col('#262064') } },
+    vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform vec3 uTop, uHor, uBand; varying vec3 vW;
+      float h12(vec2 p){ vec3 q = fract(vec3(p.xyx) * .1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+      void main(){ vec3 d = normalize(vW - cameraPosition);
+        float y = max(d.y, 0.);
+        vec3 c = mix(uHor, uBand, smoothstep(0., .06, y) * (1. - smoothstep(.06, .5, y)) * .8);
+        c = mix(c, uTop, smoothstep(.12, .9, y));
+        c += (h12(gl_FragCoord.xy) - .5) * .004;
+        gl_FragColor = vec4(c, 1.); }`
+  });
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(90, 32, 16), m);
+  sky.renderOrder = -10;
+  scene.add(sky);
+}
+
+/* ground: deep indigo with a steel grid that fades with distance */
+const groundMat = new THREE.MeshStandardMaterial({ color: col('#17143E'), roughness: 0.82, metalness: 0.0 });
+groundMat.onBeforeCompile = (sh) => {
+  sh.uniforms.uGrid = { value: STEEL.clone() };
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vGW;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+    varying vec3 vGW; uniform vec3 uGrid;
+    float gridLine(vec2 p, float s, float wpx){ vec2 g = p / s; vec2 w = fwidth(g); vec2 a = abs(fract(g - .5) - .5) / (w * wpx); return 1. - min(min(a.x, a.y), 1.); }`)
+    .replace('#include <color_fragment>', `#include <color_fragment>
+    float gMinor = gridLine(vGW.xz, 0.5, 1.0), gMajor = gridLine(vGW.xz, 2.5, 1.4);
+    float gFade = exp(-length(vGW.xz) * 0.11);
+    float gLine = max(gMinor * .35, gMajor * .8) * gFade;
+    diffuseColor.rgb = mix(diffuseColor.rgb, uGrid * 1.15, gLine);`)
+    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+    totalEmissiveRadiance += uGrid * gLine * 0.12;`);
+};
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+/* lights */
+scene.add(new THREE.HemisphereLight(col('#3A4E9A'), col('#100C2A'), 0.9));
+const key = new THREE.DirectionalLight(col('#E8F7FF'), 2.4);
+key.position.set(-5.5, 9, 6.5);
+key.castShadow = true;
+key.shadow.mapSize.set(LOW ? 1024 : 2048, LOW ? 1024 : 2048);
+key.shadow.radius = 4;
+key.shadow.bias = -0.0004;
+key.shadow.normalBias = 0.02;
+Object.assign(key.shadow.camera, { left: -8, right: 8, top: 8, bottom: -8, near: 1, far: 30 });
+scene.add(key, key.target);
+const rim = new THREE.DirectionalLight(col('#9BE8FF'), 2.6);
+rim.position.set(6, 4, -7);
+scene.add(rim);
+const fill = new THREE.DirectionalLight(col('#4FA3E0'), 0.5);
+fill.position.set(7, 2, 5);
+scene.add(fill);
+const hotLight = new THREE.PointLight(col('#FF7A2F'), 0, 4, 2);
+scene.add(hotLight);
+const pinLight = new THREE.PointLight(col('#9BE8FF'), 0, 0, 2);
+scene.add(pinLight);
+
+/* ---------- block labels: one canvas per block, faces laid out in strips ---------- */
+const FONT_MONO = '"Martian Mono", ui-monospace, monospace';
+function fitFont(ctx, text, weight, maxW, maxPx, stretch = 'normal') {
+  let px = maxPx;
+  ctx.font = `${stretch} ${weight} ${px}px ${FONT_MONO}`;
+  const w = ctx.measureText(text).width;
+  if (w > maxW) { px = Math.max(6, px * maxW / w); ctx.font = `${stretch} ${weight} ${px}px ${FONT_MONO}`; }
+  return px;
+}
+function faceRects(b, D) {
+  const [w, h, d] = b.size, W = w * D, H = h * D, Dd = d * D;
+  // row 0: +z, +x, -z, -x   row 1: +y, -y
+  return {
+    pz: [0, 0, W, H], px: [W, 0, Dd, H], nz: [W + Dd, 0, W, H], nx: [2 * W + Dd, 0, Dd, H],
+    py: [0, H, W, Dd], ny: [W, H, W, Dd],
+    cw: Math.max(2 * W + 2 * Dd, 2 * W), ch: H + Dd
+  };
+}
+function blockDensity(b) {
+  const [w, h, d] = b.size;
+  return Math.min(2048 / (2 * w + 2 * d), 1400 / (h + d), Math.max(300, 150 / h));
+}
+function drawBlockCanvas(b, ver) {
+  const D = blockDensity(b), R = faceRects(b, D);
+  const cv = document.createElement('canvas');
+  cv.width = Math.ceil(R.cw); cv.height = Math.ceil(R.ch);
+  const ctx = cv.getContext('2d');
+  const k = clamp(b.depth / 14, 0, 1);
+  const top = `rgb(${Math.round(lerp(40, 26, k))},${Math.round(lerp(58, 34, k))},${Math.round(lerp(122, 86, k))})`;
+  const bot = `rgb(${Math.round(lerp(24, 18, k))},${Math.round(lerp(32, 22, k))},${Math.round(lerp(84, 62, k))})`;
+  const [w, h, d] = b.size;
+  const longX = w >= d;
+  const face = (r, kind) => {
+    const [x, y, fw, fh] = r;
+    const g = ctx.createLinearGradient(0, y, 0, y + fh);
+    g.addColorStop(0, top); g.addColorStop(1, bot);
+    ctx.fillStyle = g; ctx.fillRect(x, y, fw, fh);
+    if (kind === 'bottom') return;
+    const m = Math.min(fw, fh) * 0.075;
+    ctx.strokeStyle = 'rgba(155,232,255,0.30)';
+    ctx.lineWidth = Math.max(1.5, Math.min(fw, fh) * 0.014);
+    ctx.strokeRect(x + m, y + m, fw - 2 * m, fh - 2 * m);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x + m, y + m, fw - 2 * m, fh - 2 * m); ctx.clip();
+    const pad = m * 1.9;
+    if (kind === 'long') {
+      const ah = fh - 2 * pad;
+      ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+      ctx.fillStyle = '#E8F7FF';
+      const px = fitFont(ctx, b.name, 500, fw - 2 * pad, ah * 0.40, fw / fh < 3.2 ? 'condensed' : 'normal');
+      ctx.fillText(b.name, x + pad, y + pad + ah * 0.40 * 0.92 + (ah * 0.40 - px) * 0.5);
+      const sub = ah * 0.24;
+      ctx.fillStyle = '#9BE8FF';
+      fitFont(ctx, ver, 400, (fw - 2 * pad) * 0.55, sub);
+      ctx.fillText(ver, x + pad, y + fh - pad - sub * 0.15);
+      ctx.fillStyle = '#8C93C4';
+      ctx.textAlign = 'right';
+      const dt = b.role === 'app' ? 'your app' : `depth ${b.depth}`;
+      fitFont(ctx, dt, 400, (fw - 2 * pad) * 0.4, sub * 0.8);
+      ctx.fillText(dt, x + fw - pad, y + fh - pad - sub * 0.15);
+    } else if (kind === 'end') {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#9BE8FF';
+      const px = fitFont(ctx, ver, 500, fw - 2 * pad, (fh - 2 * pad) * 0.42);
+      ctx.fillText(ver, x + fw / 2, y + fh * 0.44);
+      ctx.fillStyle = '#8C93C4';
+      const dt = b.role === 'app' ? 'your app' : `depth ${b.depth}`;
+      fitFont(ctx, dt, 400, fw - 2 * pad, px * 0.55);
+      ctx.fillText(dt, x + fw / 2, y + fh * 0.44 + px * 0.82);
+    } else if (kind === 'top') {
+      ctx.translate(x + fw / 2, y + fh / 2);
+      const along = fw >= fh ? fw : fh, across = fw >= fh ? fh : fw;
+      if (fw < fh) ctx.rotate(-Math.PI / 2);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#E8F7FF';
+      const px = fitFont(ctx, b.name, 400, along - 2 * pad, across * 0.24, along / across < 2.6 ? 'condensed' : 'normal');
+      ctx.fillText(b.name, 0, -px * 0.35);
+      ctx.fillStyle = '#9BE8FF';
+      fitFont(ctx, ver, 400, along - 2 * pad, px * 0.6);
+      ctx.fillText(ver, 0, px * 0.62);
+    }
+    ctx.restore();
+  };
+  // which side faces are "long" (show the name) depends on orientation
+  face(R.pz, longX ? 'long' : 'end'); face(R.nz, longX ? 'long' : 'end');
+  face(R.px, longX ? 'end' : 'long'); face(R.nx, longX ? 'end' : 'long');
+  if (b.role === 'tiny') { face(R.pz, 'long'); face(R.nz, 'long'); face(R.px, 'long'); face(R.nx, 'long'); }
+  face(R.py, 'top'); face(R.ny, 'bottom');
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = ANISO;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  return { tex, R };
+}
+// remap RoundedBoxGeometry UVs so each face samples its own rectangle of the block canvas
+function blockGeometry(b, R) {
+  const [w, h, d] = b.size;
+  const g = new RoundedBoxGeometry(w, h, d, 3, bevel(b.size));
+  const pos = g.attributes.position.array, uv = g.attributes.uv.array;
+  const faceLen = pos.length / 6;
+  const order = [R.px, R.nx, R.py, R.ny, R.pz, R.nz];
+  for (let i = 0, j = 0; i < pos.length; i += 3, j += 2) {
+    const side = Math.floor(i / faceLen), x = pos[i], y = pos[i + 1], z = pos[i + 2];
+    let u, v;
+    switch (side) {
+      case 0: u = (d / 2 - z) / d; v = (y + h / 2) / h; break;
+      case 1: u = (z + d / 2) / d; v = (y + h / 2) / h; break;
+      case 2: u = (x + w / 2) / w; v = (d / 2 - z) / d; break;
+      case 3: u = (x + w / 2) / w; v = (z + d / 2) / d; break;
+      case 4: u = (x + w / 2) / w; v = (y + h / 2) / h; break;
+      default: u = (w / 2 - x) / w; v = (y + h / 2) / h;
+    }
+    u = clamp(u, 0.004, 0.996); v = clamp(v, 0.004, 0.996);
+    const r = order[side];
+    uv[j] = (r[0] + u * r[2]) / R.cw;
+    uv[j + 1] = 1 - (r[1] + (1 - v) * r[3]) / R.ch;
+  }
+  g.attributes.uv.needsUpdate = true;
+  return g;
+}
+// block material: lit label texture, cold text glow + ice fresnel rim, or an ironbow body when hot
+function blockMaterial(tex) {
+  const m = new THREE.MeshPhysicalMaterial({
+    map: tex, emissiveMap: tex, emissive: col('#9BE8FF'), emissiveIntensity: 1,
+    roughness: 0.36, metalness: 0.08, clearcoat: 0.7, clearcoatRoughness: 0.22
+  });
+  m.userData.u = { uHeat: { value: 0 }, uHeatCol: { value: new THREE.Color() }, uRim: { value: ICE.clone().multiplyScalar(0.32) }, uGlow: { value: 0.62 } };
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, m.userData.u);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uHeat; uniform vec3 uHeatCol; uniform vec3 uRim; uniform float uGlow;')
+      .replace('#include <emissivemap_fragment>', `
+        vec4 emTex = texture2D(emissiveMap, vEmissiveMapUv);
+        float txt = smoothstep(0.18, 0.55, dot(emTex.rgb, vec3(0.299, 0.587, 0.114)));
+        float fres = pow(1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0), 3.0);
+        vec3 coldE = emissive * emTex.rgb * uGlow + uRim * fres + emissive * 0.012;
+        vec3 hotE = uHeatCol * (1.0 - 0.86 * txt) * (0.75 + 0.7 * fres);
+        totalEmissiveRadiance = mix(coldE, hotE, uHeat);
+        diffuseColor.rgb *= 1.0 - 0.85 * uHeat;`);
+  };
+  m.customProgramCacheKey = () => 'block-v1';
+  return m;
+}
+
+/* blob texture for contact shadows */
+function blobTexture() {
+  const S = 128, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.45, 'rgba(0,0,0,.55)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+  const t = new THREE.CanvasTexture(cv); return t;
+}
+
+/* ---------- build meshes (after fonts) ---------- */
+const blocks = [];       // { mesh, mat, blob, ghosts[] }
+let tinyTexCold, tinyTexHot, updMesh, updMat, hotGlow, updGlow, clampGroup, jawMeshes = [], jawMat, jawEdgeMat, lockRing, lockRingMat, hitRing, hitRingMat;
+const GHOSTS = 3;
+function buildScene() {
+  const blobTex = blobTexture();
+  BLOCKS.forEach((b, i) => {
+    const { tex, R } = drawBlockCanvas(b, b.ver);
+    const geo = blockGeometry(b, R);
+    const mat = blockMaterial(tex);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    scene.add(mesh);
+    const bm = new THREE.MeshBasicMaterial({ map: blobTex, color: 0x000000, transparent: true, opacity: 0, depthWrite: false, fog: false });
+    const blob = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), bm);
+    blob.rotation.x = -Math.PI / 2; blob.renderOrder = 1;
+    scene.add(blob);
+    const ghosts = [];
+    for (let k = 0; k < GHOSTS; k++) {
+      const gm = new THREE.MeshBasicMaterial({ color: ICE, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+      const gmesh = new THREE.Mesh(geo, gm);
+      gmesh.visible = false; scene.add(gmesh); ghosts.push(gmesh);
+    }
+    blocks.push({ mesh, mat, blob, ghosts, b });
+    if (b.role === 'tiny') {
+      tinyTexCold = tex;
+      tinyTexHot = drawBlockCanvas(b, '1.0.4').tex;
+    }
+  });
+  // soft additive halo so heat still reads when the tiny block is far away
+  {
+    const S = 128, cv = document.createElement('canvas'); cv.width = cv.height = S;
+    const ctx = cv.getContext('2d'), g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+    g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.25, 'rgba(255,255,255,.45)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+    const tex = new THREE.CanvasTexture(cv);
+    const mk = () => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 })); sp.renderOrder = 6; scene.add(sp); return sp; };
+    hotGlow = mk(); updGlow = mk();
+  }
+  // the rejected update: same package, new version, always hot
+  {
+    const b = BLOCKS[TINY];
+    const { R } = drawBlockCanvas(b, '1.0.4');
+    updMat = blockMaterial(tinyTexHot);
+    updMat.userData.u.uHeat.value = 1;
+    updMesh = new THREE.Mesh(blockGeometry(b, R), updMat);
+    updMesh.castShadow = true; updMesh.visible = false;
+    scene.add(updMesh);
+  }
+  // the lockfile clamp: two translucent ice jaws with bright edges
+  clampGroup = new THREE.Group();
+  jawMat = new THREE.MeshPhysicalMaterial({ color: col('#9BE8FF'), metalness: 0.0, roughness: 0.08, clearcoat: 1, emissive: ICE, emissiveIntensity: 0.25, transparent: true, opacity: 0.38, depthWrite: false });
+  jawEdgeMat = new THREE.LineBasicMaterial({ color: ICE.clone().multiplyScalar(1.6), transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false });
+  for (const j of jaws()) {
+    const g = new THREE.Group();
+    const box = new THREE.BoxGeometry(j.size[0], j.size[1], j.size[2]);
+    const m = new THREE.Mesh(box, jawMat); m.renderOrder = 3;
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(box), jawEdgeMat); e.renderOrder = 4;
+    // three grip ridges on the inner face
+    for (let r = -1; r <= 1; r++) {
+      const ridge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(0.012, j.size[1] * 0.8, 0.05)), jawEdgeMat);
+      ridge.position.set(-j.dir * (j.size[0] / 2 - 0.006), 0, r * 0.07);
+      g.add(ridge);
+    }
+    g.add(m, e);
+    g.userData.jaw = j;
+    clampGroup.add(g); jawMeshes.push(g);
+  }
+  lockRingMat = new THREE.MeshBasicMaterial({ color: ICE, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  lockRing = new THREE.Mesh(new THREE.RingGeometry(0.96, 1, 64), lockRingMat);
+  lockRing.rotation.x = -Math.PI / 2;
+  lockRing.position.set(0, TINY_POS[1], 0);
+  clampGroup.add(lockRing);
+  hitRingMat = lockRingMat.clone();
+  hitRing = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 48), hitRingMat);
+  hitRing.rotation.y = Math.PI / 2;
+  clampGroup.add(hitRing);
+  clampGroup.visible = false;
+  scene.add(clampGroup);
+}
+
+/* ---------- pose lookup from recordings ---------- */
+let REC_A = null, REC_B = null, UPD_IMPACT = UPD_HIT;
+const UPD_IMPACT_P = new THREE.Vector3();
+const qa = new THREE.Quaternion(), qb = new THREE.Quaternion();
+function poseA(s, i, outP, outQ) {
+  const f = clamp(s / DT, 0, A_STEPS), i0 = Math.min(Math.floor(f), A_STEPS - 1), a = f - i0;
+  const o0 = (i0 * NB + i) * 7, o1 = o0 + NB * 7, r = REC_A;
+  outP.set(lerp(r[o0], r[o1], a), lerp(r[o0 + 1], r[o1 + 1], a), lerp(r[o0 + 2], r[o1 + 2], a));
+  qa.set(r[o0 + 3], r[o0 + 4], r[o0 + 5], r[o0 + 6]); qb.set(r[o1 + 3], r[o1 + 4], r[o1 + 5], r[o1 + 6]);
+  outQ.slerpQuaternions(qa, qb, a);
+}
+function poseB(s, outP, outQ) {
+  const f = clamp(s / DT, 0, B_STEPS), i0 = Math.min(Math.floor(f), B_STEPS - 1), a = f - i0;
+  const o0 = i0 * 7, o1 = o0 + 7, r = REC_B;
+  outP.set(lerp(r[o0], r[o1], a), lerp(r[o0 + 1], r[o1 + 1], a), lerp(r[o0 + 2], r[o1 + 2], a));
+  qa.set(r[o0 + 3], r[o0 + 4], r[o0 + 5], r[o0 + 6]); qb.set(r[o1 + 3], r[o1 + 4], r[o1 + 5], r[o1 + 6]);
+  outQ.slerpQuaternions(qa, qb, a);
+}
+
+/* ---------- post: bloom, then a final pass for vignette, grain and the rewind look ---------- */
+const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: LOW ? 0 : 4 });
+const composer = new EffectComposer(renderer, rt);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.6, 0.5, 0.8);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+const finalPass = new ShaderPass({
+  uniforms: { tDiffuse: { value: null }, uRw: { value: 0 }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uPin: { value: 0 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float uRw, uTime, uPin; uniform vec2 uRes; varying vec2 vUv;
+    float h12(vec2 p){ vec3 q = fract(vec3(p.xyx) * .1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+    void main(){
+      vec2 uv = vUv;
+      // tracking band that rolls upward while rewinding
+      float bandY = fract(uTime * 0.37);
+      float band = exp(-pow((uv.y - bandY) * 18.0, 2.0)) + 0.6 * exp(-pow((uv.y - fract(bandY + 0.43)) * 40.0, 2.0));
+      float jit = (h12(vec2(floor(uv.y * uRes.y / 3.0), floor(uTime * 30.0))) - 0.5);
+      uv.x += uRw * (band * 0.012 * jit + band * 0.004);
+      float ca = uRw * (1.6 + 4.0 * band) / uRes.x;
+      vec3 c;
+      c.r = texture2D(tDiffuse, uv + vec2(ca, 0.)).r;
+      c.g = texture2D(tDiffuse, uv).g;
+      c.b = texture2D(tDiffuse, uv - vec2(ca, 0.)).b;
+      // scanlines and a cold cast
+      float sl = 0.5 + 0.5 * sin(gl_FragCoord.y * 3.14159 / 1.5);
+      c *= 1.0 - uRw * 0.16 * sl;
+      float l = dot(c, vec3(0.299, 0.587, 0.114));
+      c = mix(c, l * vec3(0.72, 0.93, 1.12) + vec3(0.0, 0.01, 0.03), uRw * 0.38);
+      c += uRw * band * vec3(0.03, 0.06, 0.08);
+      // vignette
+      vec2 q = (vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0);
+      float vig = smoothstep(1.25, 0.25, length(q));
+      c *= mix(0.62, 1.0, vig);
+      // grain, seeded by time so every frame is reproducible
+      c += (h12(gl_FragCoord.xy + floor(uTime * 24.0) * 17.0) - 0.5) * 0.018;
+      gl_FragColor = vec4(c, 1.0);
+    }`
+});
+composer.addPass(finalPass);
+
+/* ---------- HUD ---------- */
+const capRoot = document.getElementById('captions');
+const caps = CAPTIONS.map(([t0, t1, text]) => {
+  const el = document.createElement('div');
+  el.className = 'cap';
+  const chars = [];
+  text.split(' ').forEach((word, wi, arr) => {
+    const w = document.createElement('span'); w.className = 'w';
+    for (const ch of word) { const s = document.createElement('span'); s.className = 'ch'; s.textContent = ch; w.appendChild(s); chars.push(s); }
+    el.appendChild(w);
+    if (wi < arr.length - 1) el.appendChild(document.createTextNode(' '));
+  });
+  capRoot.appendChild(el);
+  return { t0, t1, el, chars, state: -1 };
+});
+function updateCaptions(t) {
+  for (const c of caps) {
+    const on = t >= c.t0 && t < c.t1;
+    if (!on) { if (c.state !== 0) { c.el.style.visibility = 'hidden'; c.state = 0; } continue; }
+    c.state = 1;
+    c.el.style.visibility = 'visible';
+    const out = smooth(c.t1 - 0.35, c.t1, t);
+    c.el.style.opacity = String(1 - out);
+    c.el.style.transform = `translateY(${(-10 * out).toFixed(1)}px)`;
+    const n = c.chars.length;
+    for (let i = 0; i < n; i++) {
+      // each character settles over ~13 frames: width axis, weight and colour arrive together
+      const p = smooth(0, 0.22, t - c.t0 - i * 0.016);
+      const s = c.chars[i].style;
+      s.opacity = (0.15 + 0.85 * p).toFixed(3);
+      s.fontVariationSettings = `"wdth" ${(75 + 25 * p).toFixed(1)}, "wght" ${(520 - 220 * p).toFixed(0)}`;
+      s.color = p < 1 ? `rgb(${Math.round(lerp(155, 232, p))},${Math.round(lerp(232, 247, p))},255)` : '';
+      s.transform = p < 1 ? `translateY(${((1 - p) * 6).toFixed(1)}px)` : '';
+    }
+  }
+}
+const ro = document.getElementById('readout'), roMode = document.getElementById('ro-mode'), roStep = document.getElementById('ro-step'), roSim = document.getElementById('ro-sim'), roBar = document.getElementById('ro-bar');
+let roLast = '';
+function updateReadout(t, s) {
+  const sp = replaySpeed(t);
+  let mode, cls = '';
+  if (t < TL.publish) mode = 'Standing';
+  else if (t < TL.yank) { mode = 'Update available'; cls = 'hot'; }
+  else if (t < TL.hold) { mode = `Replay at ${sp.toFixed(2)}x`; cls = 'hot'; }
+  else if (t < TL.rw0) mode = 'Paused';
+  else if (t < TL.rw1) { mode = `Rewinding ${sp > -0.005 ? '0.00' : (-sp).toFixed(2)}x`; cls = 'rw'; }
+  else if (t < TL.clampLock) mode = 'Back to step 0';
+  else if (t < TL.clampOut1) { mode = 'Pinned'; cls = 'pin'; }
+  else mode = 'Standing';
+  const step = Math.round(s / DT);
+  const key = mode + cls + step;
+  if (key === roLast) return;
+  roLast = key;
+  ro.className = cls;
+  roMode.textContent = mode;
+  roStep.textContent = `step ${String(step).padStart(3, '0')} of ${A_STEPS}`;
+  roSim.textContent = `sim time ${s.toFixed(3)} s`;
+  roBar.style.width = (100 * s / S_END).toFixed(2) + '%';
+}
+
+/* anchored tags with leader lines */
+const svgNS = 'http://www.w3.org/2000/svg';
+const leaders = document.getElementById('leaders');
+function makeTag(id, color) {
+  const el = document.getElementById(id);
+  const line = document.createElementNS(svgNS, 'line'); line.setAttribute('stroke', color);
+  const dot = document.createElementNS(svgNS, 'circle'); dot.setAttribute('stroke', color); dot.setAttribute('r', '5');
+  line.style.display = 'none'; dot.style.display = 'none';
+  leaders.append(line, dot);
+  return { el, line, dot, shown: false };
+}
+const tagHot = makeTag('tag-hot', '#FF7A2F'), tagPin = makeTag('tag-pin', '#9BE8FF'), tagRej = makeTag('tag-rej', '#9BE8FF');
+const vProj = new THREE.Vector3();
+function placeTag(tag, alpha, world, side, dx, dy) {
+  if (alpha <= 0.001) {
+    if (tag.shown) { tag.el.style.visibility = 'hidden'; tag.line.style.display = 'none'; tag.dot.style.display = 'none'; tag.shown = false; }
+    return;
+  }
+  const W = window.innerWidth, H = window.innerHeight;
+  vProj.copy(world).project(camera);
+  const ax = (vProj.x + 1) / 2 * W, ay = (1 - vProj.y) / 2 * H;
+  const tw = tag.el.offsetWidth, th = tag.el.offsetHeight;
+  const narrow = W < 600;
+  let x = side < 0 ? ax - dx - tw : ax + dx, y = side === 2 ? ay + dy : ay - dy - th;
+  if (narrow) { x = clamp(ax - tw * 0.5 + (side < 0 ? -dx * 0.4 : dx * 0.4), 12, W - tw - 12); y = side === 2 ? ay + dy : ay - dy - th; }
+  x = clamp(x, 12, W - tw - 12); y = clamp(y, 64, H - th - 12);
+  const ex = clamp(ax, x, x + tw), ey = clamp(ay, y, y + th);
+  tag.el.style.visibility = 'visible';
+  tag.el.style.opacity = alpha.toFixed(3);
+  tag.el.style.transform = `translate(${x.toFixed(1)}px,${(y + (1 - alpha) * 8).toFixed(1)}px)`;
+  tag.line.style.display = ''; tag.dot.style.display = '';
+  tag.line.setAttribute('x1', ax.toFixed(1)); tag.line.setAttribute('y1', ay.toFixed(1));
+  tag.line.setAttribute('x2', ex.toFixed(1)); tag.line.setAttribute('y2', ey.toFixed(1));
+  tag.line.style.opacity = alpha; tag.dot.style.opacity = alpha;
+  tag.dot.setAttribute('cx', ax.toFixed(1)); tag.dot.setAttribute('cy', ay.toFixed(1));
+  tag.shown = true;
+}
+
+/* ---------- camera framing + orbit ---------- */
+let viewShiftX = 0, viewShiftY = 0, portrait = false;
+function frameCamera() {
+  const w = window.innerWidth, h = window.innerHeight, aspect = w / h;
+  portrait = aspect < 0.8;
+  camera.fov = portrait ? 48 : aspect < 1.25 ? 42 : 35;
+  camera.aspect = aspect;
+  viewShiftX = portrait ? 0 : -Math.round(w * 0.08);
+  viewShiftY = portrait ? Math.round(h * 0.1) : 0;
+  camera.setViewOffset(w, h, viewShiftX, viewShiftY, w, h);
+  camera.updateProjectionMatrix();
+}
+const camTarget = new THREE.Vector3(), camPos = new THREE.Vector3();
+function autoCam(t) {
+  const k = camKeysAt(t, portrait);
+  const vHalf = THREE.MathUtils.degToRad(camera.fov / 2), hHalf = Math.atan(Math.tan(vHalf) * camera.aspect);
+  // portrait: the subject lives in the band between the caption and the notes card
+  const W = portrait ? Math.min(k[5] * 0.85, 3.4) : k[5], Hh = portrait ? k[6] * 1.9 : k[6];
+  const dist = Math.max(Hh / Math.tan(vHalf), W / Math.tan(hHalf)) * 1.08;
+  camTarget.set(k[0], k[1], k[2]);
+  const az = k[3], el = k[4];
+  camPos.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az)).multiplyScalar(dist).add(camTarget);
+}
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.08; controls.enablePan = false; controls.rotateSpeed = 0.6;
+controls.minDistance = 1.2; controls.maxDistance = 30; controls.maxPolarAngle = Math.PI * 0.49;
+let userCam = false, interacting = false, releasedAt = 0, blendStart = -1;
+const blendFromP = new THREE.Vector3(), blendFromT = new THREE.Vector3();
+controls.addEventListener('start', () => { userCam = true; interacting = true; blendStart = -1; });
+controls.addEventListener('end', () => { interacting = false; releasedAt = performance.now(); });
+controls.addEventListener('change', () => { dirty = true; });
+function updateCamera(t, now) {
+  autoCam(t);
+  if (!userCam) { camera.position.copy(camPos); controls.target.copy(camTarget); camera.lookAt(camTarget); return; }
+  if (interacting || now - releasedAt < 3500) { controls.update(); return; }
+  if (blendStart < 0) { blendStart = now; blendFromP.copy(camera.position); blendFromT.copy(controls.target); }
+  const e = smoother((now - blendStart) / 1600);
+  camera.position.lerpVectors(blendFromP, camPos, e);
+  controls.target.lerpVectors(blendFromT, camTarget, e);
+  camera.lookAt(controls.target);
+  if (e >= 1) userCam = false;
+}
+
+/* ---------- per-frame scene update: everything is a function of t ---------- */
+const vP = new THREE.Vector3(), vQ = new THREE.Quaternion(), vBox = new THREE.Box3(), vS = new THREE.Vector3();
+const heatCol = new THREE.Color(), tmpC = new THREE.Color();
+const hotPos = new THREE.Vector3(), pinAnchor = new THREE.Vector3(), rejAnchor = new THREE.Vector3();
+function update(t) {
+  const s = simAt(t);
+  const heat = heatAt(t);
+  const rewinding = t >= TL.rw0 && t < TL.rw1;
+  const rwAmt = rewinding ? smooth(TL.rw0, TL.rw0 + 0.25, t) * (1 - smooth(TL.rw1 - 0.3, TL.rw1, t)) : 0;
+  const sp = replaySpeed(t);
+
+  for (let i = 0; i < NB; i++) {
+    const B = blocks[i];
+    poseA(s, i, vP, vQ);
+    if (i === TINY && t >= TL.shake && t < TL.yank) {
+      // anticipation: the hot block rattles in its slot before it is pulled
+      const a = 0.0065 * smooth(TL.shake, TL.yank, t);
+      vP.x += a * Math.sin(t * 91.0); vP.z += a * Math.sin(t * 77.0 + 1.3);
+    }
+    B.mesh.position.copy(vP); B.mesh.quaternion.copy(vQ);
+    // contact shadow: a soft blob that darkens as the block nears the floor
+    const [w, h, d] = B.b.size;
+    const lowY = vP.y - 0.5 * Math.min(w, h, d);
+    const k = 1 - smooth(0.0, 0.9, lowY);
+    B.blob.position.set(vP.x, 0.004 + i * 0.0002, vP.z);
+    const fp = Math.max(w, d) * 1.25 + 0.15;
+    B.blob.scale.set(fp, fp, 1);
+    B.blob.rotation.z = Math.atan2(2 * (vQ.w * vQ.y + vQ.x * vQ.z), 1 - 2 * (vQ.y * vQ.y + vQ.z * vQ.z));
+    B.blob.material.opacity = 0.55 * k;
+    // rewind ghosts trail where each block just was; the hot block leaves a heat trail on the way out
+    const hotTrail = i === TINY && t >= TL.yank && t < TL.hold ? 1 - smooth(TL.yank + 1.4, TL.yank + 2.2, t) : 0;
+    if (hotTrail > 0.01) {
+      for (let g = 0; g < GHOSTS; g++) {
+        const gm = B.ghosts[g];
+        poseA(Math.max(0, s - 0.022 * (g + 1)), i, vP, vQ);
+        gm.position.copy(vP); gm.quaternion.copy(vQ);
+        const moved = gm.position.distanceTo(B.mesh.position);
+        gm.visible = moved > 0.02;
+        ramp(HEAT, 0.55 - g * 0.12, gm.material.color, 1);
+        gm.material.opacity = hotTrail * 0.32 * (1 - g / GHOSTS) * smooth(0.02, 0.1, moved);
+      }
+      continue;
+    }
+    for (let g = 0; g < GHOSTS; g++) {
+      const gm = B.ghosts[g];
+      if (rwAmt <= 0.01) { gm.visible = false; continue; }
+      if (i === TINY) gm.material.color.copy(ICE);
+      const sg = Math.min(s - sp * 0.045 * (g + 1), S_HOLD);
+      poseA(sg, i, vP, vQ);
+      gm.position.copy(vP); gm.quaternion.copy(vQ);
+      const moved = gm.position.distanceTo(B.mesh.position);
+      gm.visible = moved > 0.01;
+      gm.material.opacity = rwAmt * 0.16 * (1 - g / GHOSTS) * smooth(0.01, 0.12, moved);
+    }
+  }
+  // tiny block: version swap and heat
+  const tb = blocks[TINY];
+  const wantHot = tinyVersionHot(t);
+  const wantTex = wantHot ? tinyTexHot : tinyTexCold;
+  if (tb.mat.map !== wantTex) { tb.mat.map = wantTex; tb.mat.emissiveMap = wantTex; tb.mat.needsUpdate = true; }
+  const flick = t >= TL.publish && t < TL.publish + 0.32 ? (wantHot ? 1 : 0.2) : 1;
+  tb.mat.userData.u.uHeat.value = clamp(heat * 1.15, 0, 1) * flick;
+  ramp(HEAT, 0.16 + 0.46 * heat, heatCol, 0.8 + 1.8 * heat);
+  tb.mat.userData.u.uHeatCol.value.copy(heatCol);
+  hotPos.copy(tb.mesh.position);
+  hotLight.position.copy(hotPos).add(vS.set(0.15, 0.1, 0.9));
+  ramp(HEAT, 0.6 + 0.3 * heat, hotLight.color);
+  hotLight.intensity = heat * 0.9;
+  hotGlow.position.copy(hotPos);
+  ramp(HEAT, 0.5, hotGlow.material.color);
+  hotGlow.material.opacity = 0.55 * heat * (t >= TL.yank ? 1 : 0.6);
+  hotGlow.scale.setScalar(0.75 + 0.1 * Math.sin(t * 9.0));
+
+  // clamp: bars slide in with overshoot, lock flash, later fade
+  const cOn = t >= TL.clamp0 && t < TL.clampOut1;
+  clampGroup.visible = cOn;
+  let lockFlash = 0;
+  if (cOn) {
+    const fadeOut = smooth(TL.clampOut0, TL.clampOut1, t);
+    jawMeshes.forEach((g, k) => {
+      const j = g.userData.jaw;
+      const p = easeOutBack((t - TL.clamp0 - k * 0.06) / (TL.clampLock - TL.clamp0 - 0.06));
+      const off = (1 - p) * 0.75 + fadeOut * 0.6;
+      g.position.set(j.pos[0] + j.dir * off, j.pos[1], j.pos[2]);
+    });
+    lockFlash = t >= TL.clampLock ? Math.exp(-(t - TL.clampLock) * 3.2) : 0;
+    jawMat.opacity = 0.38 * (1 - fadeOut);
+    const hitAge = t - (TL.upd0 + UPD_IMPACT);
+    const hitFlash = hitAge > 0 ? Math.exp(-hitAge * 5) : 0;
+    jawMat.emissiveIntensity = 0.25 + 0.9 * lockFlash + 1.6 * hitFlash;
+    hitRing.visible = hitAge > 0 && hitAge < 0.7;
+    if (hitRing.visible) {
+      const r = 0.06 + 0.5 * (1 - Math.exp(-hitAge * 5));
+      hitRing.position.set(JAW_IN + JAW_W + 0.004, UPD_IMPACT_P.y, UPD_IMPACT_P.z);
+      hitRing.scale.set(r, r, r); hitRingMat.opacity = 0.9 * (1 - hitAge / 0.7);
+    }
+    jawEdgeMat.opacity = (0.75 + 0.25 * Math.sin(t * 3.0) * 0.5 + 0.5 * lockFlash) * (1 - fadeOut);
+    const ra = t - TL.clampLock;
+    lockRing.visible = ra > 0 && ra < 1.2;
+    if (lockRing.visible) { const r = 0.25 + ra * 1.6; lockRing.scale.set(r, r, r); lockRingMat.opacity = 0.7 * (1 - ra / 1.2); }
+  }
+  pinLight.position.set(0.5, TINY_POS[1] + 0.2, 0.6);
+  pinLight.intensity = cOn ? (0.4 + 1.4 * lockFlash) * (1 - smooth(TL.clampOut0, TL.clampOut1, t)) : 0;
+
+  // the rejected update (scene B)
+  const uOn = t >= TL.upd0 - 0.02 && t < TL.updOut1;
+  updMesh.visible = uOn;
+  updGlow.visible = uOn;
+  let impact = 0;
+  if (uOn) {
+    poseB(Math.max(0, t - TL.upd0), vP, vQ);
+    updMesh.position.copy(vP); updMesh.quaternion.copy(vQ);
+    const sc = 1 - smooth(TL.updOut0, TL.updOut1, t);
+    updMesh.scale.setScalar(Math.max(sc, 0.001));
+    const pulse = 0.9 + 0.1 * Math.sin(t * 13.0);
+    ramp(HEAT, 0.62, tmpC, 2.6 * pulse);
+    updMat.userData.u.uHeatCol.value.copy(tmpC);
+    hotLight.position.copy(vP).add(vS.set(0.4, 0.1, 0.5));
+    ramp(HEAT, 0.85, hotLight.color);
+    hotLight.intensity = 2.6 * sc;
+    updGlow.position.copy(vP); ramp(HEAT, 0.5, updGlow.material.color);
+    updGlow.material.opacity = 0.55 * sc; updGlow.scale.setScalar(0.7 * sc + 0.05 * Math.sin(t * 9.0));
+    impact = t - (TL.upd0 + UPD_IMPACT);
+  }
+  // tags
+  placeTag(tagHot, smooth(TL.publish + 0.2, TL.publish + 0.6, t) * (1 - smooth(TL.yank - 0.25, TL.yank + 0.05, t)), hotPos, 2, 60, 40);
+  pinAnchor.set(-(JAW_IN + JAW_W), TINY_POS[1] + 0.05, JAW_D / 2);
+  placeTag(tagPin, smooth(TL.clampLock + 0.05, TL.clampLock + 0.45, t) * (1 - smooth(19.0, 19.35, t)), pinAnchor, -1, 70, 40);
+  rejAnchor.copy(updMesh.position);
+  placeTag(tagRej, uOn ? smooth(0.05, 0.4, impact) * (1 - smooth(19.1, 19.45, t)) : 0, rejAnchor, 2, 40, 46);
+
+  finalPass.uniforms.uRw.value = rwAmt;
+  finalPass.uniforms.uTime.value = t;
+  updateCaptions(t);
+  updateReadout(t, s);
+}
+
+/* ---------- resize / loop / hooks ---------- */
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setPixelRatio(PR());
+  renderer.setSize(w, h, false);
+  composer.setPixelRatio(PR());
+  composer.setSize(w, h);
+  bloom.setSize(Math.round(w * 0.5), Math.round(h * 0.5));
+  finalPass.uniforms.uRes.value.set(w * PR(), h * PR());
+  frameCamera();
+  dirty = true;
+}
+let t = 0, playing = true, dirty = true, last = performance.now(), ready = false;
+const pp = document.getElementById('playpause');
+function setPlaying(p) {
+  playing = p; last = performance.now(); dirty = true;
+  pp.textContent = p ? 'Pause' : 'Play';
+  pp.setAttribute('aria-pressed', String(!p));
+}
+function wrap(x) { return ((x % PERIOD) + PERIOD) % PERIOD; }
+function renderAt(now) { updateCamera(t, now); camera.updateMatrixWorld(); update(t); composer.render(); dirty = false; }
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min((now - last) / 1000, 0.1); last = now;
+  if (!ready) return;
+  if (playing) t = wrap(t + dt);
+  if (playing || userCam || dirty) renderAt(now);
+}
+
+/* notes UI */
+const notes = document.getElementById('notes'), showBtn = document.getElementById('show-notes');
+function setNotes(v) { notes.hidden = !v; showBtn.hidden = v; }
+document.getElementById('hide-notes').addEventListener('click', () => { setNotes(false); showBtn.focus(); });
+showBtn.addEventListener('click', () => { setNotes(true); document.getElementById('hide-notes').focus(); });
+pp.addEventListener('click', () => setPlaying(!playing));
+window.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'h' || e.key === 'H') setNotes(notes.hidden);
+  else if (e.code === 'Space' || e.key === ' ') {
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'BUTTON' || ae.tagName === 'A')) return;
+    e.preventDefault(); setPlaying(!playing);
+  }
+});
+window.addEventListener('resize', resize);
+
+/* ---------- boot: fonts, physics engine, recording, determinism check ---------- */
+const ldText = document.getElementById('ld-text'), ldBar = document.getElementById('ld-bar');
+const tick = () => new Promise(r => setTimeout(r, 0));
+function sameBits(a, b) {
+  if (a.length !== b.length) return false;
+  const x = new Uint32Array(a.buffer, a.byteOffset, a.length), y = new Uint32Array(b.buffer, b.byteOffset, b.length);
+  for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false;
+  return true;
+}
+(async function boot() {
+  resize();
+  const fontsP = Promise.race([
+    Promise.all(['300 24px "Martian Mono"', '400 40px "Martian Mono"', '500 40px "Martian Mono"', 'condensed 500 40px "Martian Mono"', '500 13px "Schibsted Grotesk"'].map(f => document.fonts.load(f))).then(() => document.fonts.ready),
+    new Promise(r => setTimeout(r, 4000))
+  ]);
+  let RAPIER;
+  try {
+    RAPIER = (await import(RAPIER_URL)).default;
+    await RAPIER.init();
+  } catch (err) {
+    // fallback: no engine, so show the standing tower as a still and say what is missing
+    REC_A = new Float32Array((A_STEPS + 1) * NB * 7);
+    for (let st = 0; st <= A_STEPS; st++) BLOCKS.forEach((b, i) => REC_A.set([...b.pos, ...b.rot], (st * NB + i) * 7));
+    REC_B = new Float32Array((B_STEPS + 1) * 7);
+    await fontsP;
+    buildScene();
+    document.getElementById('loader').style.cssText = 'top:auto;bottom:24px;transform:translateX(-50%);max-width:min(520px,90vw)';
+    ldText.textContent = 'The Rapier physics engine did not load, so this is a still of the standing tower instead of the collapse.';
+    document.querySelector('#loader .lb').remove();
+    document.getElementById('captions').style.display = 'none';
+    document.getElementById('readout').style.display = 'none';
+    document.querySelector('.notes p').insertAdjacentText('beforeend', ' Rapier (WebAssembly) did not load here, so you are seeing a still frame.');
+    ready = true;
+    window.__seek = () => { t = 15.95; setPlaying(false); renderAt(performance.now()); };
+    window.__play = () => {};
+    window.__seek();
+    return;
+  }
+  ldText.textContent = 'Simulating the collapse with Rapier ' + RAPIER.version();
+  REC_A = await simulateA(RAPIER, async (p) => { ldBar.style.width = (p * 50).toFixed(1) + '%'; await tick(); });
+  ldText.textContent = 'Simulating again to check determinism';
+  const again = await simulateA(RAPIER, async (p) => { ldBar.style.width = (50 + p * 45).toFixed(1) + '%'; await tick(); });
+  const identical = sameBits(REC_A, again);
+  console.log(`Determinism check: two Rapier ${RAPIER.version()} runs of ${A_STEPS} steps x ${NB} bodies at dt 1/120 s are ${identical ? 'bit-identical' : 'DIFFERENT'} (${REC_A.length} floats compared).`);
+  REC_B = simulateB(RAPIER);
+  for (let s = 1; s < B_STEPS; s++) if (REC_B[(s + 1) * 7] > REC_B[s * 7]) { UPD_IMPACT = s * DT; UPD_IMPACT_P.set(REC_B[s * 7] - 0.1, REC_B[s * 7 + 1], REC_B[s * 7 + 2]); break; }
+  ldBar.style.width = '100%';
+  await fontsP;
+  buildScene();
+  {
+    // a plausible (made-up) sha512 integrity string, seeded so it never changes
+    const rng = mulberry32(0x1E3C0D3), A64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    let h = ''; for (let i = 0; i < 86; i++) h += A64[Math.floor(rng() * 64)];
+    document.getElementById('sha').textContent = `"integrity": "sha512-${h.slice(0, 12)}…${h.slice(-6)}=="`;
+  }
+  document.getElementById('loader').remove();
+  ready = true;
+  window.__seek = (tt) => {
+    t = wrap(Number(tt) || 0);
+    setPlaying(false);
+    userCam = false; interacting = false; blendStart = -1;
+    renderAt(performance.now());
+  };
+  window.__play = () => setPlaying(true);
+  if (Number.isFinite(T_PARAM)) { t = wrap(T_PARAM); setPlaying(false); }
+  else if (REDUCED) { t = HERO_T; setPlaying(false); }
+  else setPlaying(true);
+  renderAt(performance.now());
+})();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

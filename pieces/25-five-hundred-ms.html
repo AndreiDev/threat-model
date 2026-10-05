@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Five hundred milliseconds</title>
+<!--
+  Video-backed piece. The MP4 is rendered offline by Remotion (React + SVG) from ../remotion/:
+    cd remotion && npm install && npm run render
+  (npm run render = node scripts/make-audio.mjs && npx remotion render FiveHundredMs ../out/five-hundred-ms.mp4)
+  This page only presents it: __seek(t) sets video.currentTime, waits for "seeked", and pauses.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:   #100C2A;
+  --deep:   #1B1747;
+  --steel:  #4E5A8C;
+  --mist:   #8C93C4;
+  --ice:    #9BE8FF;
+  --frost:  #E8F7FF;
+  --heat-0: #3A0F6B;
+  --heat-1: #9B1D8F;
+  --heat-2: #F0306A;
+  --heat-3: #FF7A2F;
+  --heat-4: #FFD36B;
+  --heat-5: #FFF6E0;
+  --col: 412px;          /* left column reserved for chapters + notes on wide screens */
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--void);overflow:hidden}
+body{color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif}
+
+/* studio: film + bar, to the right of the notes column */
+.studio{position:fixed;top:0;bottom:0;right:0;left:var(--col);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:0 16px 0 0}
+.notes-hidden .studio{left:16px}
+.stage{position:relative;width:var(--fw,960px);height:var(--fh,540px)}
+#film{display:block;width:100%;height:100%;background:#100C2A;border-radius:6px;box-shadow:0 0 0 1px rgba(140,147,196,.16),0 30px 90px rgba(0,0,0,.4)}
+.bar{display:flex;align-items:center;gap:10px;width:var(--fw,960px);height:52px;padding:0 2px;
+  font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost)}
+.btn{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;color:var(--frost);background:rgba(78,90,140,.25);
+  border:1px solid rgba(140,147,196,.35);border-radius:999px;padding:8px 12px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:rgba(155,232,255,.16)}
+#bar-play{min-width:64px}
+#sound[aria-pressed="true"]{background:rgba(155,232,255,.16);border-color:rgba(155,232,255,.55)}
+.tc{font:400 12px/1 "Martian Mono",ui-monospace,monospace;color:var(--mist);white-space:nowrap;min-width:12.6em}
+.tc b{font-weight:400;color:var(--frost)}
+.scrub{position:relative;flex:1;height:46px;cursor:pointer;touch-action:none;outline-offset:4px;border-radius:6px}
+.track{position:absolute;left:0;right:0;top:31px;height:3px;border-radius:2px;background:rgba(78,90,140,.5)}
+.fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:2px;background:var(--ice)}
+.head{position:absolute;top:26px;left:0;width:13px;height:13px;margin-left:-6.5px;border-radius:50%;
+  background:var(--frost);box-shadow:0 0 0 4px rgba(155,232,255,.22)}
+.mark{position:absolute;top:8px;height:32px;border-left:1px solid rgba(140,147,196,.55)}
+.mark.hot{border-left-color:rgba(240,48,106,.7)}
+.mark.on{border-left-color:var(--ice)}
+
+/* chapters (left column) */
+.chapters{position:fixed;left:16px;top:16px;width:min(380px,calc(100vw - 32px));margin:0;padding:12px 10px 10px;list-style:none;
+  background:rgba(16,12,42,.5);border:1px solid rgba(140,147,196,.16);border-radius:14px}
+.chapters h2{margin:0 8px 6px;font:500 13px/1.4 "Schibsted Grotesk",system-ui,sans-serif;color:var(--mist)}
+.chapters ol{margin:0;padding:0;list-style:none}
+.chap{display:flex;gap:12px;align-items:baseline;width:100%;padding:6px 8px;border:0;border-radius:8px;background:none;
+  color:var(--mist);text-align:left;cursor:pointer;font:500 14px/1.3 "Schibsted Grotesk",system-ui,sans-serif}
+.chap:hover{background:rgba(155,232,255,.08);color:var(--frost)}
+.chap .t{font:400 12px/1.3 "Martian Mono",ui-monospace,monospace;color:var(--steel);min-width:4.2em}
+.chap .dot{width:7px;height:7px;border-radius:50%;flex:none;align-self:center;background:var(--ice)}
+.chap .dot.hot{background:var(--heat-2)}
+.chap.on{color:var(--frost);background:rgba(155,232,255,.1)}
+.chap.on .t{color:var(--ice)}
+
+/* notes card (shared contract) */
+.notes{position:fixed;left:16px;bottom:16px;max-width:min(380px,calc(100vw - 32px));
+  padding:16px 18px 14px;background:rgba(16,12,42,.72);backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(140,147,196,.22);
+  border-radius:14px;color:var(--frost);font:400 14px/1.5 "Schibsted Grotesk",system-ui,sans-serif;z-index:10}
+.notes h1{margin:0 0 6px;font:250 20px/1.15 "Martian Mono",ui-monospace,monospace;font-stretch:112.5%;letter-spacing:-.01em}
+.notes p{margin:0 0 10px;color:var(--mist)}
+.notes .tech{margin:0 0 12px;padding-left:18px;color:var(--frost);font-size:13px}
+.notes .tech li{margin:2px 0}
+.notes-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.notes-actions a,.notes-actions button,.show-notes{font:500 13px/1 "Schibsted Grotesk",system-ui,sans-serif;
+  color:var(--frost);background:rgba(78,90,140,.25);border:1px solid rgba(140,147,196,.35);
+  border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.notes-actions a:hover,.notes-actions button:hover,.show-notes:hover{background:rgba(155,232,255,.16)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.show-notes{position:fixed;left:16px;bottom:16px;z-index:10}
+@media (max-width:600px){.notes{font-size:13px}.notes .tech{display:none}}
+/* piece-specific additions inside the card */
+.notes code{font:400 11.5px/1.5 "Martian Mono",ui-monospace,monospace;color:var(--ice);background:rgba(27,23,71,.8);
+  border-radius:4px;padding:1px 4px;word-break:break-word}
+.notes .src{font-size:13px}
+.notes .src a{color:var(--ice);text-decoration:underline;text-decoration-color:rgba(155,232,255,.4);text-underline-offset:2px}
+.notes-hidden .chapters{display:none}
+.chapters.cramped{display:none}
+
+/* narrow portrait: film at the top, bar, chapters, then the card below */
+@media (max-width:700px) and (orientation:portrait){
+  html,body{overflow-x:hidden;overflow-y:auto}
+  .page{display:flex;flex-direction:column;min-height:100vh;min-height:100svh;padding-bottom:16px}
+  .studio,.notes-hidden .studio{position:static;justify-content:flex-start;align-items:stretch;gap:0;padding:0}
+  .stage{width:100vw;height:56.25vw}
+  #film{border-radius:0;box-shadow:none}
+  .bar{width:auto;margin:6px 12px 0;gap:8px}
+  .tc{min-width:0}
+  .tc .tc-dur{display:none}
+  .chapters{position:static;width:auto;margin:10px 12px 0;padding:8px 6px}
+  .chapters h2{display:none}
+  .chapters ol{display:grid;grid-template-columns:1fr 1fr;gap:0 4px}
+  .chap{font-size:13px;padding:6px}
+  .chap .t{min-width:3.6em;font-size:11px}
+  .notes{position:static;margin:12px 12px 0;max-width:none}
+  .show-notes{position:static;align-self:flex-start;margin:12px 12px 0}
+}
+</style>
+</head>
+<body>
+<div class="page">
+<div class="studio" id="studio">
+  <div class="stage" id="stage">
+    <video id="film" src="../out/five-hundred-ms.mp4" muted playsinline loop preload="auto"
+      aria-label="Motion graphics explainer: a failed SSH login takes half a second longer, and that half second exposes the xz-utils backdoor"></video>
+  </div>
+  <div class="bar" id="bar">
+    <button type="button" class="btn" id="bar-play" aria-pressed="false">Pause</button>
+    <button type="button" class="btn" id="sound" aria-pressed="false">Sound on</button>
+    <span class="tc" id="tc"><b>0:00.00</b><span class="tc-dur"> / 1:29.00</span></span>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="Film time" aria-valuemin="0" aria-valuemax="89" aria-valuenow="0">
+      <div class="track"><div class="fill" id="fill"></div></div>
+      <div id="marks"></div>
+      <div class="head" id="head"></div>
+    </div>
+  </div>
+</div>
+
+<nav class="chapters" id="chapters" aria-label="Chapters">
+  <h2>Chapters</h2>
+  <ol id="chap-list"></ol>
+</nav>
+
+<aside class="notes" id="notes" aria-label="About this piece">
+  <h1>Five hundred milliseconds</h1>
+  <p>A failed SSH login took half a second too long. That half second exposed the xz-utils backdoor (CVE-2024-3094), which shipped only in release tarballs.</p>
+  <ul class="tech">
+    <li>Remotion 4: React and SVG, rendered frame by frame to H.264</li>
+    <li>Each frame a pure function of <code>useCurrentFrame()</code>; shot times in one <code>cues.json</code></li>
+    <li>Reusable timeline, tarball scan, dependency chain, latency meter and kinetic type</li>
+    <li>Seeded, synthesised soundtrack cued from the same file</li>
+    <li>Render from <code>remotion/</code>: <code>npm run render</code> (makes the audio, then <code>npx remotion render FiveHundredMs</code>)</li>
+  </ul>
+  <p class="src">Sources: <a href="https://www.openwall.com/lists/oss-security/2024/03/29/4">Freund's disclosure</a>, <a href="https://www.cve.org/CVERecord?id=CVE-2024-3094">CVE record</a>, <a href="https://research.swtch.com/xz-timeline">Russ Cox's timeline</a>.</p>
+  <div class="notes-actions">
+    <a href="../index.html">Back to gallery</a>
+    <button type="button" id="playpause" aria-pressed="false">Pause</button>
+    <button type="button" id="hide-notes">Hide notes</button>
+  </div>
+</aside>
+<button type="button" class="show-notes" id="show-notes" hidden>Show notes</button>
+</div>
+
+<script>
+(() => {
+'use strict';
+const DUR = 89;
+// Chapters, from remotion/STORYBOARD.md (hot = the backdoor path, cold = discovery and fix).
+const CHAPTERS = [
+  { t: 0,    name: 'The tell',       hot: true  },
+  { t: 9,    name: 'One library',    hot: false },
+  { t: 14.5, name: 'The long game',  hot: true  },
+  { t: 33,   name: 'What shipped',   hot: true  },
+  { t: 47,   name: 'Into sshd',      hot: true  },
+  { t: 58,   name: 'Half a second',  hot: false },
+  { t: 71.5, name: 'Caught early',   hot: false },
+  { t: 77,   name: 'What to change', hot: false },
+];
+const $ = s => document.querySelector(s);
+const video = $('#film'), studio = $('#studio'), stage = $('#stage'), bar = $('#bar');
+const btnBar = $('#bar-play'), btnNotes = $('#playpause'), btnSound = $('#sound');
+const scrub = $('#scrub'), fill = $('#fill'), head = $('#head'), tc = $('#tc').querySelector('b');
+const notes = $('#notes'), showNotes = $('#show-notes');
+const Q = new URLSearchParams(location.search);
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const fmt = t => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s.toFixed(2).padStart(5, '0')}`; };
+const fmtShort = t => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${(s % 1 ? s.toFixed(1) : String(s)).padStart(s % 1 ? 4 : 2, '0')}`; };
+
+// ---- layout: fit a 16:9 stage into the studio --------------------------------------------
+const portrait = () => matchMedia('(max-width:700px) and (orientation:portrait)').matches;
+function layout() {
+  const chap = document.getElementById('chapters');
+  // the notes column collapses whenever the card is not shown (hidden by the user or by a capture tool)
+  const shown = !notes.hidden && getComputedStyle(notes).display !== 'none';
+  document.documentElement.classList.toggle('notes-hidden', !shown);
+  if (portrait()) { chap.classList.remove('cramped'); return; }
+  // hide the chapter list when the notes card would run into it (short windows)
+  chap.classList.remove('cramped');
+  if (!notes.hidden && chap.getBoundingClientRect().bottom > notes.getBoundingClientRect().top - 8) chap.classList.add('cramped');
+  const r = studio.getBoundingClientRect();
+  const w = Math.max(240, r.width - 16), h = Math.max(160, innerHeight - 52 - 40);
+  const fw = Math.floor(Math.min(w, h * 16 / 9)), fh = Math.round(fw * 9 / 16);
+  document.documentElement.style.setProperty('--fw', fw + 'px');
+  document.documentElement.style.setProperty('--fh', fh + 'px');
+}
+addEventListener('resize', layout);
+
+// ---- chapters: list + scrub marks ---------------------------------------------------------
+const list = $('#chap-list'), marks = $('#marks');
+const chapEls = CHAPTERS.map((c, i) => {
+  const li = document.createElement('li');
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'chap';
+  b.innerHTML = `<span class="dot${c.hot ? ' hot' : ''}"></span><span class="t">${fmtShort(c.t)}</span><span>${c.name}</span>`;
+  b.addEventListener('click', () => { const wasPaused = video.paused; seekTo(c.t + 0.02).then(() => { if (!wasPaused) play(); }); });
+  li.appendChild(b); list.appendChild(li);
+  const m = document.createElement('div');
+  m.className = 'mark' + (c.hot ? ' hot' : ''); m.style.left = (c.t / DUR * 100) + '%'; m.title = c.name;
+  marks.appendChild(m);
+  return { b, m };
+});
+
+// ---- UI sync --------------------------------------------------------------------------------
+function paintUI() {
+  const t = video.currentTime || 0, p = Math.min(1, t / DUR);
+  fill.style.width = (p * 100) + '%'; head.style.left = (p * 100) + '%';
+  tc.textContent = fmt(t); scrub.setAttribute('aria-valuenow', t.toFixed(1));
+  let k = 0; CHAPTERS.forEach((c, i) => { if (t >= c.t - 0.01) k = i; });
+  chapEls.forEach((e, i) => { e.b.classList.toggle('on', i === k); e.m.classList.toggle('on', i === k); });
+}
+function setPausedUI(paused) {
+  for (const b of [btnBar, btnNotes]) { b.textContent = paused ? 'Play' : 'Pause'; b.setAttribute('aria-pressed', String(paused)); }
+}
+let raf = 0;
+function tick() { paintUI(); raf = requestAnimationFrame(tick); }
+video.addEventListener('play', () => { setPausedUI(false); cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); });
+video.addEventListener('pause', () => { setPausedUI(true); cancelAnimationFrame(raf); paintUI(); });
+video.addEventListener('seeked', paintUI);
+video.addEventListener('loadedmetadata', paintUI);
+
+// ---- playback ------------------------------------------------------------------------------
+const ready = () => video.readyState >= 1 ? Promise.resolve() : new Promise(r => video.addEventListener('loadedmetadata', r, { once: true }));
+function play() { return video.play().catch(() => setPausedUI(true)); }
+function pause() { video.pause(); }
+function toggle() { video.paused ? play() : pause(); }
+/** Seek to t (seconds) and resolve once that frame is decoded. */
+function seekTo(t) {
+  return ready().then(() => new Promise(resolve => {
+    const tt = Math.max(0, Math.min(DUR - 0.001, ((+t % DUR) + DUR) % DUR));
+    if (Math.abs(video.currentTime - tt) < 1e-4 && video.readyState >= 2) { paintUI(); resolve(); return; }
+    // Resolve only once the seeked frame has been presented, not just decoded.
+    let settled = false;
+    const finish = () => { if (settled) return; settled = true; paintUI(); requestAnimationFrame(() => resolve()); };
+    const rvfc = 'requestVideoFrameCallback' in video;
+    const watch = () => video.requestVideoFrameCallback((now, meta) => {
+      if (Math.abs(meta.mediaTime - tt) < 0.06) finish(); else if (!settled) watch();
+    });
+    if (rvfc) watch();
+    video.addEventListener('seeked', () => {
+      paintUI();
+      if (!rvfc) finish();
+      setTimeout(finish, 1200);            // fallback if no new frame is reported
+    }, { once: true });
+    video.currentTime = tt;
+  }));
+}
+btnBar.addEventListener('click', toggle);
+btnNotes.addEventListener('click', toggle);
+btnSound.addEventListener('click', () => {
+  video.muted = !video.muted;
+  btnSound.setAttribute('aria-pressed', String(!video.muted));
+  btnSound.textContent = video.muted ? 'Sound on' : 'Sound off';
+  if (!video.muted && video.paused) play();
+});
+
+// scrubbing
+function scrubTo(e) {
+  const r = scrub.getBoundingClientRect();
+  seekTo(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * DUR);
+}
+let dragging = false, resume = false;
+scrub.addEventListener('pointerdown', e => { dragging = true; resume = !video.paused; pause(); scrub.setPointerCapture(e.pointerId); scrubTo(e); });
+scrub.addEventListener('pointermove', e => { if (dragging) scrubTo(e); });
+scrub.addEventListener('pointerup', () => { dragging = false; if (resume) play(); });
+scrub.addEventListener('keydown', e => {
+  const step = e.shiftKey ? 5 : 1;
+  if (e.key === 'ArrowRight') { e.preventDefault(); seekTo(video.currentTime + step); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); seekTo(video.currentTime - step); }
+  else if (e.key === 'Home') { e.preventDefault(); seekTo(0); }
+});
+
+// ---- notes card ----------------------------------------------------------------------------
+function setNotes(show) {
+  notes.hidden = !show; showNotes.hidden = show;
+  layout();
+}
+$('#hide-notes').addEventListener('click', () => { setNotes(false); showNotes.focus(); });
+showNotes.addEventListener('click', () => { setNotes(true); $('#hide-notes').focus(); });
+addEventListener('keydown', e => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+  if (e.key === 'h' || e.key === 'H') { setNotes(notes.hidden); }
+  else if (e.code === 'Space' && !(e.target && e.target.tagName === 'BUTTON')) { e.preventDefault(); toggle(); }
+});
+
+// ---- contract hooks --------------------------------------------------------------------------
+window.__seek = t => { pause(); setPausedUI(true); return seekTo(t); };
+window.__play = () => play();
+
+layout(); paintUI();
+if (document.fonts) document.fonts.ready.then(layout);
+if ('ResizeObserver' in window) new ResizeObserver(() => layout()).observe(notes);
+addEventListener('load', layout);
+if (Q.has('t')) window.__seek(parseFloat(Q.get('t')) || 0);
+else if (reduce) window.__seek(66.4);       // the cold caliper closing on +508 ms
+else { setPausedUI(false); play(); }
+})();
+</script>
+</body>
+</html>
